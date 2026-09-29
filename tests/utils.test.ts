@@ -63,6 +63,24 @@ describe('errores de la API', () => {
     expect(MENSAJES_POR_CODIGO.EMAIL_CREDENTIAL_IN_USE).toContain('Usar la predeterminada')
   })
 
+  it('usa el mensaje del panel para Google, la sesión y el sistema', () => {
+    const codigos = [
+      'GOOGLE_NOT_CONFIGURED', 'GOOGLE_UNAVAILABLE', 'GOOGLE_SESSION_EXPIRED', 'INVALID_GOOGLE_TOKEN', 'GOOGLE_EMAIL_NOT_VERIFIED',
+      'GOOGLE_NOT_AUTHORITATIVE', 'GOOGLE_ACCOUNT_MISMATCH', 'GOOGLE_ACCOUNT_IN_USE', 'GOOGLE_ACCOUNT_NOT_REGISTERED',
+      'SESSION_INVALIDATED', 'FORBIDDEN_PROFILE', 'UNDC_API_NOT_CONFIGURED', 'HOST_NOT_ALLOWED', 'INVALID_URL',
+    ]
+    for (const code of codigos) {
+      expect(MENSAJES_POR_CODIGO[code], code).toBeTruthy()
+      expect(aErrorApi({ status: 403, data: { success: false, code, message: 'texto del servidor' } }).message).toBe(MENSAJES_POR_CODIGO[code])
+    }
+    // Una cuenta no registrada no se confunde con credenciales inválidas
+    expect(MENSAJES_POR_CODIGO.GOOGLE_ACCOUNT_NOT_REGISTERED)
+      .toMatch(/^Tu cuenta de Google no está registrada como administrador ni como inscrito/)
+    // Errores del BFF (createError anida el cuerpo en data)
+    expect(aErrorApi({ statusCode: 400, data: { data: { code: 'GOOGLE_SESSION_EXPIRED', message: 'x' } } }).message)
+      .toBe(MENSAJES_POR_CODIGO.GOOGLE_SESSION_EXPIRED)
+  })
+
   it('conserva el mensaje del servidor en VALIDATION_ERROR y tiene respaldo', () => {
     expect(aErrorApi({ status: 422, data: { code: 'VALIDATION_ERROR', message: 'Los datos enviados no son válidos' } }).message)
       .toBe('Los datos enviados no son válidos')

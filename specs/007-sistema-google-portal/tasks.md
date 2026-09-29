@@ -7,7 +7,7 @@
 
 ## Base
 - [x] T004 Enmienda 1.1.0 de la constitución (dos perfiles; env solo `NUXT_BACKEND_BASE_URL`)
-- [ ] T005 Mensajes por código en `app/utils/errores.ts` (`GOOGLE_*`, `INVALID_GOOGLE_TOKEN`, `SESSION_INVALIDATED`, `FORBIDDEN_PROFILE`, `UNDC_API_NOT_CONFIGURED`, `HOST_NOT_ALLOWED`, `INVALID_URL`) con pruebas
+- [x] T005 Mensajes por código en `app/utils/errores.ts` (`GOOGLE_*`, `INVALID_GOOGLE_TOKEN`, `SESSION_INVALIDATED`, `FORBIDDEN_PROFILE`, `UNDC_API_NOT_CONFIGURED`, `HOST_NOT_ALLOWED`, `INVALID_URL`) con pruebas
 - [ ] T006 Tipos del contrato en `app/types/api.ts` (configuración, sesión, portal, vínculo con Google, verificación del correo)
 
 ## US1 - Sistema (SuperAdmin)

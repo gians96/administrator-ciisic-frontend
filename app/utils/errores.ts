@@ -21,6 +21,27 @@ export const MENSAJES_POR_CODIGO: Readonly<Record<string, string>> = {
   EMAIL_CREDENTIAL_NOT_FOUND: 'La credencial de correo no existe o ya fue eliminada. Actualiza la página.',
   EMAIL_CREDENTIAL_IN_USE: 'La credencial está asignada a uno o más eventos. Asígnales otra credencial (o «Usar la predeterminada») y vuelve a intentarlo.',
   ACCESS_TOKEN_NOT_FOUND: 'El token de acceso no existe o ya fue eliminado. Actualiza la lista.',
+
+  // Inicio de sesión con Google
+  GOOGLE_NOT_CONFIGURED: 'El inicio de sesión con Google aún no está configurado. Los administradores pueden entrar con su correo y contraseña.',
+  GOOGLE_UNAVAILABLE: 'No se pudo validar tu cuenta con Google en este momento. Intenta nuevamente en unos minutos.',
+  GOOGLE_SESSION_EXPIRED: 'El inicio de sesión con Google caducó. Vuelve a pulsar «Continuar con Google».',
+  INVALID_GOOGLE_TOKEN: 'Google no confirmó tu inicio de sesión (la respuesta caducó o no es válida). Vuelve a intentarlo.',
+  GOOGLE_EMAIL_NOT_VERIFIED: 'Tu correo de Google aún no está verificado. Verifícalo en tu cuenta de Google y vuelve a intentarlo.',
+  GOOGLE_NOT_AUTHORITATIVE: 'Google no puede confirmar ese correo porque no es de Gmail ni de una cuenta institucional de Google (por ejemplo, Outlook o Yahoo). Entra con una cuenta de Gmail o institucional.',
+  GOOGLE_ACCOUNT_MISMATCH: 'Tu correo ya está vinculado a otra cuenta de Google. Entra con esa cuenta o pide a los organizadores que desvinculen Google de tu registro.',
+  GOOGLE_ACCOUNT_IN_USE: 'Esta cuenta de Google ya está vinculada a otra persona. Entra con otra cuenta o pide a los organizadores que la desvinculen.',
+  GOOGLE_ACCOUNT_NOT_REGISTERED: 'Tu cuenta de Google no está registrada como administrador ni como inscrito. Si te inscribiste a un evento, entra con la cuenta de Google del correo que usaste al inscribirte.',
+  RATE_LIMITED: 'Demasiados intentos. Espera unos minutos y vuelve a intentarlo.',
+
+  // Sesión y perfiles (administrador / inscrito)
+  SESSION_INVALIDATED: 'Tu sesión se cerró porque cambiaron los datos de tu registro (por ejemplo, el correo). Vuelve a entrar con la cuenta de Google de tu correo actual.',
+  FORBIDDEN_PROFILE: 'Tu tipo de cuenta no tiene acceso a esta sección.',
+
+  // Configuración del sistema
+  UNDC_API_NOT_CONFIGURED: 'Falta la URL o la API key de API_UNDC. Guárdalas y vuelve a probar la conexión.',
+  INVALID_URL: 'La URL no es válida: usa https (http solo para localhost) y no incluyas usuario ni contraseña.',
+  HOST_NOT_ALLOWED: 'La URL apunta a una dirección interna o su dominio no se pudo resolver. Usa una dirección pública.',
 }
 
 /** Mensajes de respaldo cuando el servidor no envía uno (el detalle va en `fields`). */
