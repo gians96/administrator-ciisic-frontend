@@ -24,6 +24,10 @@ export default defineEventHandler(async (event) => {
     headers: {
       authorization: `Bearer ${token}`,
       cookie: '',
+      // Llamada servidor a servidor: sin los encabezados del navegador. Si se reenviara `Origin`,
+      // el backend lo evaluaría contra su CORS_ORIGINS (pensado para la landing) y respondería 403.
+      origin: '',
+      referer: '',
     },
     onResponse(proxyEvent, response) {
       // Si el backend invalida el token, se cierra la sesión del panel
