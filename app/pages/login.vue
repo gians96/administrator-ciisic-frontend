@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { aErrorApi } from '~/utils/errores'
+import { avisoLogin, destinoTrasLogin } from '~/utils/sesion'
 
 definePageMeta({ layout: 'blank' })
 useHead({ title: 'Iniciar sesión · Panel CIISIC' })
@@ -9,19 +10,35 @@ const route = useRoute()
 const correo = ref('')
 const contrasena = ref('')
 const enviando = ref(false)
-const error = ref<string | null>(null)
+const entrandoConGoogle = ref(false)
+const error = ref<string | null>(avisoLogin(route.query.motivo))
+const botonGoogle = ref<{ reiniciar: () => Promise<void> } | null>(null)
 
 async function ingresar() {
   error.value = null
   enviando.value = true
   try {
-    await auth.login(correo.value.trim(), contrasena.value)
-    const destino = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') ? route.query.redirect : '/'
-    await navigateTo(destino)
+    const tipo = await auth.login(correo.value.trim(), contrasena.value)
+    await navigateTo(destinoTrasLogin(tipo, route.query.redirect))
   } catch (e) {
     error.value = aErrorApi(e).message
   } finally {
     enviando.value = false
+  }
+}
+
+async function ingresarConGoogle(credential: string) {
+  error.value = null
+  entrandoConGoogle.value = true
+  try {
+    const tipo = await auth.loginGoogle(credential)
+    await navigateTo(destinoTrasLogin(tipo, route.query.redirect))
+  } catch (e) {
+    error.value = aErrorApi(e).message
+    // El nonce es de un solo uso: se pide uno nuevo para el siguiente intento
+    await botonGoogle.value?.reiniciar().catch(() => undefined)
+  } finally {
+    entrandoConGoogle.value = false
   }
 }
 </script>
@@ -46,8 +63,27 @@ async function ingresar() {
           <input id="contrasena" v-model="contrasena" type="password" autocomplete="current-password" required class="field-control">
         </AppField>
         <p v-if="error" class="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-200 ring-1 ring-red-400/30" role="alert">{{ error }}</p>
-        <AppButton type="submit" class="w-full" :loading="enviando" :disabled="!correo || !contrasena">Ingresar</AppButton>
+        <AppButton type="submit" class="w-full" :loading="enviando" :disabled="!correo || !contrasena || entrandoConGoogle">Ingresar</AppButton>
       </form>
+
+      <ClientOnly>
+        <BotonGoogle ref="botonGoogle" class="mt-6" @credencial="ingresarConGoogle">
+          <template #antes>
+            <div class="mb-5 flex items-center gap-3 text-xs uppercase tracking-wider text-slate-500">
+              <span class="h-px flex-1 bg-white/10" />
+              o continúa con Google
+              <span class="h-px flex-1 bg-white/10" />
+            </div>
+          </template>
+          <template #despues>
+            <p v-if="entrandoConGoogle" class="mt-3 text-center text-sm text-slate-300" aria-live="polite">Validando tu cuenta de Google…</p>
+            <p class="mt-4 text-center text-xs leading-relaxed text-slate-400">
+              ¿Te inscribiste a un evento? Entra con la cuenta de Google del correo que usaste al inscribirte
+              para ver el estado de tu inscripción.
+            </p>
+          </template>
+        </BotonGoogle>
+      </ClientOnly>
     </section>
   </div>
 </template>
