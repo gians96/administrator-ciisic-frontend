@@ -20,7 +20,13 @@ const secciones = computed(() => [
       { to: '/tipos-inscripcion', label: 'Tipos de inscripción', icon: 'heroicons:tag' },
       { to: '/consultas', label: 'Consultas DNI', icon: 'heroicons:identification' },
       { to: '/participantes', label: 'Participantes', icon: 'heroicons:users' },
-      ...(auth.esSuperAdmin ? [{ to: '/administradores', label: 'Administradores', icon: 'heroicons:shield-check' }] : []),
+      // Solo SuperAdmin (las páginas también lo exigen con `soloSuperAdmin`)
+      ...(auth.esSuperAdmin
+        ? [
+            { to: '/correo', label: 'Correo', icon: 'heroicons:paper-airplane' },
+            { to: '/administradores', label: 'Administradores', icon: 'heroicons:shield-check' },
+          ]
+        : []),
     ],
   },
 ])

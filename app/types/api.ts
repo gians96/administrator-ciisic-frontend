@@ -278,3 +278,40 @@ export interface Administrador {
 }
 
 export interface Clasificacion { id: number, nombre: string }
+
+// ─── Correo (Brevo) ───
+
+export interface CredencialCorreo {
+  id: number
+  proveedor: 'BREVO'
+  nombre: string
+  /** `••••abcd`: la API key completa nunca vuelve del backend. */
+  apiKeyEnmascarada: string
+  remitenteCorreo: string
+  remitenteNombre: string | null
+  esPredeterminada: boolean
+  activo: boolean
+  ultimoEstado: 'OK' | 'ERROR' | null
+  ultimoError: string | null
+  ultimaPruebaEn: string | null
+  ultimoEnvioEn: string | null
+  eventos: Array<{ id: number, codigo: string, nombreCorto: string }>
+  creadoEn: string
+  actualizadoEn: string
+}
+
+/** Plan de la cuenta Brevo (`tipo` y `tipoCreditos` llegan como los reporta Brevo: `free`, `sendLimit`…). */
+export interface PlanBrevo { tipo: string, creditos: number, tipoCreditos: string }
+
+export interface PruebaCredencialCorreo {
+  ok: boolean
+  cuenta?: { correo: string, empresa: string | null, planes: PlanBrevo[] }
+  error?: string
+  credencial: CredencialCorreo
+}
+
+export interface EnvioPruebaCorreo {
+  ok: boolean
+  error?: string
+  credencial: CredencialCorreo
+}
