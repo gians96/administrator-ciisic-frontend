@@ -114,6 +114,18 @@ export interface ParticipanteRef {
   apellidos: string
   correo: string
   celular: string
+  /** Solo en `participants` (listado y detalle); las inscripciones no lo traen. */
+  googleVinculado?: boolean
+  googleVinculadoEn?: string | null
+}
+
+/** Tipo de cuenta según el correo (reglas fijas del backend: en `undc.edu.pe`, parte local numérica = estudiante). */
+export type TipoCuentaCorreo = 'ESTUDIANTE' | 'PERSONAL' | 'EXTERNO'
+
+/** Verificación del correo con Google al inscribirse (`verificacion.correo` del detalle). */
+export interface VerificacionCorreo {
+  verificado: boolean
+  detalle: { metodo: 'GOOGLE', tipoCuenta: TipoCuentaCorreo, hd: string | null, verificadoEn: string } | null
 }
 
 export interface InscripcionFila {
@@ -129,6 +141,7 @@ export interface InscripcionFila {
   fechaPago: string | null
   tieneVoucher: boolean
   esEstudianteUndc: boolean
+  esCorreoVerificado?: boolean
   revisadoEn: string | null
 }
 
@@ -160,7 +173,10 @@ export interface InscripcionDetalle {
     tipoOperacion: string | null, billeteraDigital: string | null, numeroOperacion: string, fechaPago: string | null, tieneVoucher: boolean
     voucherMime: string | null
   }
-  verificacion: { esEstudianteUndc: boolean, esCorreoInstitucional: boolean, codigoEstudiante: string | null, detalle: VerificacionDetalle | null }
+  verificacion: {
+    esEstudianteUndc: boolean, esCorreoInstitucional: boolean, codigoEstudiante: string | null, detalle: VerificacionDetalle | null
+    correo?: VerificacionCorreo
+  }
   revision: {
     motivoRechazo: string | null
     revisadoPor: { id: number, nombres: string, apellidos: string } | null
@@ -291,6 +307,8 @@ export interface Administrador {
   rolCodigo: 'SUPERADMIN' | 'ADMIN'
   rolNombre: string
   activo: boolean
+  googleVinculado?: boolean
+  googleVinculadoEn?: string | null
   creadoEn: string
 }
 

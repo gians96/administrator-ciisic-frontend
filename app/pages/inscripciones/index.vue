@@ -176,7 +176,12 @@ function limpiar() {
               <td class="text-slate-400 tabular-nums">{{ fila.id }}</td>
               <td>
                 <p class="font-medium text-white">{{ nombreCompleto(fila.participante) }}</p>
-                <p class="text-xs text-slate-400">{{ fila.participante.tipoDocumento.toUpperCase() }} {{ fila.participante.numeroDocumento }} · {{ fila.participante.correo }}</p>
+                <p class="text-xs text-slate-400">
+                  {{ fila.participante.tipoDocumento.toUpperCase() }} {{ fila.participante.numeroDocumento }} · {{ fila.participante.correo }}
+                  <span v-if="fila.esCorreoVerificado" class="inline-flex align-middle text-emerald-300" title="Correo verificado con Google">
+                    <Icon name="heroicons:check-badge" class="size-3.5" aria-hidden="true" /><span class="sr-only">Correo verificado con Google</span>
+                  </span>
+                </p>
               </td>
               <td>
                 <p class="text-white">{{ fila.tipoInscripcion?.nombre ?? '—' }}</p>

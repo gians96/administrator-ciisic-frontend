@@ -2,6 +2,7 @@
 import type { CodigoEstado, InscripcionDetalle, Respuesta } from '~/types/api'
 import { fechaDia, fechaHoraLima, modalidadPago, nombreCompleto, soles } from '~/utils/formato'
 import { mensajeError } from '~/utils/errores'
+import { fechaCorreoVerificado, textoCorreoVerificado } from '~/utils/cuentaGoogle'
 
 const props = defineProps<{ inscripcionId: number | null }>()
 const emit = defineEmits<{ cerrar: [], actualizada: [detalle: InscripcionDetalle] }>()
@@ -103,6 +104,7 @@ const voucherUrl = computed(() => (detalle.value?.pago.tieneVoucher ? urlArchivo
 const credencialUrl = computed(() => (detalle.value ? urlArchivo(`inscriptions/${detalle.value.id}/credential`) : null))
 const esImagen = computed(() => detalle.value?.pago.voucherMime?.startsWith('image/') ?? false)
 const verificacion = computed(() => detalle.value?.verificacion.detalle ?? null)
+const correoVerificado = computed(() => textoCorreoVerificado(detalle.value?.verificacion.correo))
 </script>
 
 <template>
@@ -132,7 +134,15 @@ const verificacion = computed(() => detalle.value?.verificacion.detalle ?? null)
           <dl class="mt-3 space-y-1.5 text-sm">
             <div class="flex justify-between gap-3"><dt class="text-slate-400">Documento</dt><dd class="text-white">{{ detalle.participante.tipoDocumento.toUpperCase() }} {{ detalle.participante.numeroDocumento }}</dd></div>
             <div class="flex justify-between gap-3"><dt class="text-slate-400">Nombres</dt><dd class="text-right text-white">{{ nombreCompleto(detalle.participante) }}</dd></div>
-            <div class="flex justify-between gap-3"><dt class="text-slate-400">Correo</dt><dd class="truncate text-white">{{ detalle.participante.correo }}</dd></div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-slate-400">Correo</dt>
+              <dd class="min-w-0 text-right">
+                <span class="block truncate text-white">{{ detalle.participante.correo }}</span>
+                <span v-if="correoVerificado" class="inline-flex items-center gap-1 text-xs text-emerald-300" :title="fechaCorreoVerificado(detalle.verificacion.correo) ?? undefined">
+                  <Icon name="heroicons:check-badge" class="size-3.5 shrink-0" aria-hidden="true" /> {{ correoVerificado }}
+                </span>
+              </dd>
+            </div>
             <div class="flex justify-between gap-3"><dt class="text-slate-400">Celular</dt><dd class="text-white">{{ detalle.participante.celular }}</dd></div>
           </dl>
         </div>

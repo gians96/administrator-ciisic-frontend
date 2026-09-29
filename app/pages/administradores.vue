@@ -2,6 +2,7 @@
 import type { Administrador, Respuesta } from '~/types/api'
 import { fechaHoraLima, nombreCompleto } from '~/utils/formato'
 import { aErrorApi, mensajeError } from '~/utils/errores'
+import { AVISO_CAMBIO_CORREO_GOOGLE, mensajeDesvincularGoogle, tituloVinculoGoogle } from '~/utils/cuentaGoogle'
 
 definePageMeta({ soloSuperAdmin: true })
 useHead({ title: 'Administradores · Panel CIISIC' })
@@ -15,6 +16,7 @@ const admins = ref<Administrador[]>([])
 const modal = ref(false)
 const editando = ref<Administrador | null>(null)
 const guardando = ref(false)
+const desvinculando = ref(false)
 const errores = ref<Record<string, string>>({})
 const form = reactive({ nombres: '', apellidos: '', correo: '', contrasena: '', rolCodigo: 'ADMIN' as 'ADMIN' | 'SUPERADMIN', activo: true })
 
@@ -53,6 +55,23 @@ async function guardar() {
   }
 }
 
+async function desvincularGoogle(admin: Administrador) {
+  const ok = await confirmar({ titulo: 'Desvincular Google', mensaje: mensajeDesvincularGoogle(admin, 'ADMIN'), textoConfirmar: 'Desvincular' })
+  if (!ok) return
+  desvinculando.value = true
+  try {
+    const r = await api<Respuesta<Administrador>>(`admin/${admin.id}`, { method: 'PUT', body: { desvincularGoogle: true } })
+    // Solo cambia el vínculo: lo que se esté editando en el formulario sigue sin guardar
+    if (editando.value?.id === admin.id) editando.value = r.data
+    toast.exito('Google desvinculado.')
+    await cargar()
+  } catch (error) {
+    toast.error(mensajeError(error))
+  } finally {
+    desvinculando.value = false
+  }
+}
+
 async function eliminar(admin: Administrador) {
   const ok = await confirmar({ titulo: 'Eliminar administrador', mensaje: `¿Eliminar a ${nombreCompleto(admin)}? Si revisó inscripciones, solo se desactivará para conservar el historial.`, textoConfirmar: 'Eliminar', peligro: true })
   if (!ok) return
@@ -83,7 +102,12 @@ async function eliminar(admin: Administrador) {
           <tbody>
             <tr v-for="admin in admins" :key="admin.id">
               <td class="font-medium text-white">{{ nombreCompleto(admin) }} <AppBadge v-if="admin.id === auth.usuario?.id" tono="brand" class="ml-1">Tú</AppBadge></td>
-              <td class="text-sm">{{ admin.correo }}</td>
+              <td class="text-sm">
+                {{ admin.correo }}
+                <AppBadge v-if="admin.googleVinculado" tono="ok" class="ml-1" :title="tituloVinculoGoogle(admin) ?? undefined">
+                  <Icon name="heroicons:link" class="size-3.5" aria-hidden="true" /> Google vinculado
+                </AppBadge>
+              </td>
               <td><AppBadge :tono="admin.rolCodigo === 'SUPERADMIN' ? 'warn' : 'neutral'">{{ admin.rolNombre }}</AppBadge></td>
               <td><AppBadge :tono="admin.activo ? 'ok' : 'neutral'">{{ admin.activo ? 'Activo' : 'Inactivo' }}</AppBadge></td>
               <td class="text-sm whitespace-nowrap">{{ fechaHoraLima(admin.creadoEn) }}</td>
@@ -101,7 +125,9 @@ async function eliminar(admin: Administrador) {
       <form id="form-admin" class="grid gap-4 sm:grid-cols-2" @submit.prevent="guardar">
         <AppField label="Nombres" for="ad-nombres" required :error="errores.nombres"><input id="ad-nombres" v-model="form.nombres" class="field-control"></AppField>
         <AppField label="Apellidos" for="ad-apellidos" required :error="errores.apellidos"><input id="ad-apellidos" v-model="form.apellidos" class="field-control"></AppField>
-        <AppField label="Correo" for="ad-correo" required :error="errores.correo" class="sm:col-span-2"><input id="ad-correo" v-model="form.correo" type="email" autocomplete="off" class="field-control"></AppField>
+        <AppField label="Correo" for="ad-correo" required :error="errores.correo" :hint="editando?.googleVinculado ? AVISO_CAMBIO_CORREO_GOOGLE : undefined" class="sm:col-span-2">
+          <input id="ad-correo" v-model="form.correo" type="email" autocomplete="off" class="field-control">
+        </AppField>
         <AppField :label="editando ? 'Nueva contraseña' : 'Contraseña'" for="ad-pass" :required="!editando" :error="errores.contrasena" :hint="editando ? 'Déjala vacía para no cambiarla. Mínimo 12 caracteres.' : 'Mínimo 12 caracteres.'" class="sm:col-span-2">
           <input id="ad-pass" v-model="form.contrasena" type="password" autocomplete="new-password" minlength="12" class="field-control">
         </AppField>
@@ -113,6 +139,13 @@ async function eliminar(admin: Administrador) {
         </AppField>
         <div class="flex items-end">
           <AppSwitch v-model="form.activo" label="Activo" :disabled="editando?.id === auth.usuario?.id" class="w-full" />
+        </div>
+        <div v-if="editando?.googleVinculado" class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white/5 px-4 py-3 sm:col-span-2">
+          <div class="text-sm">
+            <p class="font-medium text-white">Google vinculado</p>
+            <p class="text-xs text-slate-400">{{ tituloVinculoGoogle(editando) }}</p>
+          </div>
+          <AppButton size="sm" variant="secondary" icon="heroicons:link-slash" :loading="desvinculando" @click="desvincularGoogle(editando)">Desvincular Google</AppButton>
         </div>
       </form>
       <template #acciones>

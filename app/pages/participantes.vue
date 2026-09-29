@@ -2,6 +2,7 @@
 import type { Meta, ParticipanteRef, Respuesta } from '~/types/api'
 import { fechaHoraLima, nombreCompleto } from '~/utils/formato'
 import { aErrorApi, mensajeError } from '~/utils/errores'
+import { AVISO_CAMBIO_CORREO_GOOGLE, mensajeDesvincularGoogle, tituloVinculoGoogle } from '~/utils/cuentaGoogle'
 
 useHead({ title: 'Participantes · Panel CIISIC' })
 
@@ -11,11 +12,13 @@ interface ParticipanteDetalle extends ParticipanteRef {
 
 const { api } = useApi()
 const toast = useToast()
+const { confirmar } = useConfirm()
 const participantes = ref<ParticipanteRef[]>([])
 const meta = ref<Meta | null>(null)
 const busqueda = ref('')
 const detalle = ref<ParticipanteDetalle | null>(null)
 const guardando = ref(false)
+const desvinculando = ref(false)
 const errores = ref<Record<string, string>>({})
 const form = reactive({ nombres: '', apellidos: '', correo: '', celular: '' })
 
@@ -61,6 +64,25 @@ async function guardar() {
     guardando.value = false
   }
 }
+
+async function desvincularGoogle() {
+  const participante = detalle.value
+  if (!participante) return
+  const ok = await confirmar({ titulo: 'Desvincular Google', mensaje: mensajeDesvincularGoogle(participante, 'PARTICIPANTE'), textoConfirmar: 'Desvincular' })
+  if (!ok) return
+  desvinculando.value = true
+  try {
+    const r = await api<Respuesta<ParticipanteRef>>(`participants/${participante.id}`, { method: 'PUT', body: { desvincularGoogle: true } })
+    // Solo cambia el vínculo: lo que se esté editando en el formulario sigue sin guardar
+    if (detalle.value?.id === participante.id) detalle.value = { ...detalle.value, googleVinculado: r.data.googleVinculado ?? false, googleVinculadoEn: r.data.googleVinculadoEn ?? null }
+    toast.exito('Google desvinculado.')
+    await cargar(meta.value?.page ?? 1)
+  } catch (error) {
+    toast.error(mensajeError(error))
+  } finally {
+    desvinculando.value = false
+  }
+}
 </script>
 
 <template>
@@ -83,7 +105,13 @@ async function guardar() {
             <tr v-for="p in participantes" :key="p.id">
               <td class="font-medium text-white">{{ nombreCompleto(p) }}</td>
               <td class="font-mono text-sm">{{ p.tipoDocumento.toUpperCase() }} {{ p.numeroDocumento }}</td>
-              <td class="text-sm">{{ p.correo }}<p class="text-xs text-slate-500">{{ p.celular }}</p></td>
+              <td class="text-sm">
+                {{ p.correo }}
+                <AppBadge v-if="p.googleVinculado" tono="ok" class="ml-1" :title="tituloVinculoGoogle(p) ?? undefined">
+                  <Icon name="heroicons:link" class="size-3.5" aria-hidden="true" /> Google vinculado
+                </AppBadge>
+                <p class="text-xs text-slate-500">{{ p.celular }}</p>
+              </td>
               <td class="text-right"><AppButton size="sm" variant="secondary" icon="heroicons:pencil-square" @click="abrir(p.id)">Ver / editar</AppButton></td>
             </tr>
           </tbody>
@@ -97,8 +125,17 @@ async function guardar() {
       <form id="form-participante" class="grid gap-4 sm:grid-cols-2" @submit.prevent="guardar">
         <AppField label="Nombres" for="pa-nombres" :error="errores.nombres"><input id="pa-nombres" v-model="form.nombres" class="field-control"></AppField>
         <AppField label="Apellidos" for="pa-apellidos" :error="errores.apellidos"><input id="pa-apellidos" v-model="form.apellidos" class="field-control"></AppField>
-        <AppField label="Correo" for="pa-correo" :error="errores.correo"><input id="pa-correo" v-model="form.correo" type="email" class="field-control"></AppField>
+        <AppField label="Correo" for="pa-correo" :error="errores.correo" :hint="detalle?.googleVinculado ? AVISO_CAMBIO_CORREO_GOOGLE : undefined">
+          <input id="pa-correo" v-model="form.correo" type="email" class="field-control">
+        </AppField>
         <AppField label="Celular" for="pa-celular" :error="errores.celular"><input id="pa-celular" v-model="form.celular" class="field-control"></AppField>
+        <div v-if="detalle?.googleVinculado" class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white/5 px-4 py-3 sm:col-span-2">
+          <div class="text-sm">
+            <p class="font-medium text-white">Google vinculado</p>
+            <p class="text-xs text-slate-400">{{ tituloVinculoGoogle(detalle) }}. Con esa cuenta entra a «Mis inscripciones».</p>
+          </div>
+          <AppButton size="sm" variant="secondary" icon="heroicons:link-slash" :loading="desvinculando" @click="desvincularGoogle">Desvincular Google</AppButton>
+        </div>
       </form>
       <div v-if="detalle?.inscripciones.length" class="mt-6">
         <p class="kicker">Inscripciones</p>
