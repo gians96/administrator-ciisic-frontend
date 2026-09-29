@@ -1,6 +1,13 @@
 <script setup lang="ts">
-import type { Evento, EstadoEvento } from '~/types/api'
+import type { CredencialCorreo, Evento, EstadoEvento, Respuesta } from '~/types/api'
 import { slug } from '~/utils/formato'
+import { mensajeError } from '~/utils/errores'
+import {
+  describirCredencialEvento,
+  etiquetaUsarPredeterminada,
+  opcionesCredencialEvento,
+  type CredencialCorreoRef,
+} from '~/utils/credencialesCorreo'
 
 export interface EventoFormulario {
   codigo: string
@@ -20,11 +27,15 @@ export interface EventoFormulario {
   telefonoContacto: string
   remitenteNombre: string
   asuntoAprobacion: string
+  /** `null` = usar la credencial predeterminada. */
+  credencialCorreoId: number | null
   copiarDeEventoId: string
 }
 
 const props = defineProps<{ evento?: Evento | null, eventosParaCopiar?: Evento[], enviando?: boolean, errores?: Record<string, string> }>()
 const emit = defineEmits<{ guardar: [datos: Record<string, unknown>] }>()
+const auth = useAuthStore()
+const { api } = useApi()
 
 /** `datetime-local` usa hora local del navegador (Lima para el equipo del congreso). */
 function aLocal(iso: string | null | undefined): string {
@@ -52,10 +63,66 @@ const form = reactive<EventoFormulario>({
   telefonoContacto: props.evento?.telefonoContacto ?? '',
   remitenteNombre: props.evento?.remitenteNombre ?? '',
   asuntoAprobacion: props.evento?.asuntoAprobacion ?? '',
+  credencialCorreoId: props.evento?.credencialCorreoId ?? props.evento?.credencialCorreo?.id ?? null,
   copiarDeEventoId: '',
 })
 
 const esNuevo = computed(() => !props.evento)
+
+// ─── Credencial de correo: solo el SuperAdmin puede listarlas y elegir ───
+const credenciales = ref<CredencialCorreo[]>([])
+const cargandoCredenciales = ref(false)
+const errorCredenciales = ref<string | null>(null)
+/** El SuperAdmin cambió el selector a mano (ya no se propone la del evento de origen). */
+const credencialElegida = ref(false)
+
+/** Evento del que se copia la configuración (solo en el alta). */
+const origenCopia = computed(() => (esNuevo.value && form.copiarDeEventoId
+  ? props.eventosParaCopiar?.find((origen) => String(origen.id) === form.copiarDeEventoId) ?? null
+  : null))
+
+/**
+ * Credencial de referencia: la del evento al editar o la del evento de origen al copiar (el backend
+ * la copia si no se envía otra). Se conserva en el selector aunque esté inactiva.
+ */
+const credencialReferencia = computed<CredencialCorreoRef | null>(() => {
+  const fuente = esNuevo.value ? origenCopia.value : props.evento
+  if (fuente?.credencialCorreo) return fuente.credencialCorreo
+  return fuente?.credencialCorreoId ? { id: fuente.credencialCorreoId } : null
+})
+const opcionesCredencial = computed(() => opcionesCredencialEvento(credenciales.value, credencialReferencia.value))
+const etiquetaPredeterminada = computed(() => etiquetaUsarPredeterminada(credenciales.value))
+const pistaCredencial = computed(() => {
+  const inicio = origenCopia.value && !credencialElegida.value
+    ? `Se propone la misma que «${origenCopia.value.nombreCorto}».`
+    : 'Cuenta de Brevo con la que se envían los correos del evento.'
+  return `${inicio} «Usar la predeterminada» sigue a la que esté marcada como predeterminada; elegir una la fija para este evento.`
+})
+
+// Al copiar de otro evento se propone su credencial, igual que hace el backend
+watch(origenCopia, (origen) => {
+  if (!credencialElegida.value) form.credencialCorreoId = origen?.credencialCorreoId ?? null
+})
+
+/** Solo el SuperAdmin envía `credencialCorreoId`; si copia de un evento cuya credencial no se conoce, decide el backend. */
+const enviarCredencial = computed(() => auth.esSuperAdmin
+  && !(origenCopia.value && !credencialElegida.value && origenCopia.value.credencialCorreoId === undefined))
+
+async function cargarCredenciales() {
+  cargandoCredenciales.value = true
+  errorCredenciales.value = null
+  try {
+    credenciales.value = (await api<Respuesta<CredencialCorreo[]>>('email-credentials')).data
+  } catch (error) {
+    errorCredenciales.value = `No se pudieron cargar las credenciales: ${mensajeError(error)}`
+  } finally {
+    cargandoCredenciales.value = false
+  }
+}
+onMounted(() => {
+  if (auth.esSuperAdmin) cargarCredenciales()
+})
+
 const codigoEditado = ref(false)
 watch(() => form.nombreCorto, (valor) => {
   if (esNuevo.value && !codigoEditado.value) form.codigo = slug(valor)
@@ -82,6 +149,8 @@ function enviar() {
     telefonoContacto: nulo(form.telefonoContacto),
     remitenteNombre: nulo(form.remitenteNombre),
     asuntoAprobacion: nulo(form.asuntoAprobacion),
+    // El Admin no puede elegir credencial: no se envía y el backend conserva la actual (o copia la del origen)
+    ...(enviarCredencial.value ? { credencialCorreoId: form.credencialCorreoId } : {}),
     ...(esNuevo.value && form.copiarDeEventoId ? { copiarDeEventoId: Number(form.copiarDeEventoId) } : {}),
   })
 }
@@ -154,6 +223,38 @@ const e = (campo: string) => props.errores?.[campo] ?? null
       <AppField label="Asunto del correo de aprobación" for="ev-asunto">
         <input id="ev-asunto" v-model="form.asuntoAprobacion" class="field-control" maxlength="200" placeholder="Inscripción aprobada">
       </AppField>
+      <div class="md:col-span-2">
+        <AppField
+          v-if="auth.esSuperAdmin"
+          label="Credencial de correo"
+          for="ev-credencial"
+          :error="e('credencialCorreoId') ?? errorCredenciales"
+          :hint="pistaCredencial"
+        >
+          <select
+            id="ev-credencial"
+            v-model="form.credencialCorreoId"
+            class="field-control"
+            :disabled="cargandoCredenciales"
+            :aria-busy="cargandoCredenciales"
+            @change="credencialElegida = true"
+          >
+            <option :value="null">{{ cargandoCredenciales ? 'Cargando credenciales…' : etiquetaPredeterminada }}</option>
+            <option v-for="opcion in opcionesCredencial" :key="opcion.id" :value="opcion.id">{{ opcion.etiqueta }}</option>
+          </select>
+        </AppField>
+        <AppField
+          v-else
+          label="Credencial de correo"
+          for="ev-credencial"
+          :hint="origenCopia ? 'Se copia del evento de origen. Solo un SuperAdmin puede cambiarla.' : 'Solo un SuperAdmin puede cambiarla.'"
+        >
+          <input id="ev-credencial" :value="describirCredencialEvento(credencialReferencia)" class="field-control cursor-default bg-white/5 text-slate-300" readonly>
+        </AppField>
+        <NuxtLink v-if="auth.esSuperAdmin" to="/correo" class="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-brand-300 hover:text-brand-200">
+          <Icon name="heroicons:paper-airplane" class="size-3.5" aria-hidden="true" /> Gestionar credenciales de correo
+        </NuxtLink>
+      </div>
     </section>
 
     <section v-if="esNuevo && eventosParaCopiar?.length" class="rounded-xl border border-brand-400/25 bg-brand-500/5 p-4">

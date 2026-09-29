@@ -52,6 +52,9 @@ export interface Evento {
   remitenteNombre: string | null
   asuntoAprobacion: string | null
   datosPago: DatosPago | null
+  /** Credencial de correo propia; `null` = usa la predeterminada. */
+  credencialCorreoId?: number | null
+  credencialCorreo?: { id: number, nombre: string, remitenteCorreo: string } | null
   totalInscripciones?: number
   creadoEn: string
   actualizadoEn: string
