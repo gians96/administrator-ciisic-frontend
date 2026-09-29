@@ -1,0 +1,26 @@
+# Nuxt
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
+
+# Dependencias (bun es el gestor del proyecto)
+node_modules
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Logs y SO
+logs
+*.log
+.DS_Store
+Thumbs.db
+.idea
+.vscode
+
+# Entorno local
+.env
+.env.*
+!.env.example
