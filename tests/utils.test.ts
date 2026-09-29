@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aErrorApi, mensajeError } from '~/utils/errores'
+import { aErrorApi, MENSAJES_POR_CODIGO, mensajeError } from '~/utils/errores'
 import { aParametros, filtrosDesdeQuery } from '~/utils/filtros'
 import { fechaDia, modalidadPago, nombreCompleto, slug, soles, tamanoArchivo } from '~/utils/formato'
 
@@ -52,6 +52,28 @@ describe('errores de la API', () => {
 
   it('usa mensajes por defecto sin conexión', () => {
     expect(aErrorApi(new Error('fetch failed')).message).toBe('No se pudo conectar con el servidor.')
+  })
+
+  it('usa el mensaje del panel para los códigos de credenciales y tokens', () => {
+    for (const code of ['EMAIL_CREDENTIAL_NOT_FOUND', 'EMAIL_CREDENTIAL_IN_USE', 'ACCESS_TOKEN_NOT_FOUND']) {
+      const e = aErrorApi({ status: code.endsWith('IN_USE') ? 409 : 404, data: { success: false, code, message: 'texto del servidor' } })
+      expect(e.code).toBe(code)
+      expect(e.message).toBe(MENSAJES_POR_CODIGO[code])
+    }
+    expect(MENSAJES_POR_CODIGO.EMAIL_CREDENTIAL_IN_USE).toContain('Usar la predeterminada')
+  })
+
+  it('conserva el mensaje del servidor en VALIDATION_ERROR y tiene respaldo', () => {
+    expect(aErrorApi({ status: 422, data: { code: 'VALIDATION_ERROR', message: 'Los datos enviados no son válidos' } }).message)
+      .toBe('Los datos enviados no son válidos')
+    expect(aErrorApi({ status: 422, data: { code: 'VALIDATION_ERROR', fields: { correo: 'Correo inválido' } } }).message)
+      .toBe('Revisa los datos marcados en el formulario.')
+  })
+
+  it('traduce las claves de fields con etiquetas legibles', () => {
+    const error = { status: 422, data: { code: 'VALIDATION_ERROR', message: 'Datos inválidos', fields: { remitenteCorreo: 'Debe ser un correo', otro: 'x' } } }
+    expect(mensajeError(error, { remitenteCorreo: 'Correo del remitente' })).toBe('Datos inválidos (Correo del remitente: Debe ser un correo · otro: x)')
+    expect(mensajeError({ status: 422, data: { code: 'VALIDATION_ERROR', message: 'Datos inválidos', fields: {} } })).toBe('Datos inválidos')
   })
 })
 
