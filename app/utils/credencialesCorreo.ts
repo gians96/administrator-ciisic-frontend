@@ -55,11 +55,16 @@ const TIPOS_CREDITO_BREVO: Readonly<Record<string, string>> = {
   sendLimit: 'envíos disponibles',
 }
 
+function unidadCreditosBrevo(tipoCreditos: string | null): string {
+  if (!tipoCreditos) return 'créditos'
+  return TIPOS_CREDITO_BREVO[tipoCreditos] ?? `créditos (${tipoCreditos})`
+}
+
 /** `{ tipo: 'free', creditos: 300, tipoCreditos: 'sendLimit' }` → `Gratuito: 300 envíos disponibles`. */
 export function describirPlanBrevo(plan: PlanBrevo): string {
-  const tipo = TIPOS_PLAN_BREVO[plan.tipo] ?? plan.tipo
-  const unidad = TIPOS_CREDITO_BREVO[plan.tipoCreditos] ?? (plan.tipoCreditos ? `créditos (${plan.tipoCreditos})` : 'créditos')
-  return `${tipo}: ${numero(plan.creditos)} ${unidad}`
+  const tipo = TIPOS_PLAN_BREVO[plan.tipo] ?? (plan.tipo || 'Plan')
+  if (plan.creditos === null) return `${tipo}: sin datos de créditos`
+  return `${tipo}: ${numero(plan.creditos)} ${unidadCreditosBrevo(plan.tipoCreditos)}`
 }
 
 /** Predeterminada primero, luego las activas y por nombre. */
@@ -86,11 +91,18 @@ export function formularioCredencialCorreo(credencial?: CredencialCorreo | null,
   }
 }
 
-/** Validación en el navegador (el backend vuelve a validar). Usa las mismas claves que `fields`. */
+/**
+ * Validación en el navegador con las mismas reglas del backend (nombre 2–120, API key ≥ 10) y las
+ * mismas claves que `fields`, para dar los mensajes en español antes de enviar.
+ */
 export function validarCredencialCorreo(form: FormularioCredencialCorreo, original?: CredencialCorreo | null): Record<string, string> {
   const errores: Record<string, string> = {}
-  if (!form.nombre.trim()) errores.nombre = 'Ingresa un nombre para reconocer la credencial.'
-  if (!original && !form.apiKey.trim()) errores.apiKey = 'Pega la API key de Brevo.'
+  const nombre = form.nombre.trim()
+  const apiKey = form.apiKey.trim()
+  if (!nombre) errores.nombre = 'Ingresa un nombre para reconocer la credencial.'
+  else if (nombre.length < 2) errores.nombre = 'El nombre debe tener al menos 2 caracteres.'
+  if (!original && !apiKey) errores.apiKey = 'Pega la API key de Brevo.'
+  else if (apiKey && apiKey.length < 10) errores.apiKey = 'La API key parece incompleta (mínimo 10 caracteres).'
   if (!form.remitenteCorreo.trim()) errores.remitenteCorreo = 'Ingresa el correo del remitente.'
   else if (!esCorreoValido(form.remitenteCorreo)) errores.remitenteCorreo = 'Ingresa un correo válido.'
   if (form.esPredeterminada && !form.activo && !original?.esPredeterminada) errores.activo = 'Una credencial predeterminada debe estar activa.'

@@ -101,6 +101,7 @@ describe('tokens de acceso: expiración', () => {
       expiraEn: 'Elige la fecha de expiración.',
     })
     expect(validarTokenAcceso({ nombre: 'Landing', expiracion: 'nunca', fecha: '' }, AHORA)).toEqual({})
+    expect(validarTokenAcceso({ nombre: ' L ', expiracion: 'nunca', fecha: '' }, AHORA)).toEqual({ nombre: 'El nombre debe tener al menos 2 caracteres.' })
     expect(cuerpoTokenAcceso({ nombre: ' Landing ', expiracion: 'nunca', fecha: '2026-12-31' }, AHORA)).toEqual({ nombre: 'Landing', expiraEn: null })
     expect(cuerpoTokenAcceso({ nombre: 'Landing', expiracion: '90', fecha: '' }, AHORA)).toEqual({ nombre: 'Landing', expiraEn: '2026-12-28T15:00:00.000Z' })
   })

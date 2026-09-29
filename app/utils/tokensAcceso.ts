@@ -107,10 +107,12 @@ export function errorExpiracionToken(opcion: OpcionExpiracionToken, fecha: strin
   return null
 }
 
-/** Validación en el navegador (mismas claves que `fields` del backend). */
+/** Validación en el navegador (reglas y claves de `fields` del backend: nombre 2–120, expiración futura). */
 export function validarTokenAcceso(form: FormularioTokenAcceso, ahora: Date = new Date()): Record<string, string> {
   const errores: Record<string, string> = {}
-  if (!form.nombre.trim()) errores.nombre = 'Ingresa un nombre para reconocer el token (p. ej. Landing producción).'
+  const nombre = form.nombre.trim()
+  if (!nombre) errores.nombre = 'Ingresa un nombre para reconocer el token (p. ej. Landing producción).'
+  else if (nombre.length < 2) errores.nombre = 'El nombre debe tener al menos 2 caracteres.'
   const errorFecha = errorExpiracionToken(form.expiracion, form.fecha, ahora)
   if (errorFecha) errores.expiraEn = errorFecha
   return errores

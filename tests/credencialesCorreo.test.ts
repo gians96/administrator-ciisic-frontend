@@ -56,6 +56,12 @@ describe('credenciales de correo: presentación', () => {
     expect(describirPlanBrevo({ tipo: 'enterprise', creditos: 5, tipoCreditos: 'otro' })).toBe('enterprise: 5 créditos (otro)')
   })
 
+  it('tolera planes sin créditos, sin tipo de créditos o sin tipo', () => {
+    expect(describirPlanBrevo({ tipo: 'sms', creditos: null, tipoCreditos: null })).toBe('SMS: sin datos de créditos')
+    expect(describirPlanBrevo({ tipo: 'free', creditos: 20, tipoCreditos: null })).toBe('Gratuito: 20 créditos')
+    expect(describirPlanBrevo({ tipo: '', creditos: 0, tipoCreditos: '' })).toBe('Plan: 0 créditos')
+  })
+
   it('ordena: predeterminada, activas y por nombre', () => {
     const lista = [
       credencial({ id: 1, nombre: 'Zeta', activo: true }),
@@ -83,11 +89,23 @@ describe('credenciales de correo: formulario', () => {
   it('exige nombre, API key al crear y un remitente válido', () => {
     const vacio = formularioCredencialCorreo()
     expect(Object.keys(validarCredencialCorreo(vacio))).toEqual(['nombre', 'apiKey', 'remitenteCorreo'])
-    expect(validarCredencialCorreo({ ...vacio, nombre: 'X', remitenteCorreo: 'no-es-correo' }, credencial())).toEqual({ remitenteCorreo: 'Ingresa un correo válido.' })
+    expect(validarCredencialCorreo({ ...vacio, nombre: 'Brevo', remitenteCorreo: 'no-es-correo' }, credencial())).toEqual({ remitenteCorreo: 'Ingresa un correo válido.' })
+  })
+
+  it('aplica las longitudes mínimas del backend', () => {
+    const form = { ...formularioCredencialCorreo(), nombre: 'X', apiKey: 'corta', remitenteCorreo: 'a@b.pe' }
+    expect(validarCredencialCorreo(form)).toEqual({
+      nombre: 'El nombre debe tener al menos 2 caracteres.',
+      apiKey: 'La API key parece incompleta (mínimo 10 caracteres).',
+    })
+    // Al editar, la API key vacía es válida (se conserva), pero una nueva también se valida
+    const original = credencial()
+    expect(validarCredencialCorreo({ ...formularioCredencialCorreo(original) }, original)).toEqual({})
+    expect(validarCredencialCorreo({ ...formularioCredencialCorreo(original), apiKey: 'corta' }, original).apiKey).toBeDefined()
   })
 
   it('no permite que una credencial nueva sea predeterminada e inactiva', () => {
-    const form = { ...formularioCredencialCorreo(), nombre: 'X', apiKey: 'xkeysib-1', remitenteCorreo: 'a@b.pe', esPredeterminada: true, activo: false }
+    const form = { ...formularioCredencialCorreo(), nombre: 'Brevo', apiKey: 'xkeysib-123456', remitenteCorreo: 'a@b.pe', esPredeterminada: true, activo: false }
     expect(validarCredencialCorreo(form).activo).toBeDefined()
     expect(validarCredencialCorreo(form, credencial({ esPredeterminada: true }))).toEqual({})
   })

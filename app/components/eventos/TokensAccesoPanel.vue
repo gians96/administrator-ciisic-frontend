@@ -251,7 +251,7 @@ async function revocar(token: TokenAcceso) {
     <AppModal :abierto="modal" titulo="Generar token de acceso" descripcion="Para la landing de este evento." ancho="sm" @cerrar="modal = false">
       <form id="form-token-acceso" class="space-y-4" novalidate @submit.prevent="generar">
         <AppField label="Nombre" for="ta-nombre" required :error="errores.nombre" hint="Para reconocerlo después (p. ej. Landing producción).">
-          <input id="ta-nombre" v-model="form.nombre" class="field-control" maxlength="100" autocomplete="off">
+          <input id="ta-nombre" v-model="form.nombre" class="field-control" maxlength="120" autocomplete="off">
         </AppField>
         <AppField
           label="Expiración"

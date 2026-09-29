@@ -304,11 +304,11 @@ export interface CredencialCorreo {
 }
 
 /** Plan de la cuenta Brevo (`tipo` y `tipoCreditos` llegan como los reporta Brevo: `free`, `sendLimit`…). */
-export interface PlanBrevo { tipo: string, creditos: number, tipoCreditos: string }
+export interface PlanBrevo { tipo: string, creditos: number | null, tipoCreditos: string | null }
 
 export interface PruebaCredencialCorreo {
   ok: boolean
-  cuenta?: { correo: string, empresa: string | null, planes: PlanBrevo[] }
+  cuenta?: { correo: string | null, empresa: string | null, planes: PlanBrevo[] }
   error?: string
   credencial: CredencialCorreo
 }

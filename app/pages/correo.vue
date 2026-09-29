@@ -389,7 +389,7 @@ async function enviarPrueba() {
           </div>
           <template v-if="resultado.ok && resultado.cuenta">
             <p class="mt-2 text-slate-200">
-              Cuenta Brevo: <span class="text-white">{{ resultado.cuenta.correo }}</span><span v-if="resultado.cuenta.empresa"> · {{ resultado.cuenta.empresa }}</span>
+              Cuenta Brevo: <span class="text-white">{{ resultado.cuenta.correo ?? 'correo no informado' }}</span><span v-if="resultado.cuenta.empresa"> · {{ resultado.cuenta.empresa }}</span>
             </p>
             <ul v-if="resultado.cuenta.planes.length" class="mt-2 flex flex-wrap gap-2" aria-label="Créditos por plan">
               <li v-for="(plan, indice) in resultado.cuenta.planes" :key="indice" class="rounded-lg bg-white/5 px-3 py-1.5 text-xs text-slate-200 tabular-nums ring-1 ring-white/10">
@@ -411,7 +411,7 @@ async function enviarPrueba() {
     >
       <form id="form-credencial" class="grid gap-4 sm:grid-cols-2" novalidate @submit.prevent="guardar">
         <AppField label="Nombre" for="cr-nombre" required :error="errores.nombre" hint="Para reconocerla en el panel (p. ej. Brevo congreso)." class="sm:col-span-2">
-          <input id="cr-nombre" v-model="form.nombre" class="field-control" maxlength="100" autocomplete="off">
+          <input id="cr-nombre" v-model="form.nombre" class="field-control" maxlength="120" autocomplete="off">
         </AppField>
         <AppField
           label="API key de Brevo"
