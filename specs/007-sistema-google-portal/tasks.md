@@ -11,9 +11,9 @@
 - [ ] T006 Tipos del contrato en `app/types/api.ts` (configuración, sesión, portal, vínculo con Google, verificación del correo)
 
 ## US1 - Sistema (SuperAdmin)
-- [ ] T007 [P] `app/utils/configuracionSistema.ts` (formulario, PUT parcial por tarjeta, key write-only y «Quitar key», validaciones, estado, orígenes, avisos) con pruebas
-- [ ] T008 `app/pages/sistema.vue`: tarjetas API UNDC (con «Probar conexión»), Google (orígenes autorizados), URL del panel y Landing anterior; «Actualizado por X el …»; carga/error
-- [ ] T009 Entrada «Sistema» en `AppSidebar` solo para SuperAdmin
+- [x] T007 [P] `app/utils/configuracionSistema.ts` (formulario, PUT parcial por tarjeta, key write-only y «Quitar key», validaciones, estado, orígenes, avisos) con pruebas
+- [x] T008 `app/pages/sistema.vue`: tarjetas API UNDC (con «Probar conexión»), Google (orígenes autorizados), URL del panel y Landing anterior; «Actualizado por X el …»; carga/error
+- [x] T009 Entrada «Sistema» en `AppSidebar` solo para SuperAdmin
 
 ## US3 (base) - Perfiles de sesión
 - [ ] T010 [P] `server/utils/jwt-publico.ts` (`aud` sin verificar, formato de la credencial) con pruebas

@@ -341,3 +341,35 @@ export interface TokenAcceso {
 export interface TokenAccesoCreado extends TokenAcceso {
   token: string
 }
+
+// ─── Configuración del sistema (SuperAdmin) ───
+
+export interface ConfiguracionSistema {
+  undcApi: {
+    url: string | null
+    /** `••••9f3a`: la API key nunca vuelve completa del backend. */
+    apiKeyEnmascarada: string | null
+    timeoutMs: number
+    /** Hay URL y API key guardadas. */
+    configurada: boolean
+    ultimoEstado: 'OK' | 'ERROR' | null
+    ultimoError: string | null
+    ultimaPruebaEn: string | null
+  }
+  /** El client ID no es secreto (no hace falta client secret). */
+  google: { clientId: string | null, configurado: boolean }
+  /** Origen público del panel; la landing lo usa para `/login` y «Ver mi inscripción». */
+  urlPanel: string | null
+  /** Rutas del backend que usa la landing anterior (sin token de acceso). */
+  rutasLegacy: { activas: boolean }
+  actualizadoPor: { id: number, nombres: string, apellidos: string } | null
+  actualizadoEn: string
+}
+
+export interface PruebaUndcApi {
+  ok: boolean
+  mensaje: string
+  codigoHttp: number | null
+  latenciaMs: number
+  configuracion: ConfiguracionSistema
+}

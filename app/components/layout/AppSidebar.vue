@@ -25,6 +25,7 @@ const secciones = computed(() => [
         ? [
             { to: '/correo', label: 'Correo', icon: 'heroicons:paper-airplane' },
             { to: '/administradores', label: 'Administradores', icon: 'heroicons:shield-check' },
+            { to: '/sistema', label: 'Sistema', icon: 'heroicons:cog-8-tooth' },
           ]
         : []),
     ],
