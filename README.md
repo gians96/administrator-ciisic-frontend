@@ -1,5 +1,8 @@
 # Panel administrativo CIISIC
 
+- **Documentación** (pantallas, BFF y sesiones, Google, configuración y despliegue): [`docs/`](docs/README.md)
+- **Guía para agentes de IA y forma de trabajar con el resto del ecosistema**: [`AGENTS.md`](AGENTS.md)
+
 Panel del Congreso Internacional de Ingeniería de Sistemas e Investigación Científica
 (UNDC) para gestionar **eventos**, **inscripciones** (revisión de vouchers, aprobación y
 credenciales), **tipos de inscripción**, **asistencia**, **consultas DNI** (pool de tokens
