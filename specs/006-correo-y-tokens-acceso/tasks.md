@@ -23,4 +23,4 @@
 ## Cierre
 - [x] T013 Alinear tipos y validaciones con los contratos del backend (`backend-ciisic/specs/006-credenciales-correo` y `007-tokens-acceso-evento`)
 - [x] T014 `bun run lint`, `bun run typecheck`, `bun run test` y `bun run build` en verde
-- [ ] T015 Prueba integrada con backend-ciisic (la realiza el equipo cuando el backend exponga las rutas)
+- [x] T015 Prueba integrada con backend-ciisic local: credencial creada (key enmascarada) y probada contra Brevo (error legible), token de acceso generado y mostrado una vez, usado por la landing; aprobación con credencial PDF y error de envío registrado en la credencial (2026-09-29)
