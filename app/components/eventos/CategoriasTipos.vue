@@ -2,6 +2,7 @@
 import type { Caracteristica, Categoria, Respuesta, TipoInscripcion } from '~/types/api'
 import { numero, soles } from '~/utils/formato'
 import { aErrorApi, mensajeError } from '~/utils/errores'
+import { clonarLista } from '~/utils/clonar'
 
 const props = defineProps<{ eventoId: number }>()
 
@@ -97,7 +98,7 @@ function abrirTipo(categoria: Categoria, tipo?: TipoInscripcion) {
     activo: tipo?.activo ?? true,
     orden: tipo?.orden ?? categoria.tipos.length + 1,
   })
-  caracteristicas.value = structuredClone(tipo?.caracteristicas ?? [])
+  caracteristicas.value = clonarLista(tipo?.caracteristicas)
   tipoModal.value = true
 }
 

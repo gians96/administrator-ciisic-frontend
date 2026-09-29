@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { Banco, Billetera, DatosPago } from '~/types/api'
+import { clonarLista } from '~/utils/clonar'
 
 const props = defineProps<{ datos: DatosPago | null, enviando?: boolean }>()
 const emit = defineEmits<{ guardar: [datos: DatosPago] }>()
 
 const titular = ref(props.datos?.titular ?? '')
-const bancos = ref<Banco[]>(structuredClone(props.datos?.bancos ?? []))
-const billeteras = ref<Billetera[]>(structuredClone(props.datos?.billeteras ?? []))
+const bancos = ref<Banco[]>(clonarLista(props.datos?.bancos))
+const billeteras = ref<Billetera[]>(clonarLista(props.datos?.billeteras))
 
 function guardar() {
   emit('guardar', {
