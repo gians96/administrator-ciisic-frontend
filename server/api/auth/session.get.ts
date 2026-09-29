@@ -1,18 +1,26 @@
-interface SessionResponse {
+interface RespuestaSesion {
   success: boolean
-  user: Record<string, unknown>
+  tipo?: 'ADMIN' | 'PARTICIPANTE'
+  user?: Record<string, unknown>
+  participante?: Record<string, unknown>
 }
 
+const SIN_SESION = { authenticated: false, tipo: null, user: null, participante: null } as const
+
+/** Sesión actual (administrador o inscrito) según el backend. Si el token ya no vale, se cierra. */
 export default defineEventHandler(async (event) => {
   const token = tokenDeSesion(event)
-  if (!token) return { authenticated: false, user: null }
+  if (!token) return SIN_SESION
   try {
-    const response = await $fetch<SessionResponse>(backendUrl(event, '/api/v1/auth/session'), {
+    const respuesta = await $fetch<RespuestaSesion>(backendUrl(event, '/api/v1/auth/session'), {
       headers: { authorization: `Bearer ${token}` },
     })
-    return { authenticated: true, user: response.user }
+    const esParticipante = respuesta.tipo === 'PARTICIPANTE' || (!respuesta.tipo && Boolean(respuesta.participante) && !respuesta.user)
+    return esParticipante
+      ? { authenticated: true, tipo: 'PARTICIPANTE' as const, user: null, participante: respuesta.participante ?? null }
+      : { authenticated: true, tipo: 'ADMIN' as const, user: respuesta.user ?? null, participante: null }
   } catch {
     cerrarSesion(event)
-    return { authenticated: false, user: null }
+    return SIN_SESION
   }
 })

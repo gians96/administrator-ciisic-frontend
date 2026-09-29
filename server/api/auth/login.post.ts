@@ -18,7 +18,8 @@ export default defineEventHandler(async (event) => {
       headers: { 'x-forwarded-for': getRequestIP(event, { xForwardedFor: true }) ?? '' },
     })
     guardarSesion(event, response.jwt, vidaSesionSegundos(response.expiraEn))
-    return { success: true, usuario: response.usuario }
+    // El acceso con contraseña es solo para administradores
+    return { success: true, tipo: 'ADMIN' as const, usuario: response.usuario }
   } catch (error) {
     const status = (error as { statusCode?: number }).statusCode
     if (status === 429) {

@@ -28,6 +28,20 @@ export interface Usuario {
   rolNombre: string
 }
 
+// ─── Sesión: administrador o inscrito (portal «Mis inscripciones») ───
+
+export type TipoSesion = 'ADMIN' | 'PARTICIPANTE'
+
+/** Inscrito que entró con Google al portal. */
+export interface ParticipanteSesion {
+  id: number
+  nombres: string
+  apellidos: string
+  correo: string
+}
+
+export type Sesion = { tipo: 'ADMIN', usuario: Usuario } | { tipo: 'PARTICIPANTE', participante: ParticipanteSesion }
+
 export interface Banco { codigo: string, nombre: string, numeroCuenta: string, cci?: string | null }
 export interface Billetera { codigo: string, nombre: string, telefono: string, qrUrl?: string | null }
 export interface DatosPago { titular?: string | null, bancos?: Banco[], billeteras?: Billetera[] }

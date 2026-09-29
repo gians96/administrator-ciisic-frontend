@@ -1,28 +1,53 @@
 import { defineStore } from 'pinia'
-import type { Usuario } from '~/types/api'
+import type { Sesion, TipoSesion } from '~/types/api'
+import { leerSesion } from '~/utils/sesion'
 
+/** La respuesta no trae una sesión reconocible (no debería ocurrir con el BFF). */
+function sesionDe(respuesta: unknown): Sesion {
+  const sesion = leerSesion(respuesta)
+  if (sesion) return sesion
+  throw Object.assign(new Error('Respuesta de sesión inesperada'), {
+    status: 502,
+    data: { code: 'ERROR', message: 'El servidor respondió de forma inesperada. Intenta nuevamente.' },
+  })
+}
+
+/** Sesión del panel: administrador (panel completo) o inscrito (portal «Mis inscripciones»). */
 export const useAuthStore = defineStore('auth', () => {
-  const usuario = ref<Usuario | null>(null)
+  const sesion = ref<Sesion | null>(null)
   const verificado = ref(false)
 
+  const tipo = computed<TipoSesion | null>(() => sesion.value?.tipo ?? null)
+  const usuario = computed(() => (sesion.value?.tipo === 'ADMIN' ? sesion.value.usuario : null))
+  const participante = computed(() => (sesion.value?.tipo === 'PARTICIPANTE' ? sesion.value.participante : null))
   const esSuperAdmin = computed(() => usuario.value?.rolCodigo === 'SUPERADMIN')
+  const esParticipante = computed(() => tipo.value === 'PARTICIPANTE')
+
+  function establecer(nueva: Sesion | null) {
+    sesion.value = nueva
+    verificado.value = true
+  }
 
   async function cargarSesion(): Promise<boolean> {
     try {
-      const sesion = await $fetch<{ authenticated: boolean, user: Usuario | null }>('/api/auth/session')
-      usuario.value = sesion.authenticated ? sesion.user : null
+      establecer(leerSesion(await $fetch('/api/auth/session')))
     } catch {
-      usuario.value = null
-    } finally {
-      verificado.value = true
+      establecer(null)
     }
-    return Boolean(usuario.value)
+    return Boolean(sesion.value)
   }
 
-  async function login(correo: string, contrasena: string) {
-    const respuesta = await $fetch<{ usuario: Usuario }>('/api/auth/login', { method: 'POST', body: { correo, contrasena } })
-    usuario.value = respuesta.usuario
-    verificado.value = true
+  async function login(correo: string, contrasena: string): Promise<TipoSesion> {
+    const nueva = sesionDe(await $fetch('/api/auth/login', { method: 'POST', body: { correo, contrasena } }))
+    establecer(nueva)
+    return nueva.tipo
+  }
+
+  /** Canjea la credencial (ID token) de Google por la sesión; devuelve el perfil con el que se entró. */
+  async function loginGoogle(credential: string): Promise<TipoSesion> {
+    const nueva = sesionDe(await $fetch('/api/auth/google', { method: 'POST', body: { credential } }))
+    establecer(nueva)
+    return nueva.tipo
   }
 
   async function logout() {
@@ -31,9 +56,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function limpiar() {
-    usuario.value = null
-    verificado.value = true
+    establecer(null)
   }
 
-  return { usuario, verificado, esSuperAdmin, cargarSesion, login, logout, limpiar }
+  return { sesion, verificado, tipo, usuario, participante, esSuperAdmin, esParticipante, cargarSesion, login, loginGoogle, logout, limpiar }
 })
