@@ -3,4 +3,4 @@
 - [x] T001 KPIs, gráfico por día y dona por estado
 - [x] T002 Tabla por tipo de inscripción
 - [x] T003 Tarjeta Semana Sistémica (congreso + deportes + total, errores por integración)
-- [ ] T004 Validación con una integración real de deportes-fi (fase de verificación E2E)
+- [x] T004 Validado con deportes-fi local: tarjeta con congreso, deportes por disciplina y total (2026-09-29)
