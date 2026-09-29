@@ -40,15 +40,11 @@ export default defineNuxtConfig({
     },
   },
 
+  // Única variable de entorno: NUXT_BACKEND_BASE_URL. La cookie de sesión dura lo que el JWT del
+  // backend (`expiraEn`) y el resto de la configuración vive en el backend.
   runtimeConfig: {
     // URL interna del backend-ciisic (sin /api/v1). Solo la usa el servidor Nitro.
     backendBaseUrl: 'http://localhost:3010',
-    // Duración de la sesión (debe coincidir con la expiración del JWT del backend)
-    sessionMaxAge: 3600,
-    public: {
-      appName: 'Panel CIISIC',
-      landingUrl: 'https://ciisic-viii.episundc.pe',
-    },
   },
 
   nitro: {

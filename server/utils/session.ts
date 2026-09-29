@@ -11,14 +11,17 @@ export function tokenDeSesion(event: H3Event): string | undefined {
   return getCookie(event, SESSION_COOKIE) || undefined
 }
 
-export function guardarSesion(event: H3Event, token: string): void {
-  const { sessionMaxAge } = useRuntimeConfig(event)
+/**
+ * Guarda el JWT en la cookie httpOnly. `maxAgeSegundos` es la vida del JWT según el backend
+ * (`vidaSesionSegundos(expiraEn)`), para que la cookie no sobreviva ni caduque antes que el token.
+ */
+export function guardarSesion(event: H3Event, token: string, maxAgeSegundos: number): void {
   setCookie(event, SESSION_COOKIE, token, {
     httpOnly: true,
     secure: !import.meta.dev,
     sameSite: 'strict',
     path: '/',
-    maxAge: Number(sessionMaxAge) || 3600,
+    maxAge: maxAgeSegundos,
   })
 }
 

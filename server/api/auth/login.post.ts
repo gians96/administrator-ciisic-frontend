@@ -1,6 +1,8 @@
 interface LoginResponse {
   jwt: string
   usuario: Record<string, unknown>
+  /** Vida del JWT: segundos o fecha ISO de expiración. */
+  expiraEn?: number | string
 }
 
 export default defineEventHandler(async (event) => {
@@ -15,7 +17,7 @@ export default defineEventHandler(async (event) => {
       body: { correo: body.correo, contrasena: body.contrasena },
       headers: { 'x-forwarded-for': getRequestIP(event, { xForwardedFor: true }) ?? '' },
     })
-    guardarSesion(event, response.jwt)
+    guardarSesion(event, response.jwt, vidaSesionSegundos(response.expiraEn))
     return { success: true, usuario: response.usuario }
   } catch (error) {
     const status = (error as { statusCode?: number }).statusCode

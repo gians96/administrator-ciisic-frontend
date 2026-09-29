@@ -23,10 +23,13 @@ bun run dev              # http://localhost:3001
 
 Calidad: `bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`.
 
+La única variable de entorno es `NUXT_BACKEND_BASE_URL`: la sesión dura lo que el JWT que
+emite el backend (`expiraEn`) y el resto de la configuración vive en el backend.
+
 ## Seguridad
 
 - El JWT del backend se guarda en la cookie httpOnly `ciisic_admin_session`
-  (`SameSite=Strict`); el navegador nunca lo ve.
+  (`SameSite=Strict`) con la misma vida que el JWT; el navegador nunca lo ve.
 - Todas las llamadas pasan por `/api/backend/**` (proxy Nitro) que agrega el Bearer y
   valida el `Origin` en mutaciones.
 - Los tokens de proveedores e integraciones se envían una sola vez y el backend los guarda
@@ -35,6 +38,5 @@ Calidad: `bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`.
 ## Despliegue
 
 Imagen Docker (`Dockerfile`): Node 22 Alpine sirviendo `.output/server/index.mjs` en el
-puerto 3000. Variables: `NUXT_BACKEND_BASE_URL` (URL interna del backend),
-`NUXT_SESSION_MAX_AGE` (3600) y `NUXT_PUBLIC_LANDING_URL`. Servir detrás de HTTPS
-(la cookie es `Secure`).
+puerto 3000. Única variable: `NUXT_BACKEND_BASE_URL` (URL interna del backend). Servir
+detrás de HTTPS (la cookie es `Secure`).
