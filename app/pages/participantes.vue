@@ -104,7 +104,7 @@ async function guardar() {
         <p class="kicker">Inscripciones</p>
         <ul class="mt-2 space-y-2">
           <li v-for="i in detalle.inscripciones" :key="i.id" class="flex items-center justify-between rounded-xl bg-white/5 px-4 py-2 text-sm">
-            <span>{{ i.evento.nombreCorto }} · {{ i.tipoInscripcion ?? '—' }}<span class="block text-xs text-slate-500">{{ fechaHoraLima(i.creadoEn) }}</span></span>
+            <span>{{ i.evento.nombreCorto }} · {{ i.tipoInscripcion ?? '—' }}<span class="block text-xs whitespace-nowrap text-slate-500">{{ fechaHoraLima(i.creadoEn) }}</span></span>
             <AppBadge :estado="i.estado.codigo as 'PENDIENTE'">{{ i.estado.nombre }}</AppBadge>
           </li>
         </ul>

@@ -80,8 +80,8 @@ async function eliminar(actividad: Actividad) {
           <tbody>
             <tr v-for="actividad in actividades" :key="actividad.id">
               <td class="font-medium text-white">{{ actividad.nombre }}</td>
-              <td>{{ fechaDia(actividad.fecha) }}</td>
-              <td class="tabular-nums">{{ actividad.horaInicio }} – {{ actividad.horaFin }}</td>
+              <td class="whitespace-nowrap">{{ fechaDia(actividad.fecha) }}</td>
+              <td class="whitespace-nowrap tabular-nums">{{ actividad.horaInicio }} – {{ actividad.horaFin }}</td>
               <td class="text-right tabular-nums">{{ numero(actividad.totalAsistencias) }}</td>
               <td class="text-right whitespace-nowrap">
                 <AppButton size="sm" variant="ghost" icon="heroicons:qr-code" :to="`/asistencia?actividad=${actividad.id}`">Registrar</AppButton>

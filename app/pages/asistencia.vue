@@ -154,7 +154,7 @@ const actividad = computed(() => actividades.value.find((a) => a.id === activida
               <tr v-for="asistencia in asistencias" :key="asistencia.id">
                 <td class="font-medium text-white">{{ nombreCompleto(asistencia.participante) }}</td>
                 <td class="font-mono text-sm">{{ asistencia.participante.tipoDocumento.toUpperCase() }} {{ asistencia.participante.numeroDocumento }}</td>
-                <td class="text-sm">{{ fechaHoraLima(asistencia.registradoEn) }}</td>
+                <td class="text-sm whitespace-nowrap">{{ fechaHoraLima(asistencia.registradoEn) }}</td>
                 <td class="text-right"><AppButton size="sm" variant="ghost" icon="heroicons:trash" aria-label="Quitar asistencia" @click="eliminar(asistencia)" /></td>
               </tr>
               <tr v-if="!asistencias.length"><td colspan="4" class="py-8 text-center text-slate-400">Aún no hay asistencias en esta actividad.</td></tr>

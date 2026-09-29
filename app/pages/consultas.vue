@@ -260,11 +260,11 @@ const TONO_ESTADO = { ACTIVO: 'ok', AGOTADO: 'warn', INVALIDO: 'error' } as cons
                 <div v-if="token.porcentajeUso !== null" class="mt-1 h-1.5 w-40 overflow-hidden rounded-full bg-white/10" role="progressbar" :aria-valuenow="token.porcentajeUso" aria-valuemin="0" aria-valuemax="100">
                   <div class="h-full rounded-full" :class="token.porcentajeUso >= 90 ? 'bg-red-400' : token.porcentajeUso >= 70 ? 'bg-amber-400' : 'bg-brand-500'" :style="{ width: `${token.porcentajeUso}%` }" />
                 </div>
-                <p class="mt-0.5 text-xs text-slate-500">Último uso: {{ fechaHoraLima(token.ultimoUsoEn) }}</p>
+                <p class="mt-0.5 text-xs whitespace-nowrap text-slate-500">Último uso: {{ fechaHoraLima(token.ultimoUsoEn) }}</p>
               </td>
               <td class="text-sm">
                 <p>{{ PERIODOS.find((p) => p.id === token.periodoRenovacion)?.nombre }}</p>
-                <p class="text-xs text-slate-400">{{ token.fechaRenovacion ? fechaHoraLima(token.fechaRenovacion) : 'Sin fecha' }}</p>
+                <p class="text-xs whitespace-nowrap text-slate-400">{{ token.fechaRenovacion ? fechaHoraLima(token.fechaRenovacion) : 'Sin fecha' }}</p>
               </td>
               <td>
                 <div class="flex flex-col items-start gap-1">

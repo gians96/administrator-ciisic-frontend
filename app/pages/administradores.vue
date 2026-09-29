@@ -86,7 +86,7 @@ async function eliminar(admin: Administrador) {
               <td class="text-sm">{{ admin.correo }}</td>
               <td><AppBadge :tono="admin.rolCodigo === 'SUPERADMIN' ? 'warn' : 'neutral'">{{ admin.rolNombre }}</AppBadge></td>
               <td><AppBadge :tono="admin.activo ? 'ok' : 'neutral'">{{ admin.activo ? 'Activo' : 'Inactivo' }}</AppBadge></td>
-              <td class="text-sm">{{ fechaHoraLima(admin.creadoEn) }}</td>
+              <td class="text-sm whitespace-nowrap">{{ fechaHoraLima(admin.creadoEn) }}</td>
               <td class="text-right whitespace-nowrap">
                 <AppButton size="sm" variant="ghost" icon="heroicons:pencil-square" @click="abrir(admin)">Editar</AppButton>
                 <AppButton v-if="admin.id !== auth.usuario?.id" size="sm" variant="ghost" icon="heroicons:trash" aria-label="Eliminar administrador" @click="eliminar(admin)" />

@@ -79,7 +79,7 @@ async function eliminar(mensaje: MensajeContacto) {
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-baseline justify-between gap-2">
             <p class="font-medium text-white" :class="mensaje.leido ? '' : 'font-semibold'">{{ mensaje.asunto }}</p>
-            <p class="text-xs text-slate-500">{{ fechaHoraLima(mensaje.creadoEn) }}</p>
+            <p class="text-xs whitespace-nowrap text-slate-500">{{ fechaHoraLima(mensaje.creadoEn) }}</p>
           </div>
           <p class="text-sm text-slate-400">{{ mensaje.nombres }} {{ mensaje.apellidos }} · {{ mensaje.correo }}</p>
           <p class="mt-1 line-clamp-1 text-sm text-slate-500">{{ mensaje.mensaje }}</p>

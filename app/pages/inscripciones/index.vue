@@ -188,10 +188,10 @@ function limpiar() {
               <td class="text-right font-semibold text-white tabular-nums">{{ soles(fila.monto) }}</td>
               <td>
                 <p>{{ modalidadPago(fila.modalidadPago) }}</p>
-                <p class="font-mono text-xs text-slate-400">{{ fila.numeroOperacion }} · {{ fechaDia(fila.fechaPago) }}</p>
+                <p class="font-mono text-xs whitespace-nowrap text-slate-400">{{ fila.numeroOperacion }} · {{ fechaDia(fila.fechaPago) }}</p>
               </td>
               <td><AppBadge :estado="fila.estado.codigo">{{ fila.estado.nombre }}</AppBadge></td>
-              <td class="text-xs text-slate-400">{{ fechaHoraLima(fila.creadoEn) }}</td>
+              <td class="text-xs whitespace-nowrap text-slate-400">{{ fechaHoraLima(fila.creadoEn) }}</td>
               <td class="text-right">
                 <AppButton size="sm" variant="secondary" icon="heroicons:eye" @click.stop="seleccionada = fila.id">Revisar</AppButton>
               </td>
