@@ -25,8 +25,17 @@ ultimaPruebaEn, ultimoEnvioEn, eventos: [{ id, codigo, nombreCorto }], creadoEn,
 `TokenAcceso`: `id, eventoId, nombre, prefijo, estado: 'ACTIVO'|'REVOCADO'|'EXPIRADO', ultimoUsoEn,
 expiraEn, revocadoEn, creadoPor: { id, nombres, apellidos } | null, creadoEn`.
 
-Evento (detalle): `credencialCorreoId: number | null` y
+Evento (listado y detalle): `credencialCorreoId: number | null` y
 `credencialCorreo: { id, nombre, remitenteCorreo } | null`; alta/edición aceptan `credencialCorreoId`.
+
+Detalles confirmados en los contratos del backend (`specs/006-credenciales-correo`,
+`specs/007-tokens-acceso-evento`): la lista de credenciales llega con la predeterminada primero;
+`cuenta.correo`, `planes[].creditos` y `planes[].tipoCreditos` pueden ser `null`; quitar la marca a la
+predeterminada responde `422 DEFAULT_CREDENTIAL_REQUIRED`; al eliminar una credencial sus eventos quedan
+con `credencialCorreoId = null`; un `credencialCorreoId` inexistente en el evento responde
+`422 EMAIL_CREDENTIAL_NOT_FOUND` con `fields.credencialCorreoId`; al crear un evento con
+`copiarDeEventoId` y sin `credencialCorreoId`, se copia la del origen; el prefijo del token es
+`ciisic_` + 8 caracteres y revocar es idempotente.
 
 ## Archivos
 
@@ -62,6 +71,10 @@ Evento (detalle): `credencialCorreoId: number | null` y
   Lima (UTC−5, sin horario de verano). Vacío = sin expiración (`expiraEn: null`).
 - **Rol en el formulario del evento**: solo el SuperAdmin consulta `email-credentials` y envía
   `credencialCorreoId`; el Admin ve `credencialCorreo` del evento en un campo de solo lectura.
+- **Copia de evento**: al elegir "Copiar de…" en el alta se propone la credencial del origen (lo mismo
+  que haría el backend) mientras el SuperAdmin no cambie el selector a mano.
+- **Validación en el navegador**: mismas reglas que el backend (nombre 2–120, API key ≥ 10, correo,
+  expiración futura) porque los mensajes de yup del backend llegan en inglés.
 
 ## Constitution Check
 

@@ -1,7 +1,8 @@
 # Feature Specification: Credenciales de correo (Brevo) y tokens de acceso por evento
 
-**Feature Branch**: `feat/panel-admin` · **Created**: 2026-09-29 · **Status**: En implementación
-**Contrato**: acordado con `backend-ciisic` (se implementa en paralelo; resumen en [plan.md](plan.md))
+**Feature Branch**: `feat/panel-admin` · **Created**: 2026-09-29 · **Status**: Implementado (pendiente prueba integrada)
+**Contrato**: acordado con `backend-ciisic` (resumen en [plan.md](plan.md)); contrastado con
+`backend-ciisic/specs/006-credenciales-correo/contracts` y `specs/007-tokens-acceso-evento/contracts`
 **Input**: "Credenciales de correo (Brevo), solo SUPERADMIN… Tokens de acceso por evento (para que la
 landing del evento consuma el backend), solo SUPERADMIN… En el formulario General del evento, nuevo
 campo «Credencial de correo»."
@@ -17,8 +18,9 @@ sabiendo que la key se guarda cifrada y que solo veré `••••abcd`, y ele
 2. **Given** que edito una credencial, **When** dejo vacía la API key ("Dejar vacío para conservar"),
    **Then** se conserva la actual y solo se envían los campos que cambié.
 3. **Given** una credencial activa, **When** la marco como predeterminada, **Then** la anterior deja de serlo.
-4. **Given** que elimino una credencial (con confirmación), **Then** desaparece de la lista; si era la
-   predeterminada, el backend promueve otra activa. Si está en uso y el backend lo impide
+4. **Given** que elimino una credencial (con confirmación, que menciona los eventos que la usan),
+   **Then** desaparece de la lista; si era la predeterminada, el backend promueve otra (activa primero) y
+   los eventos que la usaban quedan con "Usar la predeterminada". Si el backend llegara a impedirlo
    (`EMAIL_CREDENTIAL_IN_USE`), veo qué hacer.
 5. **Given** un Admin (no SuperAdmin), **When** intento abrir `/correo`, **Then** se me redirige al inicio y
    no veo "Correo" en el menú.
@@ -38,6 +40,8 @@ prueba y el último envío.
 ### User Story 3 - Credencial por evento (Priority: P2)
 En General del evento quiero elegir una credencial activa o "Usar la predeterminada". Un Admin ve la
 credencial actual en solo lectura (sin consultar `/email-credentials`, que es solo SuperAdmin).
+Al crear un evento copiando de otro, se propone la credencial del evento de origen (el backend la copia
+si no se envía otra).
 
 ### User Story 4 - Tokens de acceso de la landing (Priority: P1)
 Como SuperAdmin, en la pestaña "Acceso" del evento quiero generar un token (nombre y expiración
@@ -61,6 +65,10 @@ estado, último uso, expiración y quién lo creó, y revocarlo.
 - El portapapeles no está disponible (contexto no seguro o permiso denegado): se selecciona el token y
   se pide copiarlo con Ctrl+C; la copia manual también cuenta como "copiado".
 - Token con estado ACTIVO pero `expiraEn` ya vencido: se muestra como "Expirado".
+- Quitar la marca a la predeterminada no es posible (`422 DEFAULT_CREDENTIAL_REQUIRED`): el panel nunca
+  envía `esPredeterminada: false`; para cambiarla se marca otra.
+- El backend valida con mensajes de yup en inglés: el panel valida antes en español con las mismas reglas
+  (nombre 2–120, API key ≥ 10, correo válido, expiración futura).
 
 ## Requirements
 - **FR-001**: Página `/correo` con `definePageMeta({ soloSuperAdmin: true })` (el middleware global
