@@ -5,6 +5,7 @@ import { aErrorApi, mensajeError } from '~/utils/errores'
 const route = useRoute()
 const router = useRouter()
 const { api } = useApi()
+const auth = useAuthStore()
 const store = useEventoStore()
 const toast = useToast()
 const { confirmar } = useConfirm()
@@ -14,14 +15,18 @@ const evento = ref<Evento | null>(null)
 const enviando = ref(false)
 const errores = ref<Record<string, string>>({})
 
-const TABS = [
+const TABS = computed(() => [
   { id: 'general', label: 'General', icon: 'heroicons:cog-6-tooth' },
   { id: 'pago', label: 'Datos de pago', icon: 'heroicons:banknotes' },
   { id: 'tipos', label: 'Categorías y tipos', icon: 'heroicons:tag' },
   { id: 'actividades', label: 'Actividades', icon: 'heroicons:calendar' },
   { id: 'integraciones', label: 'Integraciones', icon: 'heroicons:link' },
-]
-const tab = ref(TABS.some((t) => t.id === route.query.tab) ? String(route.query.tab) : 'general')
+  // Tokens para que la landing del evento consuma el backend: solo SuperAdmin
+  ...(auth.esSuperAdmin ? [{ id: 'acceso', label: 'Acceso', icon: 'heroicons:key' }] : []),
+])
+const tab = ref(TABS.value.some((t) => t.id === route.query.tab) ? String(route.query.tab) : 'general')
+// Pestaña inexistente o no permitida (p. ej. `?tab=acceso` para un Admin): se corrige la URL
+if (route.query.tab && route.query.tab !== tab.value) router.replace({ query: { tab: tab.value } })
 watch(tab, (valor) => router.replace({ query: { tab: valor } }))
 
 useHead(() => ({ title: `${evento.value?.nombreCorto ?? 'Evento'} · Panel CIISIC` }))
@@ -105,6 +110,7 @@ async function eliminar() {
       <CategoriasTipos v-else-if="tab === 'tipos'" :evento-id="evento.id" />
       <ActividadesPanel v-else-if="tab === 'actividades'" :evento-id="evento.id" />
       <IntegracionesPanel v-else-if="tab === 'integraciones'" :evento-id="evento.id" />
+      <TokensAccesoPanel v-else-if="tab === 'acceso' && auth.esSuperAdmin" :evento-id="evento.id" />
     </template>
   </div>
 </template>

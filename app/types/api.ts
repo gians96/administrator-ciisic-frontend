@@ -315,3 +315,26 @@ export interface EnvioPruebaCorreo {
   error?: string
   credencial: CredencialCorreo
 }
+
+// ─── Tokens de acceso por evento (landing → backend) ───
+
+export type EstadoTokenAcceso = 'ACTIVO' | 'REVOCADO' | 'EXPIRADO'
+
+export interface TokenAcceso {
+  id: number
+  eventoId: number
+  nombre: string
+  /** Primeros caracteres del token (`ciisic_AbCd`); el valor completo solo llega al crearlo. */
+  prefijo: string
+  estado: EstadoTokenAcceso
+  ultimoUsoEn: string | null
+  expiraEn: string | null
+  revocadoEn: string | null
+  creadoPor: { id: number, nombres: string, apellidos: string } | null
+  creadoEn: string
+}
+
+/** Respuesta del alta: única vez que el backend devuelve el token en claro. */
+export interface TokenAccesoCreado extends TokenAcceso {
+  token: string
+}
