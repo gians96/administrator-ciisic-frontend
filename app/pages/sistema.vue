@@ -211,8 +211,8 @@ async function copiarOrigen(origen: string) {
         </p>
 
         <form id="form-undc" class="mt-5 grid gap-4 sm:grid-cols-2" novalidate @submit.prevent="guardar('undc')">
-          <AppField label="URL de API_UNDC" for="si-undc-url" :error="errores.undcApiUrl" hint="https (http solo para localhost). Vacía = sin conexión." class="sm:col-span-2">
-            <input id="si-undc-url" v-model="form.undcApiUrl" type="url" class="field-control font-mono" maxlength="255" autocomplete="off" spellcheck="false" placeholder="https://…">
+          <AppField label="URL de API_UNDC" for="si-undc-url" :error="errores.undcApiUrl" hint="La de la API (https://api-jp.episundc.pe), no la de SIGENET (jp.episundc.pe). https; http solo para localhost. Vacía = sin conexión." class="sm:col-span-2">
+            <input id="si-undc-url" v-model="form.undcApiUrl" type="url" class="field-control font-mono" maxlength="255" autocomplete="off" spellcheck="false" placeholder="https://api-jp.episundc.pe">
           </AppField>
           <AppField label="API key" for="si-undc-key" :error="errores.undcApiKey" :hint="ayudaApiKey">
             <div class="flex items-center gap-2">
@@ -240,7 +240,7 @@ async function copiarOrigen(origen: string) {
               </AppButton>
             </div>
           </AppField>
-          <AppField label="Tiempo de espera (ms)" for="si-undc-timeout" :error="errores.undcApiTimeoutMs" :hint="`Entre ${TIMEOUT_MINIMO_MS} y ${TIMEOUT_MAXIMO_MS} ms (1 a 30 segundos).`">
+          <AppField label="Tiempo de espera (ms)" for="si-undc-timeout" :error="errores.undcApiTimeoutMs" :hint="`Entre ${TIMEOUT_MINIMO_MS} y ${TIMEOUT_MAXIMO_MS} ms. Recomendado: 15000 (API_UNDC puede tardar varios segundos al consultar SIVIRENO).`">
             <input
               id="si-undc-timeout"
               v-model.number="form.undcApiTimeoutMs"
