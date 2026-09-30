@@ -36,6 +36,9 @@
 - [x] T021 [P] `app/utils/cuentaGoogle.ts` con pruebas
 - [x] T022 Administradores y participantes: «Google vinculado» y «Desvincular Google» con confirmación
 - [x] T023 Inscripciones: «Correo verificado con Google (…)» en el detalle e indicador en la lista
+- [x] T026 Administradores: acceso «Solo Google» o «Contraseña o Google» al crear y editar (quitar o
+      poner la contraseña; no quitarse la propia sin Google vinculado) y columna «Acceso», con
+      `app/utils/administradores.ts` y pruebas
 
 ## Cierre
 - [x] T024 README y spec actualizados; `bun run lint`, `bun run typecheck`, `bun run test` y `bun run build` en verde

@@ -3,6 +3,7 @@ import type { Administrador, Respuesta } from '~/types/api'
 import { fechaHoraLima, nombreCompleto } from '~/utils/formato'
 import { aErrorApi, mensajeError } from '~/utils/errores'
 import { AVISO_CAMBIO_CORREO_GOOGLE, mensajeDesvincularGoogle, tituloVinculoGoogle } from '~/utils/cuentaGoogle'
+import { accesoDe, contrasenaObligatoria, cuerpoAdmin, etiquetaAcceso, MIN_CONTRASENA, OPCIONES_ACCESO, type FormAdmin } from '~/utils/administradores'
 
 definePageMeta({ soloSuperAdmin: true })
 useHead({ title: 'Administradores · Panel CIISIC' })
@@ -18,7 +19,12 @@ const editando = ref<Administrador | null>(null)
 const guardando = ref(false)
 const desvinculando = ref(false)
 const errores = ref<Record<string, string>>({})
-const form = reactive({ nombres: '', apellidos: '', correo: '', contrasena: '', rolCodigo: 'ADMIN' as 'ADMIN' | 'SUPERADMIN', activo: true })
+const form = reactive<FormAdmin>({ nombres: '', apellidos: '', correo: '', acceso: 'GOOGLE', contrasena: '', rolCodigo: 'ADMIN', activo: true })
+
+const tieneContrasena = computed(() => accesoDe(editando.value) === 'CONTRASENA')
+// Tu propia contraseña solo se quita si ya entraste con Google: si no, quedarías sin acceso
+const googleBloqueado = computed(() => editando.value?.id === auth.usuario?.id && tieneContrasena.value && !editando.value?.googleVinculado)
+const quitaContrasena = computed(() => form.acceso === 'GOOGLE' && tieneContrasena.value)
 
 async function cargar() {
   try {
@@ -32,15 +38,15 @@ onMounted(cargar)
 function abrir(admin?: Administrador) {
   editando.value = admin ?? null
   errores.value = {}
-  Object.assign(form, { nombres: admin?.nombres ?? '', apellidos: admin?.apellidos ?? '', correo: admin?.correo ?? '', contrasena: '', rolCodigo: admin?.rolCodigo ?? 'ADMIN', activo: admin?.activo ?? true })
+  Object.assign(form, { nombres: admin?.nombres ?? '', apellidos: admin?.apellidos ?? '', correo: admin?.correo ?? '', acceso: accesoDe(admin), contrasena: '', rolCodigo: admin?.rolCodigo ?? 'ADMIN', activo: admin?.activo ?? true })
   modal.value = true
 }
 
 async function guardar() {
+  const { body, errores: locales } = cuerpoAdmin(form, editando.value)
+  errores.value = locales
+  if (Object.keys(locales).length) return
   guardando.value = true
-  errores.value = {}
-  const body: Record<string, unknown> = { nombres: form.nombres.trim(), apellidos: form.apellidos.trim(), correo: form.correo.trim(), rolCodigo: form.rolCodigo, activo: form.activo }
-  if (form.contrasena) body.contrasena = form.contrasena
   try {
     if (editando.value) await api(`admin/${editando.value.id}`, { method: 'PUT', body })
     else await api('admin', { method: 'POST', body })
@@ -98,7 +104,7 @@ async function eliminar(admin: Administrador) {
     <section class="card overflow-hidden">
       <div class="relative overflow-x-auto">
         <table class="table-base">
-          <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Creado</th><th><span class="sr-only">Acciones</span></th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Acceso</th><th>Estado</th><th>Creado</th><th><span class="sr-only">Acciones</span></th></tr></thead>
           <tbody>
             <tr v-for="admin in admins" :key="admin.id">
               <td class="font-medium text-white">{{ nombreCompleto(admin) }} <AppBadge v-if="admin.id === auth.usuario?.id" tono="brand" class="ml-1">Tú</AppBadge></td>
@@ -109,6 +115,7 @@ async function eliminar(admin: Administrador) {
                 </AppBadge>
               </td>
               <td><AppBadge :tono="admin.rolCodigo === 'SUPERADMIN' ? 'warn' : 'neutral'">{{ admin.rolNombre }}</AppBadge></td>
+              <td class="whitespace-nowrap"><AppBadge :tono="accesoDe(admin) === 'GOOGLE' ? 'brand' : 'neutral'">{{ etiquetaAcceso(admin) }}</AppBadge></td>
               <td><AppBadge :tono="admin.activo ? 'ok' : 'neutral'">{{ admin.activo ? 'Activo' : 'Inactivo' }}</AppBadge></td>
               <td class="text-sm whitespace-nowrap">{{ fechaHoraLima(admin.creadoEn) }}</td>
               <td class="text-right whitespace-nowrap">
@@ -128,8 +135,38 @@ async function eliminar(admin: Administrador) {
         <AppField label="Correo" for="ad-correo" required :error="errores.correo" :hint="editando?.googleVinculado ? AVISO_CAMBIO_CORREO_GOOGLE : undefined" class="sm:col-span-2">
           <input id="ad-correo" v-model="form.correo" type="email" autocomplete="off" class="field-control">
         </AppField>
-        <AppField :label="editando ? 'Nueva contraseña' : 'Contraseña'" for="ad-pass" :required="!editando" :error="errores.contrasena" :hint="editando ? 'Déjala vacía para no cambiarla. Mínimo 12 caracteres.' : 'Mínimo 12 caracteres.'" class="sm:col-span-2">
-          <input id="ad-pass" v-model="form.contrasena" type="password" autocomplete="new-password" minlength="12" class="field-control">
+        <fieldset class="sm:col-span-2">
+          <legend class="field-label">Acceso</legend>
+          <div class="grid gap-2 sm:grid-cols-2">
+            <label
+              v-for="opcion in OPCIONES_ACCESO"
+              :key="opcion.valor"
+              class="flex gap-3 rounded-xl border px-3.5 py-3 transition"
+              :class="[
+                form.acceso === opcion.valor ? 'border-brand-500 bg-brand-500/10' : 'border-navy-500 bg-navy-900/80 hover:border-navy-400',
+                opcion.valor === 'GOOGLE' && googleBloqueado ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
+              ]"
+            >
+              <input v-model="form.acceso" type="radio" name="ad-acceso" :value="opcion.valor" :disabled="opcion.valor === 'GOOGLE' && googleBloqueado" class="mt-0.5 accent-brand-500">
+              <span>
+                <span class="block text-sm font-medium text-white">{{ opcion.titulo }}</span>
+                <span class="block text-xs text-slate-400">{{ opcion.detalle }}</span>
+              </span>
+            </label>
+          </div>
+          <p v-if="googleBloqueado" class="field-hint">Para dejar tu cuenta solo con Google, primero entra una vez con «Continuar con Google».</p>
+          <p v-else-if="quitaContrasena" class="mt-1 text-xs text-amber-300">Al guardar se eliminará su contraseña: solo podrá entrar con Google.</p>
+        </fieldset>
+        <AppField
+          v-if="form.acceso === 'CONTRASENA'"
+          :label="tieneContrasena ? 'Nueva contraseña' : 'Contraseña'"
+          for="ad-pass"
+          :required="contrasenaObligatoria(form.acceso, editando)"
+          :error="errores.contrasena"
+          :hint="tieneContrasena ? `Déjala vacía para no cambiarla. Mínimo ${MIN_CONTRASENA} caracteres.` : `Mínimo ${MIN_CONTRASENA} caracteres.`"
+          class="sm:col-span-2"
+        >
+          <input id="ad-pass" v-model="form.contrasena" type="password" autocomplete="new-password" :minlength="MIN_CONTRASENA" class="field-control">
         </AppField>
         <AppField label="Rol" for="ad-rol">
           <select id="ad-rol" v-model="form.rolCodigo" class="field-control" :disabled="editando?.id === auth.usuario?.id">

@@ -16,7 +16,7 @@ principal). Perfiles y pantallas:
 | Consultas DNI | Pool de tokens (Decolecta/apiperu), uso, bitácora, consulta manual | Admin |
 | Correo | Credenciales de Brevo, prueba de cuenta, correo de prueba | SuperAdmin |
 | Sistema | API_UNDC (probar conexión), client ID de Google, URL del panel, landing anterior | SuperAdmin |
-| Administradores | Alta, roles, activar/desactivar, desvincular Google | SuperAdmin |
+| Administradores | Alta con acceso «Solo Google» o «Contraseña o Google», roles, activar/desactivar, desvincular Google | SuperAdmin |
 
 ## Portal del inscrito
 
@@ -28,5 +28,6 @@ ninguna pantalla de administración.
 ## Inicio de sesión
 
 - Administradores: correo y contraseña, o **Continuar con Google** si el correo de la cuenta
-  Google es el de un administrador activo (cualquier dominio).
+  Google es el de un administrador activo (cualquier dominio). Las cuentas «Solo Google» no
+  tienen contraseña: únicamente entran con Google.
 - Inscritos: solo Google.

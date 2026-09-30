@@ -35,7 +35,9 @@ emite el backend (`expiraEn`) y el resto de la configuración vive en el backend
 
 - **Administradores**: correo y contraseña, o «Continuar con Google» con la cuenta de su
   correo (Gmail o institucional). La primera vez queda vinculada esa cuenta de Google; el
-  SuperAdmin ve «Google vinculado» en Administradores y puede desvincularla.
+  SuperAdmin ve «Google vinculado» en Administradores y puede desvincularla. Al crear o editar
+  una cuenta, el SuperAdmin elige el acceso: **Solo Google** (sin contraseña) o
+  **Contraseña o Google**.
 - **Inscritos**: «Continuar con Google» con el correo de su inscripción. Solo ven
   **Mis inscripciones** (evento, estado, motivo de rechazo y credencial en PDF cuando está
   aprobada). Los administradores ven su vínculo en Participantes y pueden desvincularlo.

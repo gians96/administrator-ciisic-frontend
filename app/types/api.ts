@@ -307,6 +307,8 @@ export interface Administrador {
   rolCodigo: 'SUPERADMIN' | 'ADMIN'
   rolNombre: string
   activo: boolean
+  /** `false`: entra solo con Google. */
+  tieneContrasena?: boolean
   googleVinculado?: boolean
   googleVinculadoEn?: string | null
   creadoEn: string
