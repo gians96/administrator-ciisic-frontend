@@ -43,7 +43,8 @@ export interface ParticipanteSesion {
 export type Sesion = { tipo: 'ADMIN', usuario: Usuario } | { tipo: 'PARTICIPANTE', participante: ParticipanteSesion }
 
 export interface Banco { codigo: string, nombre: string, numeroCuenta: string, cci?: string | null }
-export interface Billetera { codigo: string, nombre: string, telefono: string, qrUrl?: string | null }
+/** `qrArchivo`: imagen subida al backend (tiene prioridad); `qrUrl`: dirección externa o de la landing. */
+export interface Billetera { codigo: string, nombre: string, telefono: string, qrUrl?: string | null, qrArchivo?: string | null }
 export interface DatosPago { titular?: string | null, bancos?: Banco[], billeteras?: Billetera[] }
 
 export interface Evento {

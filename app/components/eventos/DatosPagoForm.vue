@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Banco, Billetera, DatosPago } from '~/types/api'
 import { clonarLista } from '~/utils/clonar'
+import { prepararDatosPago } from '~/utils/qr'
 
 const props = defineProps<{ datos: DatosPago | null, enviando?: boolean }>()
 const emit = defineEmits<{ guardar: [datos: DatosPago] }>()
@@ -8,13 +9,12 @@ const emit = defineEmits<{ guardar: [datos: DatosPago] }>()
 const titular = ref(props.datos?.titular ?? '')
 const bancos = ref<Banco[]>(clonarLista(props.datos?.bancos))
 const billeteras = ref<Billetera[]>(clonarLista(props.datos?.billeteras))
+const errores = ref<string[]>([])
 
 function guardar() {
-  emit('guardar', {
-    titular: titular.value.trim() || null,
-    bancos: bancos.value.filter((b) => b.codigo && b.numeroCuenta).map((b) => ({ ...b, codigo: b.codigo.trim().toLowerCase(), cci: b.cci?.trim() || null })),
-    billeteras: billeteras.value.filter((b) => b.codigo && b.telefono).map((b) => ({ ...b, codigo: b.codigo.trim().toLowerCase(), qrUrl: b.qrUrl?.trim() || null })),
-  })
+  const { datos, errores: pendientes } = prepararDatosPago(titular.value, bancos.value, billeteras.value)
+  errores.value = pendientes
+  if (!pendientes.length) emit('guardar', datos)
 }
 </script>
 
@@ -43,18 +43,24 @@ function guardar() {
     <section class="space-y-3">
       <div class="flex items-center justify-between">
         <h3 class="text-lg font-bold">Billeteras digitales</h3>
-        <AppButton size="sm" variant="secondary" icon="heroicons:plus" @click="billeteras.push({ codigo: '', nombre: '', telefono: '', qrUrl: '' })">Agregar billetera</AppButton>
+        <AppButton size="sm" variant="secondary" icon="heroicons:plus" @click="billeteras.push({ codigo: '', nombre: '', telefono: '', qrUrl: null, qrArchivo: null })">Agregar billetera</AppButton>
       </div>
       <div v-for="(billetera, indice) in billeteras" :key="`w-${indice}`" class="grid gap-3 rounded-xl bg-white/5 p-4 md:grid-cols-[0.8fr_1fr_1fr_1.6fr_auto]">
         <AppField label="Código" :for="`w-cod-${indice}`"><input :id="`w-cod-${indice}`" v-model="billetera.codigo" class="field-control" placeholder="yape"></AppField>
         <AppField label="Nombre" :for="`w-nom-${indice}`"><input :id="`w-nom-${indice}`" v-model="billetera.nombre" class="field-control" placeholder="Yape"></AppField>
         <AppField label="Teléfono" :for="`w-tel-${indice}`"><input :id="`w-tel-${indice}`" v-model="billetera.telefono" class="field-control font-mono"></AppField>
-        <AppField label="URL del QR" :for="`w-qr-${indice}`"><input :id="`w-qr-${indice}`" v-model="billetera.qrUrl" class="field-control" placeholder="/images/qr/yape-2026.png"></AppField>
-        <div class="flex items-end"><AppButton variant="danger" size="sm" icon="heroicons:trash" aria-label="Quitar billetera" @click="billeteras.splice(indice, 1)" /></div>
+        <AppField label="Imagen del QR" :for="`w-qr-${indice}`">
+          <CampoQr :id="`w-qr-${indice}`" v-model:archivo="billetera.qrArchivo" v-model:url="billetera.qrUrl" :nombre="billetera.nombre" />
+        </AppField>
+        <div class="flex items-start md:pt-7"><AppButton variant="danger" size="sm" icon="heroicons:trash" aria-label="Quitar billetera" @click="billeteras.splice(indice, 1)" /></div>
       </div>
       <p v-if="!billeteras.length" class="text-sm text-slate-400">Sin billeteras.</p>
+      <p v-else class="text-xs text-slate-400">La imagen se publica en la landing al guardar los datos de pago.</p>
     </section>
 
+    <div v-if="errores.length" class="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-200 ring-1 ring-inset ring-red-400/30" role="alert">
+      <p v-for="texto in errores" :key="texto">{{ texto }}</p>
+    </div>
     <div class="flex justify-end">
       <AppButton type="submit" :loading="enviando" icon="heroicons:check">Guardar datos de pago</AppButton>
     </div>

@@ -11,7 +11,7 @@ principal). Perfiles y pantallas:
 | Inscripciones | Filtros, detalle con voucher, verificación UNDC y de correo (Google), aprobar/rechazar/en revisión, reenviar credencial, CSV | Admin |
 | Asistencia | Registro por actividad (hora de Lima) | Admin |
 | Ponencias · Mensajes · Participantes | Consulta y gestión; desvincular Google de un participante | Admin |
-| Eventos | General (datos, remitente, credencial de correo), Datos de pago, Categorías y tipos, Actividades, Integraciones (deportes-fi), **Acceso** (tokens de la landing, SuperAdmin) | Admin / SuperAdmin |
+| Eventos | General (datos, remitente, credencial de correo), Datos de pago (cuentas y billeteras con su QR: arrastrar y soltar), Categorías y tipos, Actividades, Integraciones (deportes-fi), **Acceso** (tokens de la landing, SuperAdmin) | Admin / SuperAdmin |
 | Tipos de inscripción | Planes del evento | Admin |
 | Consultas DNI | Pool de tokens (Decolecta/apiperu), uso, bitácora, consulta manual | Admin |
 | Correo | Credenciales de Brevo, prueba de cuenta, correo de prueba | SuperAdmin |
