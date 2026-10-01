@@ -2,79 +2,168 @@
 import type { Actividad, Respuesta } from '~/types/api'
 import { fechaDia, fechaHoraLima, nombreCompleto, numero } from '~/utils/formato'
 import { aErrorApi, mensajeError } from '~/utils/errores'
+import {
+  actividadInicial,
+  conservarValorTrasError,
+  cuerpoMarca,
+  etiquetaMetodo,
+  idDeConsulta,
+  textoMarca,
+  TIPOS_DOCUMENTO_MARCA,
+  type AsistenciaFila,
+  type MarcaAsistencia,
+  type ModoLectura,
+  type TipoDocumentoMarca,
+} from '~/utils/asistencia'
 
+definePageMeta({ permiso: 'asistencia.ver' })
 useHead({ title: 'Asistencia · Panel CIISIC' })
 
-interface AsistenciaFila {
-  id: number
-  registradoEn: string
-  participante: { id: number, tipoDocumento: string, numeroDocumento: string, nombres: string, apellidos: string }
-}
-
-const { api } = useApi()
+const { api, releerAcceso } = useApi()
+const auth = useAuthStore()
 const eventos = useEventoStore()
 const toast = useToast()
 const { confirmar } = useConfirm()
 const route = useRoute()
 
 const actividades = ref<Actividad[]>([])
-const actividadId = ref<number | null>(Number(route.query.actividad) || null)
+const cargandoActividades = ref(false)
+const actividadId = ref<number | null>(null)
 const asistencias = ref<AsistenciaFila[]>([])
-const modo = ref<'qr' | 'dni'>('qr')
+const modo = ref<ModoLectura>('qr')
 const valor = ref('')
+const tipoDocumento = ref<TipoDocumentoMarca>('')
 const fueraDeHorario = ref(false)
 const registrando = ref(false)
 const ultimo = ref<{ ok: boolean, texto: string } | null>(null)
 const entrada = ref<HTMLInputElement | null>(null)
+const selectorTipo = ref<HTMLSelectElement | null>(null)
+
+/** Enlace desde Eventos → Actividades (`?evento=&actividad=`): se usan una sola vez. */
+let eventoPedido = idDeConsulta(route.query.evento)
+let actividadPedida = idDeConsulta(route.query.actividad)
+
+const puedeMarcar = computed(() => auth.puede('asistencia.marcar'))
+const puedeFueraDeHorario = computed(() => auth.puede('asistencia.fuera_horario'))
+const puedeAnular = computed(() => auth.puede('asistencia.anular'))
+/** Actividad elegida, siempre una de las del evento elegido. */
+const actividad = computed(() => actividades.value.find((a) => a.id === actividadId.value) ?? null)
+
+/** Respuestas que llegan tarde (de un evento o una actividad anteriores) se descartan. */
+let consultaActividades = 0
+let consultaAsistencias = 0
 
 async function cargarActividades() {
-  if (!eventos.seleccionadoId) return
+  const consulta = ++consultaActividades
+  const eventoId = eventos.seleccionadoId
+  // Nada del evento anterior queda a la vista ni se puede marcar en él
+  actividades.value = []
+  actividadId.value = null
+  ultimo.value = null
+  cargandoActividades.value = Boolean(eventoId)
+  if (!eventoId) return
   try {
-    actividades.value = (await api<Respuesta<Actividad[]>>(`events/${eventos.seleccionadoId}/activities`)).data
-    if (!actividades.value.some((a) => a.id === actividadId.value)) actividadId.value = actividades.value[0]?.id ?? null
+    const lista = (await api<Respuesta<Actividad[]>>(`events/${eventoId}/activities`)).data
+    if (consulta !== consultaActividades) return
+    actividades.value = lista
+    const inicial = actividadInicial(lista, actividadPedida)
+    if (inicial.ajena) toast.info('La actividad del enlace no es de este evento: se muestra la primera del evento elegido.')
+    actividadPedida = null
+    actividadId.value = inicial.id
   } catch (error) {
-    toast.error(mensajeError(error))
+    if (consulta === consultaActividades) toast.error(mensajeError(error))
+  } finally {
+    if (consulta === consultaActividades) cargandoActividades.value = false
   }
 }
 
 async function cargarAsistencias() {
-  if (!actividadId.value) { asistencias.value = []; return }
+  const consulta = ++consultaAsistencias
+  const id = actividadId.value
+  if (!id) { asistencias.value = []; return }
   try {
-    asistencias.value = (await api<Respuesta<AsistenciaFila[]>>(`activities/${actividadId.value}/attendances`)).data
+    const lista = (await api<Respuesta<AsistenciaFila[]>>(`activities/${id}/attendances`)).data
+    if (consulta === consultaAsistencias) asistencias.value = lista
   } catch (error) {
-    toast.error(mensajeError(error))
+    if (consulta === consultaAsistencias) toast.error(mensajeError(error))
   }
 }
 
+function enfocarEntrada() {
+  nextTick(() => entrada.value?.focus())
+}
+
+// Si el enlace trae el evento y la cuenta lo tiene, se trabaja sobre él (antes de cargar actividades)
+watch(() => eventos.cargado, (cargado) => {
+  if (!cargado || !eventoPedido) return
+  if (eventos.eventos.some((evento) => evento.id === eventoPedido)) eventos.seleccionar(eventoPedido)
+  eventoPedido = null
+}, { immediate: true })
 watch(() => eventos.seleccionadoId, cargarActividades, { immediate: true })
-watch(actividadId, () => { cargarAsistencias(); nextTick(() => entrada.value?.focus()) }, { immediate: true })
+// La lista de otra actividad no queda a la vista mientras carga la nueva
+watch(actividadId, () => { asistencias.value = []; cargarAsistencias(); enfocarEntrada() }, { immediate: true })
+// El tipo de documento solo aplica al modo DNI
+watch(modo, () => { tipoDocumento.value = ''; enfocarEntrada() })
 
 async function registrar() {
-  const texto = valor.value.trim()
-  if (!actividadId.value || !texto) return
+  // Solo en una actividad del evento elegido ya cargada
+  const id = actividad.value?.id
+  if (!id || registrando.value) return
+  const resultado = cuerpoMarca(
+    { modo: modo.value, valor: valor.value, tipoDocumento: tipoDocumento.value, fueraDeHorario: fueraDeHorario.value },
+    puedeFueraDeHorario.value,
+  )
+  if ('error' in resultado) {
+    ultimo.value = { ok: false, texto: resultado.error }
+    if (modo.value === 'qr') valor.value = ''
+    enfocarEntrada()
+    return
+  }
   registrando.value = true
+  let enfocarTipo = false
   try {
-    const body = modo.value === 'qr' ? { participanteId: Number(texto), fueraDeHorario: fueraDeHorario.value } : { numeroDocumento: texto, fueraDeHorario: fueraDeHorario.value }
-    const r = await api<Respuesta<{ participante: { nombres: string, apellidos: string } }>>(`activities/${actividadId.value}/attendances`, { method: 'POST', body })
-    ultimo.value = { ok: true, texto: `✓ ${nombreCompleto(r.data.participante)}` }
+    const r = await api<Respuesta<MarcaAsistencia>>(`activities/${id}/attendances`, { method: 'POST', body: resultado.body })
+    ultimo.value = { ok: true, texto: textoMarca(r.data) }
+    valor.value = ''
+    tipoDocumento.value = ''
     await cargarAsistencias()
   } catch (error) {
-    ultimo.value = { ok: false, texto: aErrorApi(error).message }
+    const e = aErrorApi(error)
+    ultimo.value = { ok: false, texto: e.message }
+    if (conservarValorTrasError(modo.value, e.code)) {
+      // Dos inscritos comparten el número: se elige DNI o CE y se vuelve a registrar
+      enfocarTipo = true
+    } else {
+      valor.value = ''
+    }
+    if (e.code === 'OUT_OF_HOURS_NOT_ALLOWED') {
+      // Se le quitó el permiso: se desmarca la casilla y se relee el acceso ya para ocultarla
+      fueraDeHorario.value = false
+      await releerAcceso()
+    }
   } finally {
     registrando.value = false
-    valor.value = ''
-    nextTick(() => entrada.value?.focus())
+    if (enfocarTipo) nextTick(() => selectorTipo.value?.focus())
+    else enfocarEntrada()
   }
 }
 
-async function eliminar(asistencia: AsistenciaFila) {
-  const ok = await confirmar({ titulo: 'Quitar asistencia', mensaje: `¿Quitar la asistencia de ${nombreCompleto(asistencia.participante)}?`, textoConfirmar: 'Quitar', peligro: true })
+async function anular(asistencia: AsistenciaFila) {
+  const ok = await confirmar({
+    titulo: 'Anular asistencia',
+    mensaje: `¿Anular la asistencia de ${nombreCompleto(asistencia.participante)}? Queda registrado quién la anuló y se puede volver a marcar.`,
+    textoConfirmar: 'Anular',
+    peligro: true,
+  })
   if (!ok) return
   try {
     await api(`attendances/${asistencia.id}`, { method: 'DELETE' })
+    toast.exito('Asistencia anulada.')
     await cargarAsistencias()
   } catch (error) {
     toast.error(mensajeError(error))
+    // Otra persona ya la anuló: se actualiza la lista
+    if (aErrorApi(error).code === 'ATTENDANCE_NOT_FOUND') await cargarAsistencias()
   }
 }
 
@@ -97,7 +186,7 @@ async function exportar() {
   }
 }
 
-const actividad = computed(() => actividades.value.find((a) => a.id === actividadId.value) ?? null)
+const columnas = computed(() => (puedeAnular.value ? 6 : 5))
 </script>
 
 <template>
@@ -106,36 +195,68 @@ const actividad = computed(() => actividades.value.find((a) => a.id === activida
       <div>
         <p class="kicker">{{ eventos.seleccionado?.nombreCorto }}</p>
         <h1 class="mt-1 text-3xl font-extrabold">Asistencia</h1>
-        <p class="mt-1 text-sm text-slate-400">Escanea el QR de la credencial (un lector USB escribe el código y presiona Enter) o ingresa el DNI.</p>
+        <p class="mt-1 text-sm text-slate-400">
+          {{ puedeMarcar
+            ? 'Escanea el QR de la credencial (un lector USB escribe el código y presiona Enter) o ingresa el DNI.'
+            : 'Asistentes registrados en cada actividad del evento.' }}
+        </p>
       </div>
-      <AppButton variant="secondary" icon="heroicons:arrow-down-tray" @click="exportar">Exportar matriz</AppButton>
+      <AppButton v-if="eventos.seleccionadoId && auth.puede('asistencia.exportar')" variant="secondary" icon="heroicons:arrow-down-tray" @click="exportar">Exportar matriz</AppButton>
     </div>
 
-    <AppEmpty v-if="!actividades.length" titulo="Este evento no tiene actividades" descripcion="Créalas en Eventos → Actividades." icon="heroicons:calendar">
-      <AppButton v-if="eventos.seleccionadoId" :to="`/eventos/${eventos.seleccionadoId}?tab=actividades`" icon="heroicons:plus">Crear actividades</AppButton>
+    <AvisoSinEventos v-if="eventos.cargado && !eventos.seleccionadoId" />
+    <div v-else-if="!eventos.seleccionadoId || cargandoActividades" class="card py-14 text-center text-sm text-slate-400">Cargando actividades…</div>
+    <AppEmpty
+      v-else-if="!actividades.length"
+      titulo="Este evento no tiene actividades"
+      :descripcion="auth.puede('eventos.configurar') ? 'Créalas en Eventos → Actividades.' : 'Aún no se crearon las actividades de este evento.'"
+      icon="heroicons:calendar"
+    >
+      <AppButton
+        v-if="eventos.seleccionadoId && auth.puede('eventos.configurar')"
+        :to="`/eventos/${eventos.seleccionadoId}?tab=actividades`"
+        icon="heroicons:plus"
+      >
+        Crear actividades
+      </AppButton>
     </AppEmpty>
 
     <template v-else>
-      <section class="card grid gap-5 p-6 lg:grid-cols-[1fr_1.4fr]">
+      <section class="card grid gap-5 p-6" :class="{ 'lg:grid-cols-[1fr_1.4fr]': puedeMarcar }">
         <div class="space-y-4">
           <AppField label="Actividad" for="as-actividad">
             <select id="as-actividad" v-model.number="actividadId" class="field-control">
               <option v-for="a in actividades" :key="a.id" :value="a.id">{{ a.nombre }} · {{ fechaDia(a.fecha) }} {{ a.horaInicio }}–{{ a.horaFin }}</option>
             </select>
           </AppField>
-          <div class="flex gap-2" role="radiogroup" aria-label="Tipo de lectura">
-            <AppButton size="sm" :variant="modo === 'qr' ? 'primary' : 'secondary'" icon="heroicons:qr-code" @click="modo = 'qr'">QR de credencial</AppButton>
-            <AppButton size="sm" :variant="modo === 'dni' ? 'primary' : 'secondary'" icon="heroicons:identification" @click="modo = 'dni'">DNI / documento</AppButton>
-          </div>
-          <label class="flex items-center gap-2 text-sm text-slate-300">
-            <input v-model="fueraDeHorario" type="checkbox" class="size-4 accent-brand-500">
-            Registrar fuera del horario (extemporánea)
-          </label>
+          <template v-if="puedeMarcar">
+            <div class="flex gap-2" role="radiogroup" aria-label="Tipo de lectura">
+              <AppButton size="sm" :variant="modo === 'qr' ? 'primary' : 'secondary'" icon="heroicons:qr-code" @click="modo = 'qr'">QR de credencial</AppButton>
+              <AppButton size="sm" :variant="modo === 'dni' ? 'primary' : 'secondary'" icon="heroicons:identification" @click="modo = 'dni'">DNI / documento</AppButton>
+            </div>
+            <AppField v-if="modo === 'dni'" label="Tipo de documento" for="as-tipo-documento" hint="Elige DNI o CE si hay dos inscritos con el mismo número.">
+              <select id="as-tipo-documento" ref="selectorTipo" v-model="tipoDocumento" class="field-control">
+                <option v-for="opcion in TIPOS_DOCUMENTO_MARCA" :key="opcion.valor" :value="opcion.valor">{{ opcion.nombre }}</option>
+              </select>
+            </AppField>
+            <label v-if="puedeFueraDeHorario" class="flex items-center gap-2 text-sm text-slate-300">
+              <input v-model="fueraDeHorario" type="checkbox" class="size-4 accent-brand-500">
+              Registrar fuera del horario (extemporánea)
+            </label>
+          </template>
         </div>
-        <form class="space-y-3" @submit.prevent="registrar">
+        <form v-if="puedeMarcar" class="space-y-3" @submit.prevent="registrar">
           <label for="as-valor" class="field-label">{{ modo === 'qr' ? 'Código de la credencial' : 'Número de documento' }}</label>
           <div class="flex gap-2">
-            <input id="as-valor" ref="entrada" v-model="valor" :inputmode="modo === 'qr' ? 'numeric' : 'text'" autocomplete="off" class="field-control py-4 font-mono text-lg" :placeholder="modo === 'qr' ? 'Escanea o escribe el código' : '12345678'">
+            <input
+              id="as-valor"
+              ref="entrada"
+              v-model="valor"
+              :inputmode="modo === 'qr' ? 'numeric' : 'text'"
+              autocomplete="off"
+              class="field-control py-4 font-mono text-lg"
+              :placeholder="modo === 'qr' ? 'Escanea o escribe el código' : '12345678'"
+            >
             <AppButton type="submit" :loading="registrando" :disabled="!valor.trim()" icon="heroicons:check">Registrar</AppButton>
           </div>
           <p v-if="ultimo" class="rounded-xl px-4 py-3 text-sm font-medium" :class="ultimo.ok ? 'bg-emerald-500/15 text-emerald-200' : 'bg-red-500/15 text-red-200'" role="status">{{ ultimo.texto }}</p>
@@ -149,15 +270,31 @@ const actividad = computed(() => actividades.value.find((a) => a.id === activida
         </header>
         <div class="relative overflow-x-auto">
           <table class="table-base">
-            <thead><tr><th>Participante</th><th>Documento</th><th>Registrado</th><th><span class="sr-only">Acciones</span></th></tr></thead>
+            <thead>
+              <tr>
+                <th>Participante</th>
+                <th>Documento</th>
+                <th>Método</th>
+                <th>Registrado</th>
+                <th>Registrado por</th>
+                <th v-if="puedeAnular"><span class="sr-only">Acciones</span></th>
+              </tr>
+            </thead>
             <tbody>
               <tr v-for="asistencia in asistencias" :key="asistencia.id">
                 <td class="font-medium text-white">{{ nombreCompleto(asistencia.participante) }}</td>
-                <td class="font-mono text-sm">{{ asistencia.participante.tipoDocumento.toUpperCase() }} {{ asistencia.participante.numeroDocumento }}</td>
-                <td class="text-sm whitespace-nowrap">{{ fechaHoraLima(asistencia.registradoEn) }}</td>
-                <td class="text-right"><AppButton size="sm" variant="ghost" icon="heroicons:trash" aria-label="Quitar asistencia" @click="eliminar(asistencia)" /></td>
+                <td class="font-mono text-sm whitespace-nowrap">{{ asistencia.participante.tipoDocumento.toUpperCase() }} {{ asistencia.participante.numeroDocumento }}</td>
+                <td class="text-sm whitespace-nowrap">{{ etiquetaMetodo(asistencia.metodo) }}</td>
+                <td class="text-sm whitespace-nowrap">
+                  {{ fechaHoraLima(asistencia.registradoEn) }}
+                  <AppBadge v-if="asistencia.esFueraDeHorario" tono="warn" class="ml-1">Fuera de horario</AppBadge>
+                </td>
+                <td class="text-sm">{{ nombreCompleto(asistencia.registradoPor) }}</td>
+                <td v-if="puedeAnular" class="text-right">
+                  <AppButton size="sm" variant="ghost" icon="heroicons:no-symbol" :aria-label="`Anular la asistencia de ${nombreCompleto(asistencia.participante)}`" @click="anular(asistencia)">Anular</AppButton>
+                </td>
               </tr>
-              <tr v-if="!asistencias.length"><td colspan="4" class="py-8 text-center text-slate-400">Aún no hay asistencias en esta actividad.</td></tr>
+              <tr v-if="!asistencias.length"><td :colspan="columnas" class="py-8 text-center text-slate-400">Aún no hay asistencias en esta actividad.</td></tr>
             </tbody>
           </table>
         </div>

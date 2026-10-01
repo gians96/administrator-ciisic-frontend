@@ -21,10 +21,7 @@ export default defineEventHandler(async (event) => {
     // El acceso con contraseña es solo para administradores
     return { success: true, tipo: 'ADMIN' as const, usuario: response.usuario }
   } catch (error) {
-    const status = (error as { statusCode?: number }).statusCode
-    if (status === 429) {
-      throw createError({ statusCode: 429, data: { success: false, code: 'RATE_LIMITED', message: 'Demasiados intentos. Espera unos minutos.' } })
-    }
-    throw createError({ statusCode: 401, data: { success: false, code: 'INVALID_CREDENTIALS', message: 'Correo o contraseña incorrectos.' } })
+    // Backend caído (5xx o red): 503, no «contraseña incorrecta»
+    throw createError(errorLogin(estadoHttp(error)))
   }
 })

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+definePageMeta({ permiso: 'eventos.configurar' })
 useHead({ title: 'Tipos de inscripción · Panel CIISIC' })
 const eventos = useEventoStore()
 </script>

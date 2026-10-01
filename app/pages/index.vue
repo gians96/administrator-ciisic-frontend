@@ -3,37 +3,53 @@ import type { Respuesta, ResumenEvento, ResumenSemana } from '~/types/api'
 import { COLOR_GRAFICO_ESTADO, fechaDia, numero, soles } from '~/utils/formato'
 import { mensajeError } from '~/utils/errores'
 
+definePageMeta({ permiso: 'resumen.ver' })
 useHead({ title: 'Resumen · Panel CIISIC' })
 
 const { api } = useApi()
+const auth = useAuthStore()
 const eventos = useEventoStore()
 const toast = useToast()
+
+/** Sin `pagos.ver` los montos llegan en `null`: se ocultan sus tarjetas y columnas. */
+const conPagos = computed(() => auth.puede('pagos.ver'))
 
 const resumen = ref<ResumenEvento | null>(null)
 const semana = ref<ResumenSemana | null>(null)
 const cargando = ref(false)
 const cargandoSemana = ref(false)
 
-async function cargar(id: number) {
-  cargando.value = true
-  cargandoSemana.value = true
+/** Respuestas de un evento anterior que llegan tarde se descartan. */
+let consulta = 0
+
+async function cargar(id: number | null) {
+  const actual = ++consulta
+  // Los datos del evento anterior no quedan a la vista bajo el nuevo
+  resumen.value = null
+  semana.value = null
+  cargando.value = Boolean(id)
+  cargandoSemana.value = Boolean(id)
+  if (!id) return
   try {
-    resumen.value = (await api<Respuesta<ResumenEvento>>(`events/${id}/summary`)).data
+    const datos = (await api<Respuesta<ResumenEvento>>(`events/${id}/summary`)).data
+    if (actual === consulta) resumen.value = datos
   } catch (error) {
-    toast.error(mensajeError(error))
+    if (actual === consulta) toast.error(mensajeError(error))
   } finally {
-    cargando.value = false
+    if (actual === consulta) cargando.value = false
   }
+  if (actual !== consulta) return
   try {
-    semana.value = (await api<Respuesta<ResumenSemana>>(`events/${id}/integrations/sports-summary`)).data
+    const datos = (await api<Respuesta<ResumenSemana>>(`events/${id}/integrations/sports-summary`)).data
+    if (actual === consulta) semana.value = datos
   } catch {
-    semana.value = null
+    if (actual === consulta) semana.value = null
   } finally {
-    cargandoSemana.value = false
+    if (actual === consulta) cargandoSemana.value = false
   }
 }
 
-watch(() => eventos.seleccionadoId, (id) => { if (id) cargar(id) }, { immediate: true })
+watch(() => eventos.seleccionadoId, cargar, { immediate: true })
 
 const porDia = computed(() => resumen.value?.porDia.slice(-30) ?? [])
 const estadosConDatos = computed(() => resumen.value?.porEstado.filter((estado) => estado.total > 0) ?? [])
@@ -49,22 +65,22 @@ const estadosConDatos = computed(() => resumen.value?.porEstado.filter((estado) 
           {{ fechaDia(eventos.seleccionado.fechaInicio) }} – {{ fechaDia(eventos.seleccionado.fechaFin) }} · {{ eventos.seleccionado.sede ?? 'Sede por definir' }}
         </p>
       </div>
-      <div class="flex flex-wrap gap-2">
-        <AppButton variant="secondary" icon="heroicons:clock" to="/inscripciones?estado=PENDIENTE">Revisar pendientes</AppButton>
+      <div v-if="auth.puede('inscripciones.ver')" class="flex flex-wrap gap-2">
+        <AppButton variant="secondary" icon="heroicons:clock" to="/inscripciones?estado=PENDIENTE">
+          {{ auth.puede('inscripciones.validar') ? 'Revisar pendientes' : 'Ver pendientes' }}
+        </AppButton>
         <AppButton icon="heroicons:clipboard-document-check" to="/inscripciones">Inscripciones</AppButton>
       </div>
     </div>
 
-    <AppEmpty v-if="eventos.cargado && !eventos.seleccionado" titulo="Aún no hay eventos" descripcion="Crea el primer evento para empezar a recibir inscripciones." icon="heroicons:calendar-days">
-      <AppButton to="/eventos/nuevo" icon="heroicons:plus">Crear evento</AppButton>
-    </AppEmpty>
+    <AvisoSinEventos v-if="eventos.cargado && !eventos.seleccionado" />
 
     <template v-else>
-      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div class="grid gap-4 sm:grid-cols-2" :class="conPagos ? 'xl:grid-cols-4' : 'xl:grid-cols-3'">
         <AppStat etiqueta="Inscripciones" :valor="numero(resumen?.totales.inscripciones)" icon="heroicons:users" :detalle="`${numero(resumen?.totales.estudiantesUndc)} estudiantes UNDC verificados`" />
         <AppStat etiqueta="Por revisar" :valor="numero((resumen?.totales.pendientes ?? 0) + (resumen?.totales.enRevision ?? 0))" icon="heroicons:clock" tono="warn" :detalle="`${numero(resumen?.totales.enRevision)} en revisión`" />
         <AppStat etiqueta="Aprobadas" :valor="numero(resumen?.totales.aprobadas)" icon="heroicons:check-badge" tono="ok" :detalle="`${numero(resumen?.totales.rechazadas)} rechazadas · ${numero(resumen?.totales.canceladas)} canceladas`" />
-        <AppStat etiqueta="Recaudado (aprobado)" :valor="soles(resumen?.totales.montoAprobado)" icon="heroicons:banknotes" tono="info" :detalle="`${soles(resumen?.totales.montoPendiente)} por validar`" />
+        <AppStat v-if="conPagos" etiqueta="Recaudado (aprobado)" :valor="soles(resumen?.totales.montoAprobado)" icon="heroicons:banknotes" tono="info" :detalle="`${soles(resumen?.totales.montoPendiente)} por validar`" />
       </div>
 
       <div class="grid gap-6 xl:grid-cols-5">
@@ -100,7 +116,10 @@ const estadosConDatos = computed(() => resumen.value?.porEstado.filter((estado) 
         <div class="relative overflow-x-auto">
           <table class="table-base">
             <thead>
-              <tr><th>Tipo</th><th>Categoría</th><th class="text-right">Inscripciones</th><th class="text-right">Aprobadas</th><th class="text-right">Monto aprobado</th></tr>
+              <tr>
+                <th>Tipo</th><th>Categoría</th><th class="text-right">Inscripciones</th><th class="text-right">Aprobadas</th>
+                <th v-if="conPagos" class="text-right">Monto aprobado</th>
+              </tr>
             </thead>
             <tbody>
               <tr v-for="tipo in resumen?.porTipo ?? []" :key="tipo.tipoInscripcionId">
@@ -108,10 +127,10 @@ const estadosConDatos = computed(() => resumen.value?.porEstado.filter((estado) 
                 <td>{{ tipo.categoria }}</td>
                 <td class="text-right tabular-nums">{{ numero(tipo.total) }}</td>
                 <td class="text-right tabular-nums">{{ numero(tipo.aprobadas) }}</td>
-                <td class="text-right tabular-nums">{{ soles(tipo.montoAprobado) }}</td>
+                <td v-if="conPagos" class="text-right tabular-nums">{{ soles(tipo.montoAprobado) }}</td>
               </tr>
               <tr v-if="!cargando && !resumen?.porTipo.length">
-                <td colspan="5" class="py-8 text-center text-slate-400">Este evento aún no tiene tipos de inscripción.</td>
+                <td :colspan="conPagos ? 5 : 4" class="py-8 text-center text-slate-400">Este evento aún no tiene tipos de inscripción.</td>
               </tr>
             </tbody>
           </table>

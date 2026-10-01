@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { fechaDia, numero } from '~/utils/formato'
 
+definePageMeta({ permiso: 'eventos.configurar' })
 useHead({ title: 'Eventos · Panel CIISIC' })
 
 const store = useEventoStore()

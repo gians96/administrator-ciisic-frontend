@@ -35,6 +35,11 @@ export function esSesionDeParticipante(token: string | null | undefined): boolea
   return audienciasJwt(token).includes(AUDIENCIA_PARTICIPANTE)
 }
 
+/** Sesión de staff (audiencia `ciisic-admin`): la única que se renueva con `/v1/auth/refresh`. */
+export function esSesionDeStaff(token: string | null | undefined): boolean {
+  return audienciasJwt(token).includes(AUDIENCIA_ADMIN)
+}
+
 /** Credencial de Google con forma de JWT (tres segmentos base64url) y de tamaño razonable. */
 export function esCredencialGoogle(valor: unknown): valor is string {
   return typeof valor === 'string' && valor.length <= LONGITUD_MAXIMA_CREDENCIAL && FORMATO_JWT.test(valor)

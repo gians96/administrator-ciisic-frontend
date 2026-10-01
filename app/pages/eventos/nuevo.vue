@@ -2,6 +2,7 @@
 import type { Evento, Respuesta } from '~/types/api'
 import { aErrorApi, mensajeError } from '~/utils/errores'
 
+definePageMeta({ permiso: 'eventos.configurar' })
 useHead({ title: 'Nuevo evento · Panel CIISIC' })
 
 const { api } = useApi()

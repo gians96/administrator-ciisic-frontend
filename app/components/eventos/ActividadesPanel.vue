@@ -5,6 +5,7 @@ import { aErrorApi, mensajeError } from '~/utils/errores'
 
 const props = defineProps<{ eventoId: number }>()
 const { api } = useApi()
+const auth = useAuthStore()
 const toast = useToast()
 const { confirmar } = useConfirm()
 
@@ -84,7 +85,9 @@ async function eliminar(actividad: Actividad) {
               <td class="whitespace-nowrap tabular-nums">{{ actividad.horaInicio }} – {{ actividad.horaFin }}</td>
               <td class="text-right tabular-nums">{{ numero(actividad.totalAsistencias) }}</td>
               <td class="text-right whitespace-nowrap">
-                <AppButton size="sm" variant="ghost" icon="heroicons:qr-code" :to="`/asistencia?actividad=${actividad.id}`">Registrar</AppButton>
+                <AppButton v-if="auth.puede('asistencia.ver')" size="sm" variant="ghost" icon="heroicons:qr-code" :to="`/asistencia?evento=${eventoId}&actividad=${actividad.id}`">
+                  {{ auth.puede('asistencia.marcar') ? 'Registrar' : 'Asistencia' }}
+                </AppButton>
                 <AppButton size="sm" variant="ghost" icon="heroicons:pencil-square" @click="abrir(actividad)">Editar</AppButton>
                 <AppButton size="sm" variant="ghost" icon="heroicons:trash" aria-label="Eliminar actividad" @click="eliminar(actividad)" />
               </td>

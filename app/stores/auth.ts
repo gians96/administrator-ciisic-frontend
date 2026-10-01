@@ -1,6 +1,10 @@
 import { defineStore } from 'pinia'
-import type { Sesion, TipoSesion } from '~/types/api'
-import { leerSesion } from '~/utils/sesion'
+import type { AccesoPanel, Permiso, Sesion, TipoSesion } from '~/types/api'
+import { accesoDeSesion, tienePermiso } from '~/utils/permisos'
+import { lecturaTrasError, leerSesion, type LecturaSesion } from '~/utils/sesion'
+
+/** Intervalo mínimo entre dos lecturas del acceso (`refrescarAcceso`). */
+const INTERVALO_REFRESCO_MS = 15_000
 
 /** La respuesta no trae una sesión reconocible (no debería ocurrir con el BFF). */
 function sesionDe(respuesta: unknown): Sesion {
@@ -12,34 +16,82 @@ function sesionDe(respuesta: unknown): Sesion {
   })
 }
 
-/** Sesión del panel: administrador (panel completo) o inscrito (portal «Mis inscripciones»). */
+/**
+ * Sesión del panel: staff (pantallas según sus permisos) o inscrito (portal «Mis inscripciones»).
+ * Menús, páginas y botones se deciden con `puede(permiso)`, nunca con el código del rol.
+ */
 export const useAuthStore = defineStore('auth', () => {
   const sesion = ref<Sesion | null>(null)
   const verificado = ref(false)
+  /**
+   * La última lectura de la sesión falló sin que el backend respondiera (503 o red): no se sabe si
+   * sigue abierta. La primera lectura queda sin verificar y se reintenta en la siguiente navegación.
+   */
+  const noDisponible = ref(false)
 
   const tipo = computed<TipoSesion | null>(() => sesion.value?.tipo ?? null)
   const usuario = computed(() => (sesion.value?.tipo === 'ADMIN' ? sesion.value.usuario : null))
   const participante = computed(() => (sesion.value?.tipo === 'PARTICIPANTE' ? sesion.value.participante : null))
-  const esSuperAdmin = computed(() => usuario.value?.rolCodigo === 'SUPERADMIN')
   const esParticipante = computed(() => tipo.value === 'PARTICIPANTE')
+  /** Acceso del staff (sin sesión de staff: sin permisos). */
+  const acceso = computed<AccesoPanel>(() => accesoDeSesion(usuario.value))
 
-  function establecer(nueva: Sesion | null) {
-    sesion.value = nueva
-    verificado.value = true
+  /** La cuenta tiene el permiso (o alguno de la lista). */
+  function puede(permiso: Permiso | readonly Permiso[]): boolean {
+    return tienePermiso(acceso.value, permiso)
   }
 
-  async function cargarSesion(): Promise<boolean> {
+  let ultimaLectura = 0
+  let lecturaEnCurso: Promise<LecturaSesion> | null = null
+
+  function establecer(nueva: Sesion | null) {
+    const anterior = usuario.value?.id ?? null
+    sesion.value = nueva
+    verificado.value = true
+    noDisponible.value = false
+    // Otra cuenta (o ninguna) en la misma pestaña: los eventos y el evento elegido eran de la anterior
+    if ((usuario.value?.id ?? null) !== anterior) useEventoStore().limpiar()
+  }
+
+  /** Lee la sesión del BFF. Solo un cierre confirmado la borra; si el backend no responde, se conserva. */
+  async function leer(): Promise<LecturaSesion> {
+    ultimaLectura = Date.now()
     try {
       establecer(leerSesion(await $fetch('/api/auth/session')))
-    } catch {
-      establecer(null)
+      return sesion.value ? 'VIGENTE' : 'CERRADA'
+    } catch (error) {
+      const lectura = lecturaTrasError(error)
+      if (lectura === 'CERRADA') establecer(null)
+      else noDisponible.value = true
+      return lectura
     }
-    return Boolean(sesion.value)
+  }
+
+  /** Primera lectura de la sesión (middleware). */
+  function cargarSesion(): Promise<LecturaSesion> {
+    return leer()
+  }
+
+  /**
+   * Vuelve a leer la sesión para conocer los permisos y eventos actuales (p. ej. tras un 403), como
+   * máximo una vez cada 15 s. Si el BFF responde que no hay sesión, se cierra (`CERRADA`); si falla por
+   * otra causa (backend caído: 503), se conserva la sesión actual (`NO_DISPONIBLE`). `forzar` (acción
+   * explícita de la persona o un 403 de un permiso concreto) omite el intervalo.
+   */
+  async function refrescarAcceso(forzar = false): Promise<LecturaSesion> {
+    if (lecturaEnCurso) return lecturaEnCurso
+    if (!forzar && Date.now() - ultimaLectura < INTERVALO_REFRESCO_MS) {
+      if (!sesion.value) return 'CERRADA'
+      return noDisponible.value ? 'NO_DISPONIBLE' : 'VIGENTE'
+    }
+    lecturaEnCurso = leer().finally(() => { lecturaEnCurso = null })
+    return lecturaEnCurso
   }
 
   async function login(correo: string, contrasena: string): Promise<TipoSesion> {
     const nueva = sesionDe(await $fetch('/api/auth/login', { method: 'POST', body: { correo, contrasena } }))
     establecer(nueva)
+    ultimaLectura = Date.now()
     return nueva.tipo
   }
 
@@ -47,6 +99,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function loginGoogle(credential: string): Promise<TipoSesion> {
     const nueva = sesionDe(await $fetch('/api/auth/google', { method: 'POST', body: { credential } }))
     establecer(nueva)
+    ultimaLectura = Date.now()
     return nueva.tipo
   }
 
@@ -59,5 +112,8 @@ export const useAuthStore = defineStore('auth', () => {
     establecer(null)
   }
 
-  return { sesion, verificado, tipo, usuario, participante, esSuperAdmin, esParticipante, cargarSesion, login, loginGoogle, logout, limpiar }
+  return {
+    sesion, verificado, noDisponible, tipo, usuario, participante, esParticipante, acceso, puede,
+    cargarSesion, refrescarAcceso, login, loginGoogle, logout, limpiar,
+  }
 })

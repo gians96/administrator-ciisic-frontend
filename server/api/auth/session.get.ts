@@ -1,26 +1,20 @@
-interface RespuestaSesion {
-  success: boolean
-  tipo?: 'ADMIN' | 'PARTICIPANTE'
-  user?: Record<string, unknown>
-  participante?: Record<string, unknown>
-}
-
-const SIN_SESION = { authenticated: false, tipo: null, user: null, participante: null } as const
-
-/** Sesión actual (administrador o inscrito) según el backend. Si el token ya no vale, se cierra. */
+/**
+ * Sesión actual (staff o inscrito) según el backend; el staff llega con su `acceso`. Renueva el JWT
+ * del staff si está por caducar. Solo un 401 del backend (token caducado o sesión invalidada) cierra
+ * la sesión; si el backend no responde (5xx, red) se responde 503 `SESSION_UNAVAILABLE` y la cookie
+ * se conserva (`consultarSesion`).
+ */
 export default defineEventHandler(async (event) => {
-  const token = tokenDeSesion(event)
-  if (!token) return SIN_SESION
-  try {
-    const respuesta = await $fetch<RespuestaSesion>(backendUrl(event, '/api/v1/auth/session'), {
-      headers: { authorization: `Bearer ${token}` },
-    })
-    const esParticipante = respuesta.tipo === 'PARTICIPANTE' || (!respuesta.tipo && Boolean(respuesta.participante) && !respuesta.user)
-    return esParticipante
-      ? { authenticated: true, tipo: 'PARTICIPANTE' as const, user: null, participante: respuesta.participante ?? null }
-      : { authenticated: true, tipo: 'ADMIN' as const, user: respuesta.user ?? null, participante: null }
-  } catch {
+  const tokenActual = tokenDeSesion(event)
+  if (!tokenActual) return SIN_SESION
+  const token = await renovarSiHaceFalta(event, tokenActual)
+  const consulta = await consultarSesion(() => $fetch<RespuestaSesionBackend>(backendUrl(event, '/api/v1/auth/session'), {
+    headers: { authorization: `Bearer ${token}` },
+  }))
+  if (consulta.estado === 'VIGENTE') return consulta.cuerpo
+  if (consulta.estado === 'CERRADA') {
     cerrarSesion(event)
     return SIN_SESION
   }
+  throw createError(SESION_NO_DISPONIBLE)
 })

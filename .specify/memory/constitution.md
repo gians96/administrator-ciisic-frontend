@@ -34,20 +34,27 @@ Acciones destructivas siempre con confirmación.
 `bun run lint`, `bun run typecheck`, `bun run test` y `bun run build` en verde antes de
 cada commit. Las utilidades puras (formato, errores, filtros, sesión) tienen pruebas Vitest.
 
-### VI. Dos perfiles: administrador e inscrito
+### VI. Dos perfiles por audiencia; dentro del staff, roles y permisos por página
 El panel atiende a dos perfiles, separados por la audiencia del JWT (`ciisic-admin` y
-`ciisic-participante`). El administrador usa las pantallas de operación según su rol
-(`soloSuperAdmin` para las de SuperAdmin). El inscrito entra solo con Google y únicamente llega
-a las páginas con `perfil: 'participante'` (`/mis-inscripciones`) y a `/api/portal/**`, que el
-BFF reenvía a `/api/v1/me/**`. El middleware y el BFF aplican la separación (`/api/backend/**`
-rechaza sesiones de inscrito con 403 `FORBIDDEN_PROFILE`); el BFF lee `aud` sin verificar solo
-para enrutar y el backend es la autoridad.
+`ciisic-participante`). El inscrito entra solo con Google y únicamente llega a las páginas con
+`perfil: 'participante'` (`/mis-inscripciones`) y a `/api/portal/**`, que el BFF reenvía a
+`/api/v1/me/**`. El middleware y el BFF aplican la separación (`/api/backend/**` rechaza sesiones
+de inscrito con 403 `FORBIDDEN_PROFILE`); el BFF lee `aud` sin verificar solo para enrutar.
+
+Dentro del staff hay roles (Owner, Administrador del sistema, Tesorero, Comisión tecnológica) y
+el panel decide **por permisos**, nunca por el código del rol: cada página de staff declara el
+suyo con `definePageMeta({ permiso })` (el mismo que su ítem del menú) y los menús y botones usan
+`auth.puede(permiso)` con el `acceso` (permisos y eventos) que el backend envía en la sesión. Los
+códigos de rol solo aparecen en `app/utils/permisos.ts` (nombres visibles y tono). El BFF renueva
+el JWT del staff antes de que caduque. **El backend es la autoridad**: lee la cuenta en cada
+petición y responde 403 a lo que no corresponde; el panel solo evita ofrecerlo.
 
 ## Configuración
 
-La única variable de entorno es `NUXT_BACKEND_BASE_URL`. La sesión dura lo que el JWT
-(`expiraEn`); el client ID de Google, la conexión con API_UNDC, la URL del panel y las rutas de
-la landing anterior se configuran en el backend desde la página Sistema (SuperAdmin).
+La única variable de entorno es `NUXT_BACKEND_BASE_URL`. La cookie dura lo que el JWT
+(`expiraEn`); el del staff se renueva y el backend corta la sesión a las 12 h. El client ID de Google, la conexión con API_UNDC, la URL del panel y las rutas de
+la landing anterior se configuran en el backend desde la página Sistema (Owner,
+`sistema.configurar`).
 
 ## Stack
 
@@ -62,13 +69,14 @@ app/assets/css/main.css      tema Tailwind v4
 app/components/ui/           botones, campos, modales, badges, tablas, toasts…
 app/components/{layout,eventos,inscripciones,dashboard,charts,auth}/
 app/composables/             useApi (BFF), usePortal (portal del inscrito), useToast, useConfirm
-app/stores/                  auth (sesión por perfil), evento seleccionado
+app/stores/                  auth (sesión por perfil, acceso y permisos), evento seleccionado
 app/layouts/                 default (administración), participante (portal), blank (login)
 app/pages/                   resumen, inscripciones, asistencia, eventos, tipos,
                              consultas, ponencias, mensajes, participantes, administradores,
-                             correo, sistema, mis-inscripciones
+                             correo, sistema, sin-acceso, mis-inscripciones
+app/utils/permisos.ts        catálogo de permisos, menú, inicio por cuenta, etiquetas de rol
 server/api/auth/             login / google / session / logout (cookie httpOnly)
-server/api/backend/[...path] proxy autenticado a backend-ciisic (administradores)
+server/api/backend/[...path] proxy autenticado a backend-ciisic (staff; renueva el JWT)
 server/api/portal/[...path]  proxy del portal del inscrito (→ /api/v1/me)
 specs/                       SDD (Spec Kit)
 ```
@@ -78,4 +86,17 @@ specs/                       SDD (Spec Kit)
 Spec Kit: `specs/NNN-nombre/{spec,plan,tasks}.md`; ramas `feat/*`; commits
 convencionales en español.
 
-**Versión**: 1.1.0 | **Ratificada**: 2026-09-29 | **Última enmienda**: 2026-09-29
+## Gobernanza
+
+Esta constitución prevalece sobre prácticas ad-hoc. Enmiendas: se documentan en este archivo con
+fecha y motivo, y se revisan en el PR correspondiente.
+
+**Versión**: 1.2.0 | **Ratificada**: 2026-09-29 | **Última enmienda**: 2026-10-01
+
+- 1.2.0 (2026-10-01): principio VI, dos perfiles por audiencia y, dentro del staff, roles y
+  permisos declarados por página con la meta `permiso` (reemplaza `soloSuperAdmin`); menús y
+  botones con `puede(permiso)`; renovación del JWT del staff en el BFF; el backend es la autoridad.
+  Motivo: roles Owner, Administrador del sistema, Tesorero y Comisión tecnológica con alcance por
+  evento (backend-ciisic spec 013, panel spec 008).
+- 1.1.0 (2026-09-29): dos perfiles (administrador e inscrito) separados por la audiencia del JWT;
+  la única variable de entorno es `NUXT_BACKEND_BASE_URL` (spec 007).

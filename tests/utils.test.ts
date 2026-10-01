@@ -6,7 +6,10 @@ import { fechaDia, modalidadPago, nombreCompleto, slug, soles, tamanoArchivo } f
 describe('formato', () => {
   it('muestra montos en soles', () => {
     expect(soles(1460)).toMatch(/S\/\s?1,460\.00/)
-    expect(soles(null)).toMatch(/0\.00/)
+    expect(soles(0)).toMatch(/0\.00/)
+    // Sin pagos.ver los montos llegan en null: no se muestran como cero
+    expect(soles(null)).toBe('—')
+    expect(soles(undefined)).toBe('—')
   })
 
   it('muestra fechas de calendario sin corrimiento de zona horaria', () => {
@@ -40,9 +43,11 @@ describe('errores de la API', () => {
   })
 
   it('lee errores del BFF anidados en data', () => {
-    const e = aErrorApi({ statusCode: 401, data: { data: { code: 'SESSION_EXPIRED', message: 'Tu sesión expiró.' } } })
-    expect(e.code).toBe('SESSION_EXPIRED')
-    expect(e.message).toBe('Tu sesión expiró.')
+    const e = aErrorApi({ statusCode: 403, data: { data: { code: 'CSRF_ORIGIN', message: 'Origen no permitido' } } })
+    expect(e.code).toBe('CSRF_ORIGIN')
+    expect(e.message).toBe('Origen no permitido')
+    // Un 401 sin código se trata como sesión expirada
+    expect(aErrorApi({ statusCode: 401 }).code).toBe('SESSION_EXPIRED')
   })
 
   it('incluye los campos de validación en el mensaje', () => {
@@ -79,6 +84,22 @@ describe('errores de la API', () => {
     // Errores del BFF (createError anida el cuerpo en data)
     expect(aErrorApi({ statusCode: 400, data: { data: { code: 'GOOGLE_SESSION_EXPIRED', message: 'x' } } }).message)
       .toBe(MENSAJES_POR_CODIGO.GOOGLE_SESSION_EXPIRED)
+  })
+
+  it('usa el mensaje del panel para los códigos de roles y permisos (spec 013)', () => {
+    const codigos = [
+      'FORBIDDEN', 'EVENT_NOT_ASSIGNED', 'SESSION_INVALIDATED', 'SESSION_EXPIRED', 'SESSION_UNAVAILABLE', 'ROLE_NOT_ASSIGNABLE',
+      'ADMIN_NOT_MANAGEABLE', 'LAST_OWNER', 'ADMIN_CHANGED', 'SELF_UPDATE_FORBIDDEN', 'EVENTS_REQUIRED', 'EVENT_NOT_FOUND',
+      'PERMISSIONS_REQUIRED', 'PERMISSION_NOT_ELIGIBLE', 'OUT_OF_HOURS_NOT_ALLOWED', 'STATUS_NOT_ALLOWED', 'PARTICIPANT_NOT_FOUND',
+      'AMBIGUOUS_DOCUMENT', 'ATTENDANCE_NOT_FOUND',
+    ]
+    for (const code of codigos) {
+      expect(MENSAJES_POR_CODIGO[code], code).toBeTruthy()
+      expect(aErrorApi({ status: 403, data: { success: false, code, message: 'texto del servidor' } }).message).toBe(MENSAJES_POR_CODIGO[code])
+    }
+    // Los campos del formulario se conservan para marcar el control
+    expect(aErrorApi({ status: 422, data: { code: 'EVENTS_REQUIRED', fields: { eventoIds: 'Elige al menos un evento.' } } }).fields)
+      .toEqual({ eventoIds: 'Elige al menos un evento.' })
   })
 
   it('conserva el mensaje del servidor en VALIDATION_ERROR y tiene respaldo', () => {

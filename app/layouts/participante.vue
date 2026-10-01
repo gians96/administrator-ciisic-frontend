@@ -18,14 +18,14 @@ async function salir() {
           <p class="font-display text-sm font-extrabold text-white">CIISIC</p>
           <p class="text-xs text-slate-400">Mis inscripciones</p>
         </div>
-        <div class="ml-auto flex items-center gap-3">
-          <div class="hidden text-right sm:block">
-            <p class="text-sm font-medium text-white">{{ auth.participante?.nombres }} {{ auth.participante?.apellidos }}</p>
-            <p class="text-xs text-slate-400">{{ auth.participante?.correo }}</p>
-          </div>
-          <AppButton variant="ghost" size="sm" icon="heroicons:arrow-right-on-rectangle" @click="salir">
-            <span class="hidden sm:inline">Salir</span>
-          </AppButton>
+        <div class="ml-auto flex items-center">
+          <MenuUsuario
+            :nombres="auth.participante?.nombres"
+            :apellidos="auth.participante?.apellidos"
+            :correo="auth.participante?.correo"
+            rol="Participante"
+            @salir="salir"
+          />
         </div>
       </div>
     </header>

@@ -4,6 +4,7 @@ import { fechaHoraLima, nombreCompleto } from '~/utils/formato'
 import { aErrorApi, mensajeError } from '~/utils/errores'
 import { AVISO_CAMBIO_CORREO_GOOGLE, mensajeDesvincularGoogle, tituloVinculoGoogle } from '~/utils/cuentaGoogle'
 
+definePageMeta({ permiso: 'participantes.gestionar' })
 useHead({ title: 'Participantes · Panel CIISIC' })
 
 interface ParticipanteDetalle extends ParticipanteRef {

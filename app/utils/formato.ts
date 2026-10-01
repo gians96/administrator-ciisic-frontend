@@ -7,8 +7,9 @@ const entero = new Intl.NumberFormat('es-PE')
 const fechaCorta = new Intl.DateTimeFormat('es-PE', { timeZone: ZONA, day: '2-digit', month: 'short', year: 'numeric' })
 const fechaHora = new Intl.DateTimeFormat('es-PE', { timeZone: ZONA, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
+/** Monto en soles; sin valor (p. ej. sin el permiso `pagos.ver`, que oculta los montos) muestra «—». */
 export function soles(valor: number | null | undefined): string {
-  return moneda.format(valor ?? 0)
+  return typeof valor === 'number' && Number.isFinite(valor) ? moneda.format(valor) : '—'
 }
 
 export function numero(valor: number | null | undefined): string {

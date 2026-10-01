@@ -76,7 +76,9 @@ defineExpose({ reiniciar })
 <template>
   <div v-show="disponible">
     <slot name="antes" />
-    <div ref="contenedor" class="flex min-h-11 w-full justify-center" />
+    <!-- El botón es un iframe de Google con esquema claro: si hereda el `color-scheme: dark` de la
+         página, el navegador le pinta un fondo opaco (blanco). Con `scheme-light` queda transparente. -->
+    <div ref="contenedor" class="flex min-h-11 w-full justify-center scheme-light" />
     <slot name="despues" />
   </div>
 </template>

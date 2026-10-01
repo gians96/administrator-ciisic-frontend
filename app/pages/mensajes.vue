@@ -3,9 +3,11 @@ import type { MensajeContacto, Meta, Respuesta } from '~/types/api'
 import { fechaHoraLima } from '~/utils/formato'
 import { mensajeError } from '~/utils/errores'
 
+definePageMeta({ permiso: 'mensajes.ver' })
 useHead({ title: 'Mensajes · Panel CIISIC' })
 
 const { api } = useApi()
+const auth = useAuthStore()
 const eventos = useEventoStore()
 const toast = useToast()
 const { confirmar } = useConfirm()
@@ -93,7 +95,7 @@ async function eliminar(mensaje: MensajeContacto) {
       <p class="text-xs text-slate-500">{{ fechaHoraLima(abierto?.creadoEn) }}</p>
       <p class="mt-3 text-sm leading-relaxed whitespace-pre-line text-slate-200">{{ abierto?.mensaje }}</p>
       <template #acciones>
-        <AppButton variant="danger" icon="heroicons:trash" @click="abierto && eliminar(abierto)">Eliminar</AppButton>
+        <AppButton v-if="auth.puede('mensajes.eliminar')" variant="danger" icon="heroicons:trash" @click="abierto && eliminar(abierto)">Eliminar</AppButton>
         <a v-if="abierto" :href="`mailto:${abierto.correo}?subject=${encodeURIComponent(`Re: ${abierto.asunto}`)}`" class="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-navy-900 hover:bg-brand-300">
           <Icon name="heroicons:envelope" class="size-4" aria-hidden="true" /> Responder
         </a>

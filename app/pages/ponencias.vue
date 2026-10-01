@@ -3,6 +3,7 @@ import type { Meta, Ponencia, Respuesta } from '~/types/api'
 import { fechaHoraLima, tamanoArchivo } from '~/utils/formato'
 import { mensajeError } from '~/utils/errores'
 
+definePageMeta({ permiso: 'ponencias.ver' })
 useHead({ title: 'Ponencias · Panel CIISIC' })
 
 const { api, urlArchivo } = useApi()

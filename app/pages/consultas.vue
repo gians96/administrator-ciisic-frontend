@@ -3,6 +3,7 @@ import type { Meta, PeriodoRenovacion, Proveedor, RegistroConsulta, Respuesta, T
 import { fechaDia, fechaHoraLima, numero } from '~/utils/formato'
 import { aErrorApi, mensajeError } from '~/utils/errores'
 
+definePageMeta({ permiso: 'consultas_dni.gestionar' })
 useHead({ title: 'Consultas DNI · Panel CIISIC' })
 
 const { api } = useApi()

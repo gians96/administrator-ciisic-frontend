@@ -17,7 +17,7 @@ import {
   validarCredencialCorreo,
 } from '~/utils/credencialesCorreo'
 
-definePageMeta({ soloSuperAdmin: true })
+definePageMeta({ permiso: 'correo.configurar' })
 useHead({ title: 'Correo · Panel CIISIC' })
 
 type ResultadoPrueba = Omit<PruebaCredencialCorreo, 'credencial'>

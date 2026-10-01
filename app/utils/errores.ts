@@ -34,9 +34,34 @@ export const MENSAJES_POR_CODIGO: Readonly<Record<string, string>> = {
   GOOGLE_ACCOUNT_NOT_REGISTERED: 'Tu cuenta de Google no está registrada como administrador ni como inscrito. Si te inscribiste a un evento, entra con la cuenta de Google del correo que usaste al inscribirte.',
   RATE_LIMITED: 'Demasiados intentos. Espera unos minutos y vuelve a intentarlo.',
 
-  // Sesión y perfiles (administrador / inscrito)
-  SESSION_INVALIDATED: 'Tu sesión se cerró porque cambiaron los datos de tu registro (por ejemplo, el correo). Vuelve a entrar con la cuenta de Google de tu correo actual.',
+  // Sesión y perfiles (staff / inscrito)
+  SESSION_INVALIDATED: 'Tu sesión se cerró porque cambiaron los datos de tu cuenta (por ejemplo, el correo, la contraseña o el vínculo con Google) o fue desactivada. Vuelve a ingresar; si entras con Google, usa la cuenta de tu correo actual.',
+  SESSION_EXPIRED: 'Tu sesión expiró o llegó a su duración máxima (12 horas). Ingresa nuevamente.',
+  SESSION_UNAVAILABLE: 'No se pudo verificar tu sesión en este momento. Intenta nuevamente en unos segundos.',
+  LOGIN_UNAVAILABLE: 'No se pudo iniciar sesión porque el servidor no responde. Intenta nuevamente en unos minutos.',
   FORBIDDEN_PROFILE: 'Tu tipo de cuenta no tiene acceso a esta sección.',
+
+  // Permisos y eventos asignados (spec 013)
+  FORBIDDEN: 'Tu cuenta no tiene permiso para esta acción. Si lo necesitas, pídelo a un Owner o a un Administrador del sistema.',
+  EVENT_NOT_ASSIGNED: 'No tienes asignado este evento. Elige uno de tus eventos en la barra superior.',
+  STATUS_NOT_ALLOWED: 'No tienes permiso para cancelar inscripciones.',
+
+  // Equipo y administradores
+  ROLE_NOT_ASSIGNABLE: 'No puedes asignar ese rol. Un Administrador del sistema solo crea y gestiona cuentas de Tesorero y Comisión.',
+  ADMIN_NOT_MANAGEABLE: 'No puedes ver ni modificar esta cuenta: solo un Owner gestiona a los Owners y Administradores del sistema.',
+  LAST_OWNER: 'Es el último Owner activo: no se puede cambiar su rol, desactivar ni eliminar. Primero asigna el rol de Owner a otra cuenta.',
+  ADMIN_CHANGED: 'La cuenta cambió mientras la editabas (por ejemplo, otra persona cambió su rol). Actualiza la lista y vuelve a intentarlo.',
+  SELF_UPDATE_FORBIDDEN: 'No puedes cambiar tu propio rol, estado, eventos ni permisos (tampoco tu correo ni tu vínculo con Google si no eres Owner). Pide el cambio a otra persona con acceso al equipo.',
+  EVENTS_REQUIRED: 'Asigna al menos un evento a esta cuenta.',
+  EVENT_NOT_FOUND: 'Alguno de los eventos elegidos ya no existe. Actualiza la lista y vuelve a elegirlos.',
+  PERMISSIONS_REQUIRED: 'Elige al menos un permiso para la cuenta de la Comisión.',
+  PERMISSION_NOT_ELIGIBLE: 'Alguno de los permisos elegidos no se puede asignar a la Comisión (por ejemplo, ver pagos o validar inscripciones).',
+
+  // Asistencia
+  OUT_OF_HOURS_NOT_ALLOWED: 'No tienes permiso para marcar asistencia fuera del horario de la actividad. Desmarca «Fuera de horario» o pide ese permiso.',
+  PARTICIPANT_NOT_FOUND: 'No se encontró a la persona: no está inscrita en este evento o su registro ya no existe.',
+  AMBIGUOUS_DOCUMENT: 'Hay más de un inscrito con ese número de documento. Indica el tipo de documento (DNI o CE) y vuelve a intentarlo.',
+  ATTENDANCE_NOT_FOUND: 'La asistencia no existe o ya fue anulada. Actualiza la lista.',
 
   // Configuración del sistema
   UNDC_API_NOT_CONFIGURED: 'Falta la URL o la API key de API_UNDC. Guárdalas y vuelve a probar la conexión.',

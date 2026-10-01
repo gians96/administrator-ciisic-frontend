@@ -27,7 +27,7 @@ import {
   type TarjetaSistema,
 } from '~/utils/configuracionSistema'
 
-definePageMeta({ soloSuperAdmin: true })
+definePageMeta({ permiso: 'sistema.configurar' })
 useHead({ title: 'Sistema · Panel CIISIC' })
 
 type ResultadoPrueba = Omit<PruebaUndcApi, 'configuracion'>

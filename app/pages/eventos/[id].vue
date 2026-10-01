@@ -2,6 +2,8 @@
 import type { DatosPago, Evento, Respuesta } from '~/types/api'
 import { aErrorApi, mensajeError } from '~/utils/errores'
 
+definePageMeta({ permiso: 'eventos.configurar' })
+
 const route = useRoute()
 const router = useRouter()
 const { api } = useApi()
@@ -21,11 +23,11 @@ const TABS = computed(() => [
   { id: 'tipos', label: 'Categorías y tipos', icon: 'heroicons:tag' },
   { id: 'actividades', label: 'Actividades', icon: 'heroicons:calendar' },
   { id: 'integraciones', label: 'Integraciones', icon: 'heroicons:link' },
-  // Tokens para que la landing del evento consuma el backend: solo SuperAdmin
-  ...(auth.esSuperAdmin ? [{ id: 'acceso', label: 'Acceso', icon: 'heroicons:key' }] : []),
+  // Tokens para que la landing del evento consuma el backend (`/access-tokens` exige eventos.configurar)
+  ...(auth.puede('eventos.configurar') ? [{ id: 'acceso', label: 'Acceso', icon: 'heroicons:key' }] : []),
 ])
 const tab = ref(TABS.value.some((t) => t.id === route.query.tab) ? String(route.query.tab) : 'general')
-// Pestaña inexistente o no permitida (p. ej. `?tab=acceso` para un Admin): se corrige la URL
+// Pestaña inexistente o no permitida: se corrige la URL
 if (route.query.tab && route.query.tab !== tab.value) router.replace({ query: { tab: tab.value } })
 watch(tab, (valor) => router.replace({ query: { tab: valor } }))
 
@@ -100,7 +102,7 @@ async function eliminar() {
       <section v-if="tab === 'general'" class="card p-6">
         <EventoForm :key="evento.actualizadoEn" :evento="evento" :enviando="enviando" :errores="errores" @guardar="guardar">
           <template #acciones>
-            <AppButton variant="danger" icon="heroicons:trash" @click="eliminar">Eliminar</AppButton>
+            <AppButton v-if="auth.puede('eventos.eliminar')" variant="danger" icon="heroicons:trash" @click="eliminar">Eliminar</AppButton>
           </template>
         </EventoForm>
       </section>
@@ -110,7 +112,7 @@ async function eliminar() {
       <CategoriasTipos v-else-if="tab === 'tipos'" :evento-id="evento.id" />
       <ActividadesPanel v-else-if="tab === 'actividades'" :evento-id="evento.id" />
       <IntegracionesPanel v-else-if="tab === 'integraciones'" :evento-id="evento.id" />
-      <TokensAccesoPanel v-else-if="tab === 'acceso' && auth.esSuperAdmin" :evento-id="evento.id" />
+      <TokensAccesoPanel v-else-if="tab === 'acceso' && auth.puede('eventos.configurar')" :evento-id="evento.id" />
     </template>
   </div>
 </template>

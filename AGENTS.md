@@ -5,8 +5,11 @@ Guía para agentes de IA y desarrolladores que trabajen en este repositorio.
 ## Qué es
 
 Panel del Congreso CIISIC (UNDC) con **dos perfiles**:
-- **Administración** (SuperAdmin / Admin): eventos, inscripciones, asistencia, ponencias,
-  mensajes, tipos de inscripción, consultas DNI, participantes, correo, sistema y administradores.
+- **Staff**: Owner, Administrador del sistema (ambos con todos los eventos), Tesorero y Comisión
+  tecnológica (solo sus eventos). Cada cuenta ve las pantallas y botones que sus **permisos**
+  permiten: resumen, inscripciones, asistencia, ponencias, mensajes, eventos, tipos de inscripción,
+  consultas DNI, participantes, correo, equipo y administradores, y sistema (solo Owner). Tabla
+  de permisos por pantalla y por rol en [`docs/overview.md`](docs/overview.md).
 - **Portal del inscrito**: "Mis inscripciones" (estado, motivo de rechazo, credencial PDF).
 
 Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Documentación:
@@ -41,11 +44,17 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
 - `server/utils/jwt-publico.ts`: lee la audiencia del JWT **solo para enrutar** (el backend verifica).
 - `server/api/auth/*`: `login.post` (contraseña), `google.get` (client ID + nonce en cookie
   httpOnly), `google.post` (canjea el ID token en `/v1/auth/google`), `session.get`, `logout.post`.
-- `app/stores/auth.ts` (sesión `{ tipo, usuario | participante }`), `app/middleware/auth.global.ts`
-  + `app/utils/sesion.ts` (redirecciones por perfil y `soloSuperAdmin`).
-- `app/composables/useApi.ts` (admin) y `usePortal.ts` (inscrito); `app/utils/errores.ts` traduce
-  los `code` del backend.
-- Layouts: `default` (menú y selector de evento) y `participante` (sin menú).
+- `server/utils/renovar-sesion.ts`: si al JWT del staff le quedan < 20 min, el BFF lo renueva con
+  `POST /v1/auth/refresh` (proxy y `session.get`); el backend corta la sesión a las 12 h.
+- `app/stores/auth.ts` (sesión `{ tipo, usuario | participante }`, `acceso` y `puede(permiso)`),
+  `app/middleware/auth.global.ts` + `app/utils/sesion.ts` (redirecciones por perfil y por `permiso`)
+  y `app/utils/permisos.ts` (catálogo, menú, `inicioPara`; único lugar con códigos de rol).
+- `app/composables/useApi.ts` (staff: 401 → login con motivo; 403 `FORBIDDEN`/`EVENT_NOT_ASSIGNED`
+  → relee el acceso y los eventos) y `usePortal.ts` (inscrito); `app/utils/errores.ts` traduce los
+  `code` del backend.
+- Layouts: `default` (menú lateral contraíble con la hamburguesa —preferencia en `localStorage`—,
+  selector de evento y menú de usuario `MenuUsuario`) y `participante` (sin menú lateral, mismo
+  menú de usuario).
 
 ## Convenciones de código
 
@@ -59,8 +68,11 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
 
 ## Reglas de negocio clave (no romper)
 
-- Páginas de administración: sesión ADMIN; `Sistema`, `Correo`, `Administradores`, tokens de
-  acceso: solo SuperAdmin (`definePageMeta({ soloSuperAdmin: true })` + menú condicionado).
+- Páginas de administración: sesión de staff y el permiso de la página
+  (`definePageMeta({ permiso: '…' })`, mismo permiso que su ítem en `MENU` de `app/utils/permisos.ts`).
+  Menús y botones se deciden con `auth.puede(permiso)`, **nunca** con el código del rol (Owner =
+  `SUPERADMIN`, Administrador del sistema = `ADMIN`, Tesorero y Comisión con alcance por evento).
+  Sin `pagos.ver` los montos llegan en `null` (`soles()` muestra «—»).
 - Portal: solo `/mis-inscripciones` y `/api/portal/**` para el perfil PARTICIPANTE.
 - Secretos (API keys, tokens) son de solo escritura: se muestran enmascarados; el token de acceso
   de un evento se muestra una única vez y no se guarda en el navegador.
@@ -96,19 +108,21 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
   cambios sin comitear que no son tuyos, detente y coordina (ya ocurrió: dos sesiones editando
   este repo a la vez).
 - No modifiques el backend ni la landing desde aquí.
-- Git: rama `feat/panel-admin`; `git add <rutas explícitas>`; commits convencionales en español;
-  sin push, merge ni despliegues sin confirmación humana.
+- Git: ramas `feat/*` (roles y permisos: `feat/roles-permisos`); `git add <rutas explícitas>`;
+  commits convencionales en español; sin push, merge ni despliegues sin confirmación humana.
 - Al terminar, reporta commits, pruebas y pendientes.
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–007
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–008
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
-correo y tokens de acceso, sistema/Google/portal). Flujo: spec → plan → tasks; marcar tasks.
+correo y tokens de acceso, sistema/Google/portal, roles y permisos). Flujo: spec → plan → tasks;
+marcar tasks. Contrato de roles y permisos: `backend-ciisic/specs/013-roles-permisos/contracts/`.
 
 ## Antes de dar por terminado
 
 1. `bun run lint`, `bun run typecheck`, `bun run test` y `bun run build` en verde.
-2. Probar en el navegador contra el backend local la pantalla afectada (y el perfil que corresponda).
+2. Probar en el navegador contra el backend local la pantalla afectada, con el perfil que
+   corresponda y con una cuenta de cada rol que la use (Owner, Administrador, Tesorero, Comisión).
 3. Mensajes para códigos de error nuevos en `app/utils/errores.ts`.
 4. Documentación de `docs/` al día.

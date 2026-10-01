@@ -81,6 +81,11 @@ const tipoCategoria = ref<Categoria | null>(null)
 const tipoEditando = ref<TipoInscripcion | null>(null)
 const tipoForm = reactive({ codigo: '', nombre: '', etiqueta: '', descripcion: '', precio: 0, precioInstitucional: 0, activo: true, orden: 0 })
 const caracteristicas = ref<Caracteristica[]>([])
+/**
+ * Los precios llegan en `null` sin `pagos.ver`: al editar no se muestran ni se envían, así el backend
+ * conserva los actuales (nunca se guardan en 0 por no conocerlos).
+ */
+const preciosOcultos = ref(false)
 
 const ICONOS_SUGERIDOS = ['heroicons:academic-cap', 'heroicons:gift', 'heroicons:identification', 'heroicons:ticket', 'heroicons:x-mark', 'heroicons:sparkles', 'heroicons:computer-desktop']
 
@@ -99,6 +104,7 @@ function abrirTipo(categoria: Categoria, tipo?: TipoInscripcion) {
     orden: tipo?.orden ?? categoria.tipos.length + 1,
   })
   caracteristicas.value = clonarLista(tipo?.caracteristicas)
+  preciosOcultos.value = Boolean(tipo) && (tipo?.precio === null || tipo?.precioInstitucional === null)
   tipoModal.value = true
 }
 
@@ -106,13 +112,13 @@ async function guardarTipo() {
   if (!tipoCategoria.value) return
   guardando.value = true
   errores.value = {}
+  const { precio, precioInstitucional, ...resto } = tipoForm
   const body = {
-    ...tipoForm,
+    ...resto,
     codigo: tipoForm.codigo.trim().toLowerCase(),
     etiqueta: tipoForm.etiqueta.trim() || null,
     descripcion: tipoForm.descripcion.trim() || null,
-    precio: Number(tipoForm.precio),
-    precioInstitucional: Number(tipoForm.precioInstitucional),
+    ...(preciosOcultos.value ? {} : { precio: Number(precio), precioInstitucional: Number(precioInstitucional) }),
     orden: Number(tipoForm.orden) || 0,
     caracteristicas: caracteristicas.value.filter((c) => c.text.trim()).map((c) => ({ icon: c.icon.trim() || 'heroicons:check', text: c.text.trim() })),
   }
@@ -249,12 +255,17 @@ async function eliminarTipo(tipo: TipoInscripcion) {
         <AppField label="Orden" for="tipo-orden">
           <input id="tipo-orden" v-model.number="tipoForm.orden" type="number" min="0" class="field-control">
         </AppField>
-        <AppField label="Precio regular (S/)" for="tipo-precio" required :error="errores.precio">
-          <input id="tipo-precio" v-model.number="tipoForm.precio" type="number" min="0" step="0.01" class="field-control">
-        </AppField>
-        <AppField label="Precio UNDC / institucional (S/)" for="tipo-precio-inst" required :error="errores.precioInstitucional ?? errores.body">
-          <input id="tipo-precio-inst" v-model.number="tipoForm.precioInstitucional" type="number" min="0" step="0.01" class="field-control">
-        </AppField>
+        <template v-if="!preciosOcultos">
+          <AppField label="Precio regular (S/)" for="tipo-precio" required :error="errores.precio">
+            <input id="tipo-precio" v-model.number="tipoForm.precio" type="number" min="0" step="0.01" class="field-control">
+          </AppField>
+          <AppField label="Precio UNDC / institucional (S/)" for="tipo-precio-inst" required :error="errores.precioInstitucional ?? errores.body">
+            <input id="tipo-precio-inst" v-model.number="tipoForm.precioInstitucional" type="number" min="0" step="0.01" class="field-control">
+          </AppField>
+        </template>
+        <p v-else class="rounded-xl bg-white/5 px-4 py-3 text-sm text-slate-300 md:col-span-2">
+          Tu cuenta no puede ver los precios: se conservan los actuales.
+        </p>
         <AppField label="Descripción" for="tipo-desc" class="md:col-span-2">
           <textarea id="tipo-desc" v-model="tipoForm.descripcion" rows="2" class="field-control" maxlength="1000" />
         </AppField>

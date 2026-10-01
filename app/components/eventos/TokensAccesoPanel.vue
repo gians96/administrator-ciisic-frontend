@@ -20,7 +20,7 @@ import {
 } from '~/utils/tokensAcceso'
 
 /**
- * Tokens de acceso del evento (solo SuperAdmin): la landing del evento los usa desde su servidor
+ * Tokens de acceso del evento (`eventos.configurar`): la landing del evento los usa desde su servidor
  * para consumir el backend. El valor completo llega una sola vez al generarlo y solo vive en el
  * estado local de este componente mientras el diálogo está abierto (nunca en Pinia ni localStorage).
  */

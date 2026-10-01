@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CredencialCorreo, Evento, EstadoEvento, Respuesta } from '~/types/api'
+import type { CredencialCorreo, Evento, EventoListado, EstadoEvento, Respuesta } from '~/types/api'
 import { slug } from '~/utils/formato'
 import { mensajeError } from '~/utils/errores'
 import {
@@ -32,7 +32,7 @@ export interface EventoFormulario {
   copiarDeEventoId: string
 }
 
-const props = defineProps<{ evento?: Evento | null, eventosParaCopiar?: Evento[], enviando?: boolean, errores?: Record<string, string> }>()
+const props = defineProps<{ evento?: Evento | null, eventosParaCopiar?: EventoListado[], enviando?: boolean, errores?: Record<string, string> }>()
 const emit = defineEmits<{ guardar: [datos: Record<string, unknown>] }>()
 const auth = useAuthStore()
 const { api } = useApi()
@@ -69,11 +69,11 @@ const form = reactive<EventoFormulario>({
 
 const esNuevo = computed(() => !props.evento)
 
-// ─── Credencial de correo: solo el SuperAdmin puede listarlas y elegir ───
+// ─── Credencial de correo: solo quien tiene correo.configurar puede listarlas y elegir ───
 const credenciales = ref<CredencialCorreo[]>([])
 const cargandoCredenciales = ref(false)
 const errorCredenciales = ref<string | null>(null)
-/** El SuperAdmin cambió el selector a mano (ya no se propone la del evento de origen). */
+/** Se cambió el selector a mano (ya no se propone la del evento de origen). */
 const credencialElegida = ref(false)
 
 /** Evento del que se copia la configuración (solo en el alta). */
@@ -104,8 +104,8 @@ watch(origenCopia, (origen) => {
   if (!credencialElegida.value) form.credencialCorreoId = origen?.credencialCorreoId ?? null
 })
 
-/** Solo el SuperAdmin envía `credencialCorreoId`; si copia de un evento cuya credencial no se conoce, decide el backend. */
-const enviarCredencial = computed(() => auth.esSuperAdmin
+/** Solo quien configura el correo envía `credencialCorreoId`; si copia de un evento cuya credencial no se conoce, decide el backend. */
+const enviarCredencial = computed(() => auth.puede('correo.configurar')
   && !(origenCopia.value && !credencialElegida.value && origenCopia.value.credencialCorreoId === undefined))
 
 async function cargarCredenciales() {
@@ -120,7 +120,7 @@ async function cargarCredenciales() {
   }
 }
 onMounted(() => {
-  if (auth.esSuperAdmin) cargarCredenciales()
+  if (auth.puede('correo.configurar')) cargarCredenciales()
 })
 
 const codigoEditado = ref(false)
@@ -149,7 +149,7 @@ function enviar() {
     telefonoContacto: nulo(form.telefonoContacto),
     remitenteNombre: nulo(form.remitenteNombre),
     asuntoAprobacion: nulo(form.asuntoAprobacion),
-    // El Admin no puede elegir credencial: no se envía y el backend conserva la actual (o copia la del origen)
+    // Sin correo.configurar no se envía: el backend conserva la credencial actual (o copia la del origen)
     ...(enviarCredencial.value ? { credencialCorreoId: form.credencialCorreoId } : {}),
     ...(esNuevo.value && form.copiarDeEventoId ? { copiarDeEventoId: Number(form.copiarDeEventoId) } : {}),
   })
@@ -225,7 +225,7 @@ const e = (campo: string) => props.errores?.[campo] ?? null
       </AppField>
       <div class="md:col-span-2">
         <AppField
-          v-if="auth.esSuperAdmin"
+          v-if="auth.puede('correo.configurar')"
           label="Credencial de correo"
           for="ev-credencial"
           :error="e('credencialCorreoId') ?? errorCredenciales"
@@ -247,11 +247,11 @@ const e = (campo: string) => props.errores?.[campo] ?? null
           v-else
           label="Credencial de correo"
           for="ev-credencial"
-          :hint="origenCopia ? 'Se copia del evento de origen. Solo un SuperAdmin puede cambiarla.' : 'Solo un SuperAdmin puede cambiarla.'"
+          :hint="origenCopia ? 'Se copia del evento de origen. Solo quien configura el correo puede cambiarla.' : 'Solo quien configura el correo puede cambiarla.'"
         >
           <input id="ev-credencial" :value="describirCredencialEvento(credencialReferencia)" class="field-control cursor-default bg-white/5 text-slate-300" readonly>
         </AppField>
-        <NuxtLink v-if="auth.esSuperAdmin" to="/correo" class="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-brand-300 hover:text-brand-200">
+        <NuxtLink v-if="auth.puede('correo.configurar')" to="/correo" class="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-brand-300 hover:text-brand-200">
           <Icon name="heroicons:paper-airplane" class="size-3.5" aria-hidden="true" /> Gestionar credenciales de correo
         </NuxtLink>
       </div>

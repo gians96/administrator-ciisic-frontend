@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3'
 import { esSesionDeParticipante } from './jwt-publico'
+import { renovarSiHaceFalta } from './renovar-sesion'
 import { assertSameOrigin, backendUrl, cerrarSesion, tokenDeSesion } from './session'
 
 const RUTA_VALIDA = /^[\w\-./]+$/
@@ -28,16 +29,17 @@ const MENSAJE_PERFIL: Readonly<Record<PerfilProxy, string>> = {
 /**
  * Reenvía `/<proxy>/<ruta>` a `<backend><prefijo>/<ruta>` con el Bearer de la cookie de sesión y transmite
  * cuerpos multipart y archivos sin cargarlos en memoria. Valida el `Origin` en mutaciones, la ruta y el
- * perfil de la sesión (leído del `aud` del JWT). Si el backend invalida el token (401), cierra la sesión.
+ * perfil de la sesión (leído del `aud` del JWT). Renueva el JWT del staff si está por caducar
+ * (`renovarSiHaceFalta`). Si el backend invalida el token (401), cierra la sesión.
  */
-export function proxyAutenticado(event: H3Event, opciones: OpcionesProxy) {
+export async function proxyAutenticado(event: H3Event, opciones: OpcionesProxy) {
   assertSameOrigin(event)
-  const token = tokenDeSesion(event)
-  if (!token) {
+  const tokenActual = tokenDeSesion(event)
+  if (!tokenActual) {
     throw createError({ statusCode: 401, data: { success: false, code: 'SESSION_EXPIRED', message: 'Tu sesión expiró. Inicia sesión nuevamente.' } })
   }
 
-  const perfil: PerfilProxy = esSesionDeParticipante(token) ? 'PARTICIPANTE' : 'ADMIN'
+  const perfil: PerfilProxy = esSesionDeParticipante(tokenActual) ? 'PARTICIPANTE' : 'ADMIN'
   if (perfil !== opciones.perfil) {
     throw createError({ statusCode: 403, data: { success: false, code: 'FORBIDDEN_PROFILE', message: MENSAJE_PERFIL[opciones.perfil] } })
   }
@@ -49,6 +51,8 @@ export function proxyAutenticado(event: H3Event, opciones: OpcionesProxy) {
 
   const { search } = getRequestURL(event)
   const destino = backendUrl(event, `${ruta ? `${opciones.prefijo}/${ruta}` : opciones.prefijo}${search}`)
+  // El backend no envía cookies: la del JWT renovado (si la hay) no se pisa al copiar sus encabezados
+  const token = await renovarSiHaceFalta(event, tokenActual)
   return proxyRequest(event, destino, {
     headers: {
       authorization: `Bearer ${token}`,
