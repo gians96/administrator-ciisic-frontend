@@ -45,7 +45,9 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   + `app/utils/sesion.ts` (redirecciones por perfil y `soloSuperAdmin`).
 - `app/composables/useApi.ts` (admin) y `usePortal.ts` (inscrito); `app/utils/errores.ts` traduce
   los `code` del backend.
-- Layouts: `default` (menú y selector de evento) y `participante` (sin menú).
+- Layouts: `default` (menú lateral contraíble con la hamburguesa —preferencia en `localStorage`—,
+  selector de evento y menú de usuario `MenuUsuario`) y `participante` (sin menú lateral, mismo
+  menú de usuario).
 
 ## Convenciones de código
 
