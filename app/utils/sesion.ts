@@ -2,7 +2,10 @@ import type { AccesoPanel, ParticipanteSesion, Permiso, Sesion, TipoSesion, Usua
 import { aErrorApi, MENSAJES_POR_CODIGO, type ErrorApi } from '~/utils/errores'
 import { inicioPara, RUTA_SIN_ACCESO, sinEventosAsignados, tienePermiso } from '~/utils/permisos'
 
-/** Página de inicio del inscrito (la del staff depende de sus permisos: `inicioPara`). */
+/**
+ * Página de inicio del inscrito (la del staff depende de sus permisos: `inicioPara`). Las demás
+ * secciones del portal (`NAVEGACION_PORTAL` en `app/utils/portal.ts`) declaran `perfil: 'participante'`.
+ */
 export const INICIO_PARTICIPANTE = '/mis-inscripciones'
 
 /** Meta de la página que decide quién puede abrirla (`definePageMeta`). */
@@ -58,9 +61,10 @@ export function redireccionPara(tipo: TipoSesion, meta: MetaAcceso, acceso: Acce
 const RUTA_LOGIN = /^\/login(?:[/?#]|$)/
 
 /**
- * Destino tras iniciar sesión: el inscrito siempre va a «Mis inscripciones»; el staff, a `redirect`
- * si es una ruta interna (no el propio login) que puede abrir, o a su página de inicio. `metaDe`
- * da la meta de la página de `redirect` (en el panel, `router.resolve(ruta).meta`).
+ * Destino tras iniciar sesión: `redirect` si es una ruta interna (no el propio login) que la sesión
+ * puede abrir —el inscrito, solo las del portal (`perfil: 'participante'`, p. ej. su fotocheck)—; si
+ * no, la página de inicio (`INICIO_PARTICIPANTE` o `inicioPara`). `metaDe` da la meta de la página de
+ * `redirect` (en el panel, `router.resolve(ruta).meta`).
  */
 export function destinoTrasLogin(
   tipo: TipoSesion,
@@ -68,9 +72,8 @@ export function destinoTrasLogin(
   acceso: AccesoPanel | null = null,
   metaDe: (ruta: string) => MetaAcceso = () => ({}),
 ): string {
-  if (tipo === 'PARTICIPANTE') return INICIO_PARTICIPANTE
   if (esRutaInterna(redirect) && !RUTA_LOGIN.test(redirect) && redireccionPara(tipo, metaDe(redirect), acceso) === null) return redirect
-  return inicioPara(acceso)
+  return tipo === 'PARTICIPANTE' ? INICIO_PARTICIPANTE : inicioPara(acceso)
 }
 
 /**
@@ -126,5 +129,17 @@ export const CODIGOS_ACCESO_CAMBIADO: readonly string[] = ['FORBIDDEN', 'EVENT_N
 export function reaccionAError(error: Pick<ErrorApi, 'status' | 'code'>, silenciar401 = false): 'LOGIN' | 'RELEER_ACCESO' | null {
   if (error.status === 401) return silenciar401 ? null : 'LOGIN'
   if (error.status === 403 && CODIGOS_ACCESO_CAMBIADO.includes(error.code)) return 'RELEER_ACCESO'
+  return null
+}
+
+/**
+ * Qué hace el portal del inscrito ante un error de `/api/portal/**`: un 401 va al login; un 403
+ * `FORBIDDEN_PROFILE` significa que la cookie ya no es la del participante (otra pestaña entró al panel,
+ * o una respuesta del staff llegó tarde tras el paso al portal): se vuelve a leer la sesión y se va a la
+ * página que corresponda.
+ */
+export function reaccionPortalAError(error: Pick<ErrorApi, 'status' | 'code'>): 'LOGIN' | 'RELEER_SESION' | null {
+  if (error.status === 401) return 'LOGIN'
+  if (error.status === 403 && error.code === 'FORBIDDEN_PROFILE') return 'RELEER_SESION'
   return null
 }

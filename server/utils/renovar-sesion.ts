@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
 import type { H3Event } from 'h3'
-import { esSesionDeStaff, payloadJwt } from './jwt-publico'
+import { esSesionDeParticipante, esSesionDeStaff, payloadJwt } from './jwt-publico'
 import { estadoHttp } from './respuestas-auth'
-import { backendUrl, guardarSesion } from './session'
+import { backendUrl, guardarSesion, SESSION_COOKIE } from './session'
 import { VIDA_SESION_POR_DEFECTO, vidaSesionSegundos } from './vida-sesion'
 
 /**
@@ -78,6 +78,8 @@ export interface Renovador {
   renovar: (token: string, exp: unknown, pedir: () => Promise<ResultadoRenovacion>) => Promise<Renovacion | null>
   /** Se cerró la sesión de `token`: hasta que caduque no se renueva (ni se vuelve a guardar en la cookie). */
   cerrar: (token: string, exp: unknown) => void
+  /** La sesión de `token` se cerró (`cerrar`) y su JWT aún no caduca. */
+  estaCerrada: (token: string) => boolean
   /** Entradas en memoria (pruebas). */
   tamano: () => number
 }
@@ -121,7 +123,12 @@ export function crearRenovador(reloj: () => number = () => Date.now()): Renovado
     cerradas.set(clave, caducidadMs(exp, ahora))
   }
 
-  return { renovar, cerrar, tamano: () => resultados.size + cerradas.size }
+  function estaCerrada(token: string): boolean {
+    purgar(reloj())
+    return cerradas.has(claveDe(token))
+  }
+
+  return { renovar, cerrar, estaCerrada, tamano: () => resultados.size + cerradas.size }
 }
 
 const renovador = crearRenovador()
@@ -138,13 +145,21 @@ async function pedirRenovacion(event: H3Event, token: string): Promise<Resultado
 }
 
 /**
+ * Solo se renueva la sesión del staff. La del participante (Google o código por correo, spec 014) dura
+ * 12 h y **no se renueva**: al vencer se vuelve a entrar (un JWT con las dos audiencias tampoco).
+ */
+export function esRenovable(token: string | null | undefined): boolean {
+  return esSesionDeStaff(token) && !esSesionDeParticipante(token)
+}
+
+/**
  * Devuelve el JWT con el que reenviar la petición: el mismo, o uno renovado (guardado ya en la cookie)
  * si es de staff y le quedan menos de 20 min. Las peticiones simultáneas con el mismo JWT comparten una
  * sola renovación; un JWT de una sesión cerrada (`olvidarSesion`) no se renueva.
  */
 export async function renovarSiHaceFalta(event: H3Event, token: string): Promise<string> {
   const exp = payloadJwt(token)?.exp
-  if (!esSesionDeStaff(token) || !debeRenovar(exp)) return token
+  if (!esRenovable(token) || !debeRenovar(exp)) return token
   const nueva = await renovador.renovar(token, exp, () => pedirRenovacion(event, token))
   if (!nueva) return token
   guardarSesion(event, nueva.jwt, vidaSesionSegundos(nueva.expiraEn))
@@ -157,4 +172,30 @@ export async function renovarSiHaceFalta(event: H3Event, token: string): Promise
  */
 export function olvidarSesion(token: string | undefined): void {
   if (token) renovador.cerrar(token, payloadJwt(token)?.exp)
+}
+
+/** La sesión de `token` se cerró en este servidor (salir o paso al portal: `olvidarSesion`). */
+export function sesionCerrada(token: string | null | undefined): boolean {
+  return typeof token === 'string' && token !== '' && renovador.estaCerrada(token)
+}
+
+/** Valores de `Set-Cookie` sin los de la cookie `nombre`. */
+export function sinCookie(valores: readonly string[], nombre: string): string[] {
+  return valores.filter((valor) => !valor.trimStart().startsWith(`${nombre}=`))
+}
+
+/**
+ * Antes de responder una petición que renovó el JWT del staff (`usado !== anterior`): si mientras
+ * tanto esa sesión se cerró (salir, o el paso al portal de participante), se quita de la respuesta la
+ * cookie con el JWT renovado. Si esta respuesta llegara al navegador después de la del cierre o del
+ * paso al portal, le devolvería la sesión del staff.
+ */
+export function descartarRenovacionSiSeCerro(event: H3Event, anterior: string, usado: string): void {
+  if (usado === anterior || !(sesionCerrada(anterior) || sesionCerrada(usado))) return
+  const res = event.node.res
+  const actual = res.getHeader('set-cookie')
+  if (actual === undefined) return
+  const restantes = sinCookie(Array.isArray(actual) ? actual : [String(actual)], SESSION_COOKIE)
+  if (restantes.length) res.setHeader('set-cookie', restantes)
+  else res.removeHeader('set-cookie')
 }

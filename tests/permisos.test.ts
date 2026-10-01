@@ -12,8 +12,10 @@ import {
   MENU,
   PERMISOS,
   requeridoPor,
+  RUTA_ESCANER,
   RUTA_SIN_ACCESO,
   sinEventosAsignados,
+  soloMarcaAsistencia,
   tienePermiso,
   tonoRol,
 } from '~/utils/permisos'
@@ -105,7 +107,7 @@ describe('permisos: accesoDeSesion', () => {
 
 describe('permisos: menú', () => {
   it('Owner ve todo; Administrador, todo menos Sistema', () => {
-    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/asistencia', '/ponencias', '/mensajes', '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
+    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/asistencia', '/escanear', '/ponencias', '/mensajes', '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
     expect(rutas(ADMINISTRADOR)).not.toContain('/sistema')
     expect(rutas(ADMINISTRADOR)).toContain('/administradores')
   })
@@ -116,7 +118,8 @@ describe('permisos: menú', () => {
   })
 
   it('Comisión: solo lo que se le asignó', () => {
-    expect(rutas(COMISION)).toEqual(['/asistencia'])
+    expect(rutas(COMISION)).toEqual(['/asistencia', '/escanear'])
+    expect(rutas(acceso(['asistencia.ver']))).toEqual(['/asistencia'])
     expect(menuPara(acceso([]))).toEqual([])
     expect(menuPara(null)).toEqual([])
   })
@@ -131,11 +134,28 @@ describe('permisos: página de inicio', () => {
     expect(inicioPara(acceso(['correo.configurar'], 'GLOBAL'))).toBe('/correo')
   })
 
-  it('la cuenta por evento que marca asistencia empieza en Asistencia', () => {
-    expect(inicioPara(COMISION)).toBe('/asistencia')
+  it('la cuenta que solo marca asistencia empieza en el escáner', () => {
+    expect(RUTA_ESCANER).toBe('/escanear')
+    expect(inicioPara(COMISION)).toBe('/escanear')
+    // Marcar fuera de horario también es marcar
+    expect(inicioPara(acceso(['asistencia.marcar', 'asistencia.ver', 'asistencia.fuera_horario']))).toBe('/escanear')
+    // Aunque fuera global (todos los eventos)
+    expect(inicioPara(acceso(['asistencia.marcar', 'asistencia.ver'], 'GLOBAL'))).toBe('/escanear')
+    expect(soloMarcaAsistencia(COMISION)).toBe(true)
+    expect(soloMarcaAsistencia(acceso(['asistencia.ver']))).toBe(false)
+    expect(soloMarcaAsistencia(acceso(['asistencia.ver', 'asistencia.fuera_horario']))).toBe(false)
+    expect(soloMarcaAsistencia(null)).toBe(false)
+  })
+
+  it('la cuenta por evento que marca y hace algo más empieza en Asistencia', () => {
     expect(inicioPara(acceso(['resumen.ver', 'asistencia.marcar', 'asistencia.ver']))).toBe('/asistencia')
+    expect(inicioPara(acceso(['asistencia.marcar', 'asistencia.ver', 'asistencia.anular']))).toBe('/asistencia')
+    expect(inicioPara(acceso(['asistencia.marcar', 'asistencia.ver', 'asistencia.exportar']))).toBe('/asistencia')
+    expect(soloMarcaAsistencia(acceso(['asistencia.marcar', 'asistencia.ver', 'asistencia.anular']))).toBe(false)
     // Sin marcar, el orden normal
     expect(inicioPara(acceso(['resumen.ver', 'asistencia.ver']))).toBe('/')
+    // Global con más permisos: el orden normal
+    expect(inicioPara(ADMINISTRADOR)).toBe('/')
   })
 
   it('una cuenta por evento sin eventos asignados va a /sin-acceso aunque tenga permisos', () => {

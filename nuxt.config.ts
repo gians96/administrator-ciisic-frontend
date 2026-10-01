@@ -50,6 +50,8 @@ export default defineNuxtConfig({
   nitro: {
     routeRules: {
       '/api/**': { headers: { 'cache-control': 'no-store' } },
+      // wasm de ZXing del escáner (~1 MB): la ruta lleva la versión, así que no cambia nunca
+      '/zxing-wasm/**': { headers: { 'cache-control': 'public, max-age=31536000, immutable' } },
     },
   },
 

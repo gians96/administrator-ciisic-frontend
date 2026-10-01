@@ -8,13 +8,17 @@ import {
   cuerpoMarca,
   etiquetaMetodo,
   idDeConsulta,
+  resultadoDeError,
   textoMarca,
   TIPOS_DOCUMENTO_MARCA,
   type AsistenciaFila,
   type MarcaAsistencia,
   type ModoLectura,
   type TipoDocumentoMarca,
+  type TonoResultado,
 } from '~/utils/asistencia'
+import { claveLectura, debeProcesar, interpretarLectura, type LecturaReciente } from '~/utils/lecturaQr'
+import { RUTA_ESCANER } from '~/utils/permisos'
 
 definePageMeta({ permiso: 'asistencia.ver' })
 useHead({ title: 'Asistencia · Panel CIISIC' })
@@ -35,7 +39,18 @@ const valor = ref('')
 const tipoDocumento = ref<TipoDocumentoMarca>('')
 const fueraDeHorario = ref(false)
 const registrando = ref(false)
-const ultimo = ref<{ ok: boolean, texto: string } | null>(null)
+/** Resultado de la última marca: verde, ámbar (QR anterior o ya registrada) o rojo. */
+const ultimo = ref<{ tono: TonoResultado, texto: string } | null>(null)
+/** Última lectura del QR procesada: el lector USB a veces envía la misma dos veces (`debeProcesar`). */
+let lecturaReciente: LecturaReciente | null = null
+/** La última lectura se ignoró por repetida (se avisa sin tapar el resultado anterior). */
+const repetida = ref(false)
+
+const TONOS_ULTIMO: Readonly<Record<TonoResultado, string>> = {
+  exito: 'bg-emerald-500/15 text-emerald-200',
+  alerta: 'bg-amber-400/15 text-amber-200',
+  error: 'bg-red-500/15 text-red-200',
+}
 const entrada = ref<HTMLInputElement | null>(null)
 const selectorTipo = ref<HTMLSelectElement | null>(null)
 
@@ -48,6 +63,14 @@ const puedeFueraDeHorario = computed(() => auth.puede('asistencia.fuera_horario'
 const puedeAnular = computed(() => auth.puede('asistencia.anular'))
 /** Actividad elegida, siempre una de las del evento elegido. */
 const actividad = computed(() => actividades.value.find((a) => a.id === actividadId.value) ?? null)
+/** Escáner a pantalla completa con el evento y la actividad elegidos. */
+const enlaceEscaner = computed(() => {
+  const consulta = new URLSearchParams()
+  if (eventos.seleccionadoId) consulta.set('evento', String(eventos.seleccionadoId))
+  if (eventos.seleccionadoId && actividad.value) consulta.set('actividad', String(actividad.value.id))
+  const texto = consulta.toString()
+  return texto ? `${RUTA_ESCANER}?${texto}` : RUTA_ESCANER
+})
 
 /** Respuestas que llegan tarde (de un evento o una actividad anteriores) se descartan. */
 let consultaActividades = 0
@@ -100,8 +123,18 @@ watch(() => eventos.cargado, (cargado) => {
   eventoPedido = null
 }, { immediate: true })
 watch(() => eventos.seleccionadoId, cargarActividades, { immediate: true })
-// La lista de otra actividad no queda a la vista mientras carga la nueva
-watch(actividadId, () => { asistencias.value = []; cargarAsistencias(); enfocarEntrada() }, { immediate: true })
+// La lista de otra actividad no queda a la vista mientras carga la nueva; «Fuera de horario» es para
+// una actividad concreta y se desmarca al cambiar
+watch(actividadId, () => {
+  asistencias.value = []
+  lecturaReciente = null
+  repetida.value = false
+  fueraDeHorario.value = false
+  cargarAsistencias()
+  enfocarEntrada()
+}, { immediate: true })
+// Con «Fuera de horario» recién marcado (p. ej. tras un OUTSIDE_WINDOW) la misma lectura se vuelve a procesar
+watch(fueraDeHorario, () => { lecturaReciente = null })
 // El tipo de documento solo aplica al modo DNI
 watch(modo, () => { tipoDocumento.value = ''; enfocarEntrada() })
 
@@ -109,27 +142,44 @@ async function registrar() {
   // Solo en una actividad del evento elegido ya cargada
   const id = actividad.value?.id
   if (!id || registrando.value) return
+  // Código del fotocheck (10 caracteres) o QR anterior (id); la misma lectura en 3 s se ignora
+  const lectura = modo.value === 'qr' ? interpretarLectura(valor.value) : null
+  const instante = Date.now()
+  if (lectura && !debeProcesar(lectura, lecturaReciente, instante)) {
+    // El resultado anterior sigue a la vista; se avisa aparte que esta lectura no se envió
+    repetida.value = true
+    valor.value = ''
+    enfocarEntrada()
+    return
+  }
+  repetida.value = false
   const resultado = cuerpoMarca(
     { modo: modo.value, valor: valor.value, tipoDocumento: tipoDocumento.value, fueraDeHorario: fueraDeHorario.value },
     puedeFueraDeHorario.value,
   )
   if ('error' in resultado) {
-    ultimo.value = { ok: false, texto: resultado.error }
+    ultimo.value = { tono: 'error', texto: resultado.error }
     if (modo.value === 'qr') valor.value = ''
     enfocarEntrada()
     return
   }
+  if (lectura) lecturaReciente = { clave: claveLectura(lectura), instante }
   registrando.value = true
   let enfocarTipo = false
   try {
     const r = await api<Respuesta<MarcaAsistencia>>(`activities/${id}/attendances`, { method: 'POST', body: resultado.body })
-    ultimo.value = { ok: true, texto: textoMarca(r.data) }
+    // Con el QR anterior (alerta QR_LEGADO) se pide verificar el DNI
+    ultimo.value = { tono: r.data.alerta === 'QR_LEGADO' ? 'alerta' : 'exito', texto: textoMarca(r.data) }
     valor.value = ''
     tipoDocumento.value = ''
     await cargarAsistencias()
   } catch (error) {
     const e = aErrorApi(error)
-    ultimo.value = { ok: false, texto: e.message }
+    // Ya registrada en ámbar (con la hora); un código que el backend 013 no reconoce lo explica
+    const rechazo = resultadoDeError(e, lectura)
+    ultimo.value = { tono: rechazo.tono, texto: rechazo.mensaje ?? e.message }
+    // Tras un rechazo, volver a escanear el mismo código lo envía de nuevo (como en el escáner)
+    if (rechazo.tono === 'error') lecturaReciente = null
     if (conservarValorTrasError(modo.value, e.code)) {
       // Dos inscritos comparten el número: se elige DNI o CE y se vuelve a registrar
       enfocarTipo = true
@@ -197,11 +247,14 @@ const columnas = computed(() => (puedeAnular.value ? 6 : 5))
         <h1 class="mt-1 text-3xl font-extrabold">Asistencia</h1>
         <p class="mt-1 text-sm text-slate-400">
           {{ puedeMarcar
-            ? 'Escanea el QR de la credencial (un lector USB escribe el código y presiona Enter) o ingresa el DNI.'
+            ? 'Escanea el QR del fotocheck o de la credencial (un lector USB escribe el código y presiona Enter) o ingresa el DNI. Con la cámara del celular, usa «Abrir escáner».'
             : 'Asistentes registrados en cada actividad del evento.' }}
         </p>
       </div>
-      <AppButton v-if="eventos.seleccionadoId && auth.puede('asistencia.exportar')" variant="secondary" icon="heroicons:arrow-down-tray" @click="exportar">Exportar matriz</AppButton>
+      <div class="flex flex-wrap gap-2">
+        <AppButton v-if="puedeMarcar" :to="enlaceEscaner" icon="heroicons:camera">Abrir escáner</AppButton>
+        <AppButton v-if="eventos.seleccionadoId && auth.puede('asistencia.exportar')" variant="secondary" icon="heroicons:arrow-down-tray" @click="exportar">Exportar matriz</AppButton>
+      </div>
     </div>
 
     <AvisoSinEventos v-if="eventos.cargado && !eventos.seleccionadoId" />
@@ -231,7 +284,7 @@ const columnas = computed(() => (puedeAnular.value ? 6 : 5))
           </AppField>
           <template v-if="puedeMarcar">
             <div class="flex gap-2" role="radiogroup" aria-label="Tipo de lectura">
-              <AppButton size="sm" :variant="modo === 'qr' ? 'primary' : 'secondary'" icon="heroicons:qr-code" @click="modo = 'qr'">QR de credencial</AppButton>
+              <AppButton size="sm" :variant="modo === 'qr' ? 'primary' : 'secondary'" icon="heroicons:qr-code" @click="modo = 'qr'">QR del fotocheck</AppButton>
               <AppButton size="sm" :variant="modo === 'dni' ? 'primary' : 'secondary'" icon="heroicons:identification" @click="modo = 'dni'">DNI / documento</AppButton>
             </div>
             <AppField v-if="modo === 'dni'" label="Tipo de documento" for="as-tipo-documento" hint="Elige DNI o CE si hay dos inscritos con el mismo número.">
@@ -246,20 +299,23 @@ const columnas = computed(() => (puedeAnular.value ? 6 : 5))
           </template>
         </div>
         <form v-if="puedeMarcar" class="space-y-3" @submit.prevent="registrar">
-          <label for="as-valor" class="field-label">{{ modo === 'qr' ? 'Código de la credencial' : 'Número de documento' }}</label>
+          <label for="as-valor" class="field-label">{{ modo === 'qr' ? 'Código del fotocheck o de la credencial' : 'Número de documento' }}</label>
           <div class="flex gap-2">
             <input
               id="as-valor"
               ref="entrada"
               v-model="valor"
-              :inputmode="modo === 'qr' ? 'numeric' : 'text'"
+              inputmode="text"
               autocomplete="off"
+              spellcheck="false"
+              :autocapitalize="modo === 'qr' ? 'characters' : 'off'"
               class="field-control py-4 font-mono text-lg"
               :placeholder="modo === 'qr' ? 'Escanea o escribe el código' : '12345678'"
             >
             <AppButton type="submit" :loading="registrando" :disabled="!valor.trim()" icon="heroicons:check">Registrar</AppButton>
           </div>
-          <p v-if="ultimo" class="rounded-xl px-4 py-3 text-sm font-medium" :class="ultimo.ok ? 'bg-emerald-500/15 text-emerald-200' : 'bg-red-500/15 text-red-200'" role="status">{{ ultimo.texto }}</p>
+          <p v-if="ultimo" class="rounded-xl px-4 py-3 text-sm font-medium" :class="TONOS_ULTIMO[ultimo.tono]" role="status">{{ ultimo.texto }}</p>
+          <p v-if="repetida" class="text-xs text-amber-200" role="status">Misma lectura de hace un momento: se ignoró. Si fue a propósito, vuelve a escanear en unos segundos.</p>
         </form>
       </section>
 

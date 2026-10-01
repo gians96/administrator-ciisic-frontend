@@ -11,9 +11,11 @@ export default defineEventHandler(async (event) => {
   const consulta = await consultarSesion(() => $fetch<RespuestaSesionBackend>(backendUrl(event, '/api/v1/auth/session'), {
     headers: { authorization: `Bearer ${token}` },
   }))
+  // Si la sesión se cerró o pasó al portal mientras tanto, no se devuelve la cookie del JWT renovado
+  descartarRenovacionSiSeCerro(event, tokenActual, token)
   if (consulta.estado === 'VIGENTE') return consulta.cuerpo
   if (consulta.estado === 'CERRADA') {
-    cerrarSesion(event)
+    if (!sesionCerrada(tokenActual) && !sesionCerrada(token)) cerrarSesion(event)
     return SIN_SESION
   }
   throw createError(SESION_NO_DISPONIBLE)

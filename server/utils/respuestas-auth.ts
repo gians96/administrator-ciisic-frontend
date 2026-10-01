@@ -74,3 +74,91 @@ export function errorLogin(estado: number | undefined): { statusCode: number, da
   }
   return { statusCode: 401, data: { success: false, code: 'INVALID_CREDENTIALS', message: 'Correo o contraseña incorrectos.' } }
 }
+
+// ─── Errores del backend que el BFF propaga (código por correo y paso al portal, spec 014) ───
+
+/** Error que el BFF devuelve al navegador con el estado, el código y los `fields` del backend. */
+export interface ErrorPropagado {
+  statusCode: number
+  data: { success: false, code: string, message: string, fields?: Record<string, string> }
+  /** Segundos para el encabezado `Retry-After` (429 y 503 temporales); `null` si no hay espera. */
+  reintentarEnSegundos: number | null
+}
+
+/** Código y mensaje cuando el backend no responde o aún no tiene la ruta (imagen anterior a la 014). */
+export interface RespaldoError {
+  code: string
+  message: string
+}
+
+/**
+ * Segundos de espera de un `Retry-After` (segundos o fecha HTTP) o de `fields.reintentarEnSegundos`
+ * (el backend lo envía como texto). Entero positivo, o `null` si no hay un valor válido.
+ */
+export function segundosDeEspera(valor: unknown, ahora: number = Date.now()): number | null {
+  let segundos = Number.NaN
+  if (typeof valor === 'number') {
+    segundos = valor
+  } else if (typeof valor === 'string' && valor.trim()) {
+    const texto = valor.trim()
+    segundos = /^\d+(?:\.\d+)?$/.test(texto) ? Number(texto) : (Date.parse(texto) - ahora) / 1000
+  }
+  return Number.isFinite(segundos) && segundos > 0 ? Math.ceil(segundos) : null
+}
+
+function objetoDe(valor: unknown): Record<string, unknown> | null {
+  return valor && typeof valor === 'object' && !Array.isArray(valor) ? valor as Record<string, unknown> : null
+}
+
+/** `fields` del backend con valores de texto (los demás se descartan). */
+function camposDe(valor: unknown): Record<string, string> | undefined {
+  const campos = objetoDe(valor)
+  if (!campos) return undefined
+  const texto = Object.entries(campos).filter((par): par is [string, string] => typeof par[1] === 'string')
+  return texto.length ? Object.fromEntries(texto) : undefined
+}
+
+/** `Retry-After` de la respuesta de un error de `$fetch` (ofetch guarda la `Response` en `response`). */
+function retryAfterDe(error: unknown): string | null {
+  const headers = (objetoDe(error)?.response as { headers?: { get?: (nombre: string) => string | null } } | undefined)?.headers
+  return typeof headers?.get === 'function' ? headers.get('retry-after') : null
+}
+
+/**
+ * Error de una ruta de autenticación del backend listo para el navegador:
+ * - sin respuesta (red), 5xx sin código de negocio o la ruta inexistente (404/405 `NOT_FOUND` o sin
+ *   código: backend anterior a la spec 014) → 503 con el `respaldo`;
+ * - cualquier otro → el mismo estado, código, mensaje y `fields`.
+ * La espera (`Retry-After` o `fields.reintentarEnSegundos`) se conserva y va también en `fields`.
+ */
+export function errorPropagado(error: unknown, respaldo: RespaldoError, ahora: number = Date.now()): ErrorPropagado {
+  const estado = estadoHttp(error)
+  const cuerpo = objetoDe(objetoDe(error)?.data)
+  const codigo = typeof cuerpo?.code === 'string' && cuerpo.code ? cuerpo.code : null
+  const mensaje = typeof cuerpo?.message === 'string' && cuerpo.message ? cuerpo.message : null
+  const campos = camposDe(cuerpo?.fields)
+  const reintentarEnSegundos = segundosDeEspera(campos?.reintentarEnSegundos, ahora) ?? segundosDeEspera(retryAfterDe(error), ahora)
+  const conEspera = (fields?: Record<string, string>) => (reintentarEnSegundos === null
+    ? fields
+    : { ...fields, reintentarEnSegundos: String(reintentarEnSegundos) })
+
+  const sinRuta = (estado === 404 || estado === 405) && (!codigo || codigo === 'NOT_FOUND')
+  const caido = estado === undefined || (estado >= 500 && !(estado === 503 && codigo))
+  if (sinRuta || caido) {
+    const fields = conEspera()
+    return { statusCode: 503, data: { success: false, ...respaldo, ...(fields ? { fields } : {}) }, reintentarEnSegundos }
+  }
+  const fields = conEspera(campos)
+  // Un limitador que respondió sin cuerpo JSON: 429 genérico
+  const limitado = estado === 429 && !codigo
+  return {
+    statusCode: estado as number,
+    data: {
+      success: false,
+      code: codigo ?? (limitado ? 'RATE_LIMITED' : 'ERROR'),
+      message: mensaje ?? (limitado ? 'Demasiados intentos. Espera unos minutos y vuelve a intentarlo.' : respaldo.message),
+      ...(fields ? { fields } : {}),
+    },
+    reintentarEnSegundos,
+  }
+}

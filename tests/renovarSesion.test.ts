@@ -4,12 +4,16 @@ import { esSesionDeStaff } from '../server/utils/jwt-publico'
 import {
   crearRenovador,
   debeRenovar,
+  descartarRenovacionSiSeCerro,
+  esRenovable,
   fallaRenovacion,
   MARGEN_RENOVACION_SEGUNDOS,
   olvidarSesion,
   recordarHasta,
   renovacionDe,
   renovarSiHaceFalta,
+  sesionCerrada,
+  sinCookie,
   VIDA_RENOVACION_COMPARTIDA_MS,
   type ResultadoRenovacion,
 } from '../server/utils/renovar-sesion'
@@ -195,6 +199,14 @@ describe('renovarSiHaceFalta (BFF)', () => {
     expect(setCookie).toHaveBeenCalledWith(evento, 'ciisic_admin_session', 'jwt-g2', expect.objectContaining({ httpOnly: true, sameSite: 'strict', maxAge: 3600 }))
   })
 
+  it('solo la sesión del staff es renovable (la del participante dura 12 h y no se renueva)', () => {
+    expect(esRenovable(jwt({ aud: 'ciisic-admin' }))).toBe(true)
+    expect(esRenovable(jwt({ aud: 'ciisic-participante' }))).toBe(false)
+    expect(esRenovable(jwt({ aud: ['ciisic-admin', 'ciisic-participante'] }))).toBe(false)
+    expect(esRenovable(jwt({}))).toBe(false)
+    expect(esRenovable(undefined)).toBe(false)
+  })
+
   it('no renueva si sobra tiempo ni las sesiones de inscrito', async () => {
     preparar()
     const holgado = jwtStaff('h', 45)
@@ -226,5 +238,68 @@ describe('renovarSiHaceFalta (BFF)', () => {
     expect(await renovarSiHaceFalta(evento, token)).toBe(token)
     expect(setCookie).not.toHaveBeenCalled()
     expect(fetchBackend).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('renovación: sesión cerrada mientras se respondía', () => {
+  const exp = AHORA_S + 10 * 60
+
+  it('recuerda las sesiones cerradas hasta que su JWT caduca', () => {
+    let ahora = AHORA
+    const renovador = crearRenovador(() => ahora)
+    expect(renovador.estaCerrada('jwt-m')).toBe(false)
+    renovador.cerrar('jwt-m', exp)
+    expect(renovador.estaCerrada('jwt-m')).toBe(true)
+    ahora = exp * 1000 + 1
+    expect(renovador.estaCerrada('jwt-m')).toBe(false)
+  })
+
+  it('quita solo la cookie de la sesión de los Set-Cookie', () => {
+    expect(sinCookie(['ciisic_admin_session=jwt; Path=/; HttpOnly', 'otra=1; Path=/'], 'ciisic_admin_session')).toEqual(['otra=1; Path=/'])
+    expect(sinCookie([' ciisic_admin_session=; Max-Age=0'], 'ciisic_admin_session')).toEqual([])
+    expect(sinCookie(['ciisic_admin_session_x=1'], 'ciisic_admin_session')).toEqual(['ciisic_admin_session_x=1'])
+  })
+
+  function respuesta(setCookie: string | string[] | undefined) {
+    const cabeceras = new Map<string, unknown>(setCookie === undefined ? [] : [['set-cookie', setCookie]])
+    const res = {
+      getHeader: (nombre: string) => cabeceras.get(nombre),
+      setHeader: (nombre: string, valor: unknown) => { cabeceras.set(nombre, valor) },
+      removeHeader: (nombre: string) => { cabeceras.delete(nombre) },
+    }
+    return { evento: { node: { res } } as unknown as H3Event, cabeceras }
+  }
+
+  const staff = (sufijo: string) => jwt({ aud: 'ciisic-admin', sub: sufijo, exp: Math.floor(Date.now() / 1000) + 600 })
+
+  it('el staff pasó al portal mientras se renovaba: la respuesta tardía no le devuelve la cookie del staff', () => {
+    const anterior = staff('n')
+    const { evento, cabeceras } = respuesta(['ciisic_admin_session=jwt-n2; Path=/; HttpOnly'])
+    // /api/auth/portal cerró la sesión del staff (olvidarSesion) antes de que esta respuesta saliera
+    olvidarSesion(anterior)
+    expect(sesionCerrada(anterior)).toBe(true)
+    descartarRenovacionSiSeCerro(evento, anterior, 'jwt-n2')
+    expect(cabeceras.has('set-cookie')).toBe(false)
+  })
+
+  it('también si al cerrar la cookie ya tenía el JWT renovado; y conserva otras cookies', () => {
+    const anterior = staff('o')
+    const renovado = staff('o2')
+    const { evento, cabeceras } = respuesta([`ciisic_admin_session=${renovado}; Path=/`, 'otra=1'])
+    olvidarSesion(renovado)
+    descartarRenovacionSiSeCerro(evento, anterior, renovado)
+    expect(cabeceras.get('set-cookie')).toEqual(['otra=1'])
+  })
+
+  it('sin cierre, o sin renovación en esta petición, no toca la respuesta', () => {
+    const anterior = staff('p')
+    const { evento, cabeceras } = respuesta('ciisic_admin_session=jwt-p2; Path=/')
+    descartarRenovacionSiSeCerro(evento, anterior, 'jwt-p2')
+    expect(cabeceras.get('set-cookie')).toBe('ciisic_admin_session=jwt-p2; Path=/')
+    olvidarSesion(anterior)
+    descartarRenovacionSiSeCerro(evento, anterior, anterior)
+    expect(cabeceras.get('set-cookie')).toBe('ciisic_admin_session=jwt-p2; Path=/')
+    expect(sesionCerrada(undefined)).toBe(false)
+    expect(sesionCerrada('')).toBe(false)
   })
 })

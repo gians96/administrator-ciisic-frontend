@@ -14,18 +14,32 @@ const props = defineProps<{
 }>()
 const marcados = defineModel<Permiso[]>({ required: true })
 const id = useId()
+/** Id de la casilla de un permiso (`asistencia.marcar` → `…-permiso-asistencia-marcar`). */
+const idCasilla = (codigo: string) => `${id}-permiso-${codigo.replace(/[^\w-]/g, '-')}`
 
 const filas = computed(() => props.elegibles.map((elegible) => {
   const marcado = marcados.value.includes(elegible.codigo)
   const exigidoPor = marcado ? bloqueadoPor(elegible.codigo, marcados.value, props.elegibles) : []
+  const casillaId = idCasilla(elegible.codigo)
   return {
     ...elegible,
+    casillaId,
     marcado,
     exigidoPor: exigidoPor.map((codigo) => nombrePermiso(codigo, props.elegibles)),
     implica: (elegible.implica ?? []).map((codigo) => nombrePermiso(codigo, props.elegibles)),
     datosPersonales: exponeDatosPersonales(elegible.codigo, props.elegibles),
   }
 }))
+
+/** Lo que acompaña al nombre (aviso de datos personales, lo que incluye y lo que lo exige). */
+function descripcionDe(fila: (typeof filas.value)[number]): string | undefined {
+  const ids = [
+    fila.datosPersonales ? `${fila.casillaId}-datos` : null,
+    fila.implica.length ? `${fila.casillaId}-incluye` : null,
+    fila.exigidoPor.length ? `${fila.casillaId}-exige` : null,
+  ].filter(Boolean)
+  return ids.length ? ids.join(' ') : undefined
+}
 
 function alternar(permiso: Permiso, evento: Event) {
   const casilla = evento.target as HTMLInputElement
@@ -42,6 +56,7 @@ function alternar(permiso: Permiso, evento: Event) {
       <label
         v-for="fila in filas"
         :key="fila.codigo"
+        :for="fila.casillaId"
         class="flex gap-3 rounded-xl border px-3.5 py-2.5 transition"
         :class="[
           fila.marcado ? 'border-brand-500 bg-brand-500/10' : 'border-navy-500 bg-navy-900/80',
@@ -49,20 +64,26 @@ function alternar(permiso: Permiso, evento: Event) {
           disabled ? 'opacity-60' : '',
         ]"
       >
+        <!-- Nombre accesible: el texto de la opción (aria-labelledby; aria-label repite el mismo texto
+             para las herramientas que no resuelven referencias y mostrarían el valor «on») -->
         <input
+          :id="fila.casillaId"
           type="checkbox"
           class="mt-0.5 size-4 shrink-0 accent-brand-500"
           :checked="fila.marcado"
           :disabled="disabled || fila.exigidoPor.length > 0"
+          :aria-label="fila.nombre"
+          :aria-labelledby="`${fila.casillaId}-nombre`"
+          :aria-describedby="descripcionDe(fila)"
           @change="alternar(fila.codigo, $event)"
         >
         <span class="min-w-0 space-y-0.5">
           <span class="block text-sm font-medium text-white">
-            {{ fila.nombre }}
-            <AppBadge v-if="fila.datosPersonales" tono="warn" class="ml-1 align-middle">Datos personales</AppBadge>
+            <!-- En la misma línea: el espacio entre el nombre y la insignia se conserva -->
+            <span :id="`${fila.casillaId}-nombre`">{{ fila.nombre }}</span> <AppBadge v-if="fila.datosPersonales" :id="`${fila.casillaId}-datos`" tono="warn" class="ml-1 align-middle">Datos personales</AppBadge>
           </span>
-          <span v-if="fila.implica.length" class="block text-xs text-slate-400">Incluye: {{ fila.implica.join(' · ') }}</span>
-          <span v-if="fila.exigidoPor.length" class="block text-xs text-slate-400">Lo exige: {{ fila.exigidoPor.join(' · ') }}</span>
+          <span v-if="fila.implica.length" :id="`${fila.casillaId}-incluye`" class="block text-xs text-slate-400">Incluye: {{ fila.implica.join(' · ') }}</span>
+          <span v-if="fila.exigidoPor.length" :id="`${fila.casillaId}-exige`" class="block text-xs text-slate-400">Lo exige: {{ fila.exigidoPor.join(' · ') }}</span>
         </span>
       </label>
     </div>

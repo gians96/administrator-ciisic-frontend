@@ -184,6 +184,9 @@ export interface SeccionMenu {
   items: ItemMenu[]
 }
 
+/** Escáner de asistencia a pantalla completa (cámara, lector USB o DNI). */
+export const RUTA_ESCANER = '/escanear'
+
 /** Menú completo; cada página exige el mismo permiso en su `definePageMeta({ permiso })`. */
 export const MENU: readonly SeccionMenu[] = [
   {
@@ -192,6 +195,7 @@ export const MENU: readonly SeccionMenu[] = [
       { to: '/', label: 'Resumen', icon: 'heroicons:squares-2x2', permiso: 'resumen.ver' },
       { to: '/inscripciones', label: 'Inscripciones', icon: 'heroicons:clipboard-document-check', permiso: 'inscripciones.ver' },
       { to: '/asistencia', label: 'Asistencia', icon: 'heroicons:qr-code', permiso: 'asistencia.ver' },
+      { to: RUTA_ESCANER, label: 'Escanear asistencia', icon: 'heroicons:camera', permiso: 'asistencia.marcar' },
       { to: '/ponencias', label: 'Ponencias', icon: 'heroicons:document-text', permiso: 'ponencias.ver' },
       { to: '/mensajes', label: 'Mensajes', icon: 'heroicons:envelope', permiso: 'mensajes.ver' },
     ],
@@ -224,12 +228,28 @@ export function menuPara(acceso: AccesoPanel | null | undefined): SeccionMenu[] 
     .filter((seccion) => seccion.items.length > 0)
 }
 
+/** Permisos que solo acompañan a `asistencia.marcar`: el que implica y la opción de marcar fuera de horario. */
+const ACOMPANAN_MARCAR: readonly Permiso[] = ['asistencia.ver', 'asistencia.fuera_horario']
+
 /**
- * Primera página permitida en el orden del menú. Una cuenta por evento que marca asistencia (la
- * Comisión) empieza en Asistencia. Sin ninguna (o una cuenta por evento sin eventos), `/sin-acceso`.
+ * La cuenta solo marca asistencia: tiene `asistencia.marcar` y ningún otro permiso aparte de los que lo
+ * acompañan (`asistencia.ver`, `asistencia.fuera_horario`).
+ */
+export function soloMarcaAsistencia(acceso: AccesoPanel | null | undefined): boolean {
+  if (!acceso || !tienePermiso(acceso, 'asistencia.marcar')) return false
+  return acceso.permisos.every((permiso) => permiso === 'asistencia.marcar' || ACOMPANAN_MARCAR.includes(permiso))
+}
+
+/**
+ * Primera página permitida en el orden del menú. Una cuenta cuyo único permiso operativo es
+ * `asistencia.marcar` empieza en el escáner; una cuenta por evento que además hace otras cosas y marca
+ * asistencia (la Comisión con más permisos) empieza en Asistencia. Sin ninguna (o una cuenta por evento
+ * sin eventos), `/sin-acceso`.
  */
 export function inicioPara(acceso: AccesoPanel | null | undefined): string {
   const items = menuPara(acceso).flatMap((seccion) => seccion.items)
+  const escaner = items.find((item) => item.to === RUTA_ESCANER)
+  if (escaner && soloMarcaAsistencia(acceso)) return escaner.to
   const asistencia = items.find((item) => item.permiso === 'asistencia.ver')
   if (asistencia && acceso?.alcance === 'EVENTO' && tienePermiso(acceso, 'asistencia.marcar')) return asistencia.to
   return items[0]?.to ?? RUTA_SIN_ACCESO

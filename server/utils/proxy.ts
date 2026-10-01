@@ -1,6 +1,6 @@
 import type { H3Event } from 'h3'
 import { esSesionDeParticipante } from './jwt-publico'
-import { renovarSiHaceFalta } from './renovar-sesion'
+import { descartarRenovacionSiSeCerro, renovarSiHaceFalta, sesionCerrada } from './renovar-sesion'
 import { assertSameOrigin, backendUrl, cerrarSesion, tokenDeSesion } from './session'
 
 const RUTA_VALIDA = /^[\w\-./]+$/
@@ -30,7 +30,8 @@ const MENSAJE_PERFIL: Readonly<Record<PerfilProxy, string>> = {
  * Reenvía `/<proxy>/<ruta>` a `<backend><prefijo>/<ruta>` con el Bearer de la cookie de sesión y transmite
  * cuerpos multipart y archivos sin cargarlos en memoria. Valida el `Origin` en mutaciones, la ruta y el
  * perfil de la sesión (leído del `aud` del JWT). Renueva el JWT del staff si está por caducar
- * (`renovarSiHaceFalta`). Si el backend invalida el token (401), cierra la sesión.
+ * (`renovarSiHaceFalta`). Si el backend invalida el token (401), cierra la sesión. Si la sesión se cerró
+ * en otra petición mientras tanto (salir o paso al portal), la respuesta no toca la cookie.
  */
 export async function proxyAutenticado(event: H3Event, opciones: OpcionesProxy) {
   assertSameOrigin(event)
@@ -63,8 +64,12 @@ export async function proxyAutenticado(event: H3Event, opciones: OpcionesProxy) 
       referer: '',
     },
     onResponse(proxyEvent, response) {
+      // Si mientras se reenviaba la sesión se cerró o pasó al portal, esta respuesta no toca la cookie:
+      // ni devuelve el JWT renovado del staff ni borra la cookie que ya es de la sesión nueva
+      const cerrada = sesionCerrada(tokenActual) || sesionCerrada(token)
+      descartarRenovacionSiSeCerro(proxyEvent, tokenActual, token)
       // Si el backend invalida el token (expirado, sesión invalidada), se cierra la sesión del panel
-      if (response.status === 401) cerrarSesion(proxyEvent)
+      if (response.status === 401 && !cerrada) cerrarSesion(proxyEvent)
     },
   })
 }

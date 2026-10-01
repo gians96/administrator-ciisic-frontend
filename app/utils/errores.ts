@@ -63,15 +63,67 @@ export const MENSAJES_POR_CODIGO: Readonly<Record<string, string>> = {
   AMBIGUOUS_DOCUMENT: 'Hay más de un inscrito con ese número de documento. Indica el tipo de documento (DNI o CE) y vuelve a intentarlo.',
   ATTENDANCE_NOT_FOUND: 'La asistencia no existe o ya fue anulada. Actualiza la lista.',
 
+  // Asistencia por el QR del fotocheck (spec 014)
+  CODE_NOT_FOUND: 'El QR no corresponde a ninguna credencial. Vuelve a escanear o registra con el documento.',
+  CODE_OTHER_EVENT: 'La credencial es de otro evento. Revisa el evento elegido en la barra superior.',
+  MANUAL_NOT_ALLOWED: 'No tienes permiso para registrar asistencia manual.',
+
+  // Acceso al portal con un código por correo y paso del staff a su portal (spec 014)
+  CODE_LOGIN_UNAVAILABLE: 'El acceso con código no está disponible en este momento. Entra con Google o inténtalo más tarde.',
+  CODE_LOGIN_PAUSED: 'El acceso con código está pausado por seguridad. Entra con Google o inténtalo más tarde.',
+  CODE_EXPIRED: 'El código venció o ya no es válido. Pide uno nuevo.',
+  CODE_LOCKED: 'Demasiados intentos con este correo. Espera un momento o entra con Google.',
+  CODE_REQUIRED: 'Para entrar a tu portal de participante confirma con un código que te enviaremos al correo de tu cuenta.',
+  PORTAL_SWITCH_UNAVAILABLE: 'El paso a tu portal de participante aún no está disponible. Intenta más tarde.',
+
+  // Portal: foto y fotocheck (spec 014)
+  CONSENT_REQUIRED: 'Debes aceptar el uso de tu foto en el fotocheck.',
+  IMAGE_TOO_LARGE: 'La foto es demasiado grande: como máximo 4096 × 4096 píxeles. Redúcela e intenta otra vez.',
+  PHOTO_CONFLICT: 'Tu foto se está actualizando desde otra ventana. Intenta nuevamente.',
+  PDF_BUSY: 'Hay muchas credenciales generándose en este momento. Intenta nuevamente en unos segundos.',
+
+  // Alta de participantes (spec 014)
+  NAMES_REQUIRED: 'No se pudieron obtener los nombres del documento. Ingresa los nombres y apellidos.',
+  PARTICIPANT_EXISTS: 'Ya existe un participante con ese documento.',
+
   // Configuración del sistema
   UNDC_API_NOT_CONFIGURED: 'Falta la URL o la API key de API_UNDC. Guárdalas y vuelve a probar la conexión.',
   INVALID_URL: 'La URL no es válida: usa https (http solo para localhost) y no incluyas usuario ni contraseña.',
   HOST_NOT_ALLOWED: 'La URL apunta a una dirección interna o su dominio no se pudo resolver. Usa una dirección pública.',
 }
 
-/** Mensajes de respaldo cuando el servidor no envía uno (el detalle va en `fields`). */
+/**
+ * Mensajes de respaldo cuando el servidor no envía uno (el detalle va en `fields`). Aquí van los
+ * códigos cuyo mensaje del servidor trae datos (la hora, la fecha, los intentos que quedan) o cambia
+ * según la pantalla (foto del portal o QR de pagos): el del servidor tiene prioridad.
+ */
 const RESPALDO_POR_CODIGO: Readonly<Record<string, string>> = {
   VALIDATION_ERROR: 'Revisa los datos marcados en el formulario.',
+
+  // Código por correo (spec 014): el servidor dice cuánto esperar o cuántos intentos quedan
+  CODE_COOLDOWN: 'Espera un momento antes de pedir otro código.',
+  INVALID_CODE: 'El código no es correcto.',
+
+  // Asistencia y credenciales (spec 013 y 014): el servidor trae el horario, la hora o la fecha
+  NOT_APPROVED: 'La inscripción aún no está aprobada.',
+  OUTSIDE_WINDOW: 'La actividad no está en su horario de registro de asistencia.',
+  ATTENDANCE_ALREADY_REGISTERED: 'La asistencia de esta persona ya estaba registrada en esta actividad.',
+  LEGACY_QR_NOT_ALLOWED: 'Este QR anterior ya no es válido. Pide el fotocheck del portal o registra con el documento.',
+
+  // Archivos (foto del portal, QR de pagos)
+  FILE_REQUIRED: 'Adjunta el archivo.',
+  INVALID_FILE_TYPE: 'El tipo de archivo no está permitido.',
+  INVALID_FILE_CONTENT: 'El archivo no es una imagen válida o está dañado.',
+  UPLOAD_LIMIT_EXCEEDED: 'El archivo supera el tamaño permitido.',
+  UPLOAD_INVALID: 'El archivo enviado no es válido.',
+  PHOTO_NOT_FOUND: 'No hay una foto registrada.',
+  INSCRIPTION_NOT_FOUND: 'La inscripción no existe.',
+
+  // Participantes e inscripciones de cortesía (spec 014)
+  EMAIL_IN_USE: 'El correo ya está registrado por otra persona.',
+  ALREADY_REGISTERED: 'La persona ya tiene una inscripción en este evento.',
+  REGISTRATION_TYPE_INVALID: 'El tipo de inscripción no existe o no pertenece a este evento.',
+  DUPLICATE_RECORD: 'Ya existe un registro con estos datos.',
 }
 
 function cuerpo(data: unknown): Partial<ErrorApi> {

@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
     const response = await $fetch<LoginResponse>(backendUrl(event, '/api/v1/auth/login'), {
       method: 'POST',
       body: { correo: body.correo, contrasena: body.contrasena },
-      headers: { 'x-forwarded-for': getRequestIP(event, { xForwardedFor: true }) ?? '' },
+      headers: { 'x-forwarded-for': ipCliente(event) ?? '' },
     })
     guardarSesion(event, response.jwt, vidaSesionSegundos(response.expiraEn))
     // El acceso con contraseña es solo para administradores

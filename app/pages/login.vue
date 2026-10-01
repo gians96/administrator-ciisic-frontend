@@ -18,6 +18,18 @@ const botonGoogle = ref<{ reiniciar: () => Promise<void> } | null>(null)
 /** Se llegó porque el backend no respondió al verificar la sesión: la cookie puede seguir siendo válida. */
 const sesionSinVerificar = ref(route.query.motivo === 'SESSION_UNAVAILABLE')
 const verificando = ref(false)
+/**
+ * El backend ofrece el acceso al portal con un código por correo (`accesoCodigo.disponible`, spec 014).
+ * Un backend anterior no lo informa: se oculta.
+ */
+const accesoCodigo = ref(false)
+/** El formulario del código se despliega a pedido (evita dos campos de correo a la vista). */
+const conCodigo = ref(false)
+
+onMounted(async () => {
+  const config = await $fetch<{ accesoCodigo?: { disponible?: boolean } }>('/api/auth/config').catch(() => null)
+  accesoCodigo.value = config?.accesoCodigo?.disponible === true
+})
 
 /** Vuelve a `redirect` si la cuenta puede abrirla; si no, a su página de inicio. */
 function destino(tipo: TipoSesion) {
@@ -54,6 +66,13 @@ async function ingresar() {
   }
 }
 
+/** Entró con el código de su correo: siempre al portal del inscrito. */
+async function alIngresarConCodigo(tipo: TipoSesion) {
+  error.value = null
+  sesionSinVerificar.value = false
+  await navigateTo(destino(tipo))
+}
+
 async function ingresarConGoogle(credential: string) {
   error.value = null
   sesionSinVerificar.value = false
@@ -80,7 +99,9 @@ async function ingresarConGoogle(credential: string) {
         </span>
         <p class="kicker">Congreso CIISIC · UNDC</p>
         <h1 class="mt-2 text-3xl font-extrabold">Panel administrativo</h1>
-        <p class="mt-2 text-sm text-slate-400">Ingresa con tu cuenta de administrador.</p>
+        <p class="mt-2 text-sm text-slate-400">
+          El equipo ingresa con su cuenta. Si te inscribiste a un evento, entra con Google<template v-if="accesoCodigo"> o con un código enviado a tu correo</template>.
+        </p>
       </div>
 
       <form class="space-y-5" novalidate @submit.prevent="ingresar">
@@ -111,11 +132,27 @@ async function ingresarConGoogle(credential: string) {
           <template #despues>
             <p v-if="entrandoConGoogle" class="mt-3 text-center text-sm text-slate-300" aria-live="polite">Validando tu cuenta de Google…</p>
             <p class="mt-4 text-center text-xs leading-relaxed text-slate-400">
-              ¿Te inscribiste a un evento? Entra con la cuenta de Google del correo que usaste al inscribirte
-              para ver el estado de tu inscripción.
+              ¿Te inscribiste a un evento? Entra con la cuenta de Google del correo que usaste al inscribirte<template v-if="accesoCodigo">
+                o pide un código a ese correo</template>
+              para ver tu inscripción.
             </p>
           </template>
         </BotonGoogle>
+
+        <div v-if="accesoCodigo" class="mt-6">
+          <div class="mb-5 flex items-center gap-3 text-xs uppercase tracking-wider text-slate-500">
+            <span class="h-px flex-1 bg-white/10" />
+            o recibe un código en tu correo
+            <span class="h-px flex-1 bg-white/10" />
+          </div>
+          <AccesoConCodigo v-if="conCodigo" @ingreso="alIngresarConCodigo" />
+          <AppButton v-else variant="secondary" class="w-full" icon="heroicons:envelope" :disabled="enviando || entrandoConGoogle" @click="conCodigo = true">
+            Entrar con un código a mi correo
+          </AppButton>
+          <p class="mt-3 text-center text-xs leading-relaxed text-slate-400">
+            Para inscritos: el código abre tu portal de participante (no el panel del equipo).
+          </p>
+        </div>
       </ClientOnly>
     </section>
   </div>

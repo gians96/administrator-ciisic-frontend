@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import type { AccesoPanel, Permiso, Sesion, TipoSesion } from '~/types/api'
+import { codigoSolicitadoDe, normalizarCorreo, type CodigoSolicitado } from '~/utils/codigoAcceso'
+import { aErrorApi } from '~/utils/errores'
 import { accesoDeSesion, tienePermiso } from '~/utils/permisos'
+import { pideCodigoParaPortal } from '~/utils/portal'
 import { lecturaTrasError, leerSesion, type LecturaSesion } from '~/utils/sesion'
 
 /** Intervalo mínimo entre dos lecturas del acceso (`refrescarAcceso`). */
@@ -15,6 +18,12 @@ function sesionDe(respuesta: unknown): Sesion {
     data: { code: 'ERROR', message: 'El servidor respondió de forma inesperada. Intenta nuevamente.' },
   })
 }
+
+/**
+ * Resultado de `irAlPortal`: ya se está en el portal, o hay que confirmar con un código al correo de la
+ * cuenta (entró con contraseña: `CODE_REQUIRED`).
+ */
+export type ResultadoIrAlPortal = 'PORTAL' | 'CODIGO_REQUERIDO'
 
 /**
  * Sesión del panel: staff (pantallas según sus permisos) o inscrito (portal «Mis inscripciones»).
@@ -103,6 +112,41 @@ export const useAuthStore = defineStore('auth', () => {
     return nueva.tipo
   }
 
+  /**
+   * Pide un código de acceso al portal para `correo` (spec 014). La respuesta es la misma exista o no
+   * el correo; los errores (`CODE_COOLDOWN`, `RATE_LIMITED`, `CODE_LOGIN_UNAVAILABLE`…) se relanzan.
+   */
+  async function solicitarCodigo(correo: string): Promise<CodigoSolicitado> {
+    return codigoSolicitadoDe(await $fetch('/api/auth/codigo', { method: 'POST', body: { correo: normalizarCorreo(correo) } }))
+  }
+
+  /** Canjea el código del correo por la sesión del portal (siempre de participante, 12 h). */
+  async function verificarCodigo(correo: string, codigo: string): Promise<TipoSesion> {
+    const nueva = sesionDe(await $fetch('/api/auth/codigo/verificar', { method: 'POST', body: { correo: normalizarCorreo(correo), codigo } }))
+    establecer(nueva)
+    ultimaLectura = Date.now()
+    return nueva.tipo
+  }
+
+  /**
+   * El staff pasa a su portal de participante (`acceso.perfilParticipante`). Si entró con contraseña (o
+   * su inscripción tiene otra cuenta de Google) devuelve `CODIGO_REQUERIDO`: la pantalla pide el código
+   * al correo de la cuenta (`solicitarCodigo` + `verificarCodigo`). Un 401 cierra la sesión; los demás
+   * errores se relanzan (`mensajeCambioAPortal`).
+   */
+  async function irAlPortal(): Promise<ResultadoIrAlPortal> {
+    try {
+      const nueva = sesionDe(await $fetch('/api/auth/portal', { method: 'POST' }))
+      establecer(nueva)
+      ultimaLectura = Date.now()
+      return 'PORTAL'
+    } catch (error) {
+      if (pideCodigoParaPortal(error)) return 'CODIGO_REQUERIDO'
+      if (aErrorApi(error).status === 401) establecer(null)
+      throw error
+    }
+  }
+
   async function logout() {
     await $fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
     limpiar()
@@ -114,6 +158,6 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     sesion, verificado, noDisponible, tipo, usuario, participante, esParticipante, acceso, puede,
-    cargarSesion, refrescarAcceso, login, loginGoogle, logout, limpiar,
+    cargarSesion, refrescarAcceso, login, loginGoogle, solicitarCodigo, verificarCodigo, irAlPortal, logout, limpiar,
   }
 })

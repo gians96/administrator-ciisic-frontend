@@ -9,6 +9,7 @@ import {
   lecturaTrasError,
   leerSesion,
   reaccionAError,
+  reaccionPortalAError,
   redireccionPara,
   rutaLoginTrasCierre,
   type MetaAcceso,
@@ -32,9 +33,11 @@ const META: Record<string, MetaAcceso> = {
   '/': { permiso: 'resumen.ver' },
   '/inscripciones': { permiso: 'inscripciones.ver' },
   '/asistencia': { permiso: 'asistencia.ver' },
+  '/escanear': { permiso: 'asistencia.marcar' },
   '/eventos/3': { permiso: 'eventos.configurar' },
   '/sistema': { permiso: 'sistema.configurar' },
   '/mis-inscripciones': { perfil: 'participante' },
+  '/mi-fotocheck': { perfil: 'participante' },
 }
 const metaDe = (ruta: string): MetaAcceso => META[ruta.split(/[?#]/)[0] ?? ''] ?? {}
 
@@ -69,7 +72,7 @@ describe('sesión: acceso por perfil', () => {
 
   it('el staff no entra a páginas de participante: va a su inicio', () => {
     expect(redireccionPara('ADMIN', { perfil: 'participante' }, OWNER)).toBe('/')
-    expect(redireccionPara('ADMIN', { perfil: 'participante' }, COMISION)).toBe('/asistencia')
+    expect(redireccionPara('ADMIN', { perfil: 'participante' }, COMISION)).toBe('/escanear')
   })
 
   it('las páginas exigen su permiso (basta uno de la lista)', () => {
@@ -78,7 +81,7 @@ describe('sesión: acceso por perfil', () => {
     expect(redireccionPara('ADMIN', { permiso: 'sistema.configurar' }, ADMINISTRADOR)).toBe('/')
     expect(redireccionPara('ADMIN', { permiso: 'eventos.configurar' }, TESORERO)).toBe('/')
     expect(redireccionPara('ADMIN', { permiso: ['eventos.configurar', 'inscripciones.ver'] }, TESORERO)).toBeNull()
-    expect(redireccionPara('ADMIN', { permiso: 'resumen.ver' }, COMISION)).toBe('/asistencia')
+    expect(redireccionPara('ADMIN', { permiso: 'resumen.ver' }, COMISION)).toBe('/escanear')
     expect(redireccionPara('ADMIN', { permiso: 'asistencia.ver' }, COMISION)).toBeNull()
   })
 
@@ -99,15 +102,21 @@ describe('sesión: acceso por perfil', () => {
 
   it('no redirige a la misma página', () => {
     // Inconsistencia (el inicio no cumple la meta de la página): termina en /sin-acceso, sin bucles
-    expect(redireccionPara('ADMIN', { permiso: 'sistema.configurar' }, COMISION, '/asistencia')).toBe('/sin-acceso')
+    expect(redireccionPara('ADMIN', { permiso: 'sistema.configurar' }, COMISION, '/escanear')).toBe('/sin-acceso')
     expect(redireccionPara('ADMIN', { permiso: 'sistema.configurar' }, SIN_PERMISOS, '/sin-acceso')).toBeNull()
   })
 })
 
 describe('sesión: destino tras el login', () => {
-  it('el inscrito siempre va a «Mis inscripciones»', () => {
+  it('el inscrito va a «Mis inscripciones» salvo que redirect sea otra página del portal', () => {
     expect(destinoTrasLogin('PARTICIPANTE', '/inscripciones')).toBe('/mis-inscripciones')
     expect(destinoTrasLogin('PARTICIPANTE', undefined)).toBe('/mis-inscripciones')
+    expect(destinoTrasLogin('PARTICIPANTE', '/inscripciones', null, metaDe)).toBe('/mis-inscripciones')
+    // Su fotocheck (p. ej. la sesión de 12 h venció con la página abierta)
+    expect(destinoTrasLogin('PARTICIPANTE', '/mi-fotocheck', null, metaDe)).toBe('/mi-fotocheck')
+    expect(destinoTrasLogin('PARTICIPANTE', '//evil.example', null, metaDe)).toBe('/mis-inscripciones')
+    // El staff no entra a las páginas del portal
+    expect(destinoTrasLogin('ADMIN', '/mi-fotocheck', OWNER, metaDe)).toBe('/')
   })
 
   it('el staff vuelve a redirect solo si es una ruta interna', () => {
@@ -122,9 +131,12 @@ describe('sesión: destino tras el login', () => {
     expect(destinoTrasLogin('ADMIN', '/eventos/3', ADMINISTRADOR, metaDe)).toBe('/eventos/3')
     expect(destinoTrasLogin('ADMIN', '/sistema', ADMINISTRADOR, metaDe)).toBe('/')
     expect(destinoTrasLogin('ADMIN', '/eventos/3', TESORERO, metaDe)).toBe('/')
-    expect(destinoTrasLogin('ADMIN', '/inscripciones', COMISION, metaDe)).toBe('/asistencia')
-    expect(destinoTrasLogin('ADMIN', '/mis-inscripciones', COMISION, metaDe)).toBe('/asistencia')
-    expect(destinoTrasLogin('ADMIN', undefined, COMISION, metaDe)).toBe('/asistencia')
+    expect(destinoTrasLogin('ADMIN', '/inscripciones', COMISION, metaDe)).toBe('/escanear')
+    expect(destinoTrasLogin('ADMIN', '/mis-inscripciones', COMISION, metaDe)).toBe('/escanear')
+    expect(destinoTrasLogin('ADMIN', undefined, COMISION, metaDe)).toBe('/escanear')
+    expect(destinoTrasLogin('ADMIN', '/asistencia', COMISION, metaDe)).toBe('/asistencia')
+    // El escáner exige asistencia.marcar
+    expect(destinoTrasLogin('ADMIN', '/escanear', TESORERO, metaDe)).toBe('/')
     expect(destinoTrasLogin('ADMIN', '/', SIN_PERMISOS, metaDe)).toBe('/sin-acceso')
   })
 
@@ -195,5 +207,18 @@ describe('sesión: errores de la API del staff', () => {
     }
     expect(reaccionAError({ status: 503, code: 'SESSION_UNAVAILABLE' })).toBeNull()
     expect(reaccionAError({ status: 404, code: 'FORBIDDEN' })).toBeNull()
+  })
+})
+
+describe('portal: reacción ante un error de /api/portal', () => {
+  it('401 al login; 403 FORBIDDEN_PROFILE (la cookie ya no es del participante) relee la sesión', () => {
+    expect(reaccionPortalAError({ status: 401, code: 'SESSION_EXPIRED' })).toBe('LOGIN')
+    expect(reaccionPortalAError({ status: 403, code: 'FORBIDDEN_PROFILE' })).toBe('RELEER_SESION')
+  })
+
+  it('los demás errores los maneja cada página', () => {
+    expect(reaccionPortalAError({ status: 403, code: 'FORBIDDEN' })).toBeNull()
+    expect(reaccionPortalAError({ status: 404, code: 'NOT_FOUND' })).toBeNull()
+    expect(reaccionPortalAError({ status: 503, code: 'PDF_BUSY' })).toBeNull()
   })
 })

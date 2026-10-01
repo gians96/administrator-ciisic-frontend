@@ -1,5 +1,8 @@
 <script setup lang="ts">
 const { toasts, cerrar } = useToast()
+const route = useRoute()
+/** En el portal, en el celular, los avisos van sobre la barra inferior de navegación (no la tapan). */
+const sobreBarraInferior = computed(() => route.meta.layout === 'participante')
 
 const ESTILO = {
   exito: { icono: 'heroicons:check-circle', clase: 'border-emerald-400/30 text-emerald-100' },
@@ -9,7 +12,12 @@ const ESTILO = {
 </script>
 
 <template>
-  <div class="pointer-events-none fixed right-4 bottom-4 z-[60] flex w-full max-w-sm flex-col gap-2" aria-live="polite">
+  <!-- Celular: de borde a borde con 1 rem de margen; desde sm, a la derecha con 24 rem como máximo -->
+  <div
+    class="pointer-events-none fixed inset-x-4 bottom-4 z-[60] flex flex-col gap-2 sm:left-auto sm:w-full sm:max-w-sm"
+    :class="{ 'max-sm:bottom-[calc(4.75rem+env(safe-area-inset-bottom))]': sobreBarraInferior }"
+    aria-live="polite"
+  >
     <TransitionGroup
       enter-from-class="translate-y-2 opacity-0"
       enter-active-class="transition duration-200"

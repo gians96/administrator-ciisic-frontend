@@ -7,7 +7,7 @@ definePageMeta({ layout: 'participante', perfil: 'participante' })
 useHead({ title: 'Mis inscripciones · CIISIC' })
 
 const auth = useAuthStore()
-const { portal, urlPortal } = usePortal()
+const { portal } = usePortal()
 const inscripciones = ref<InscripcionPortal[]>([])
 const cargando = ref(true)
 const error = ref<string | null>(null)
@@ -52,7 +52,7 @@ onMounted(cargar)
       v-else-if="!inscripciones.length"
       icon="heroicons:ticket"
       titulo="Aún no hay inscripciones con este correo"
-      descripcion="Usa la cuenta de Google del mismo correo con el que te inscribiste. Si te inscribiste con otro correo, cierra sesión y entra con esa cuenta."
+      descripcion="Entra con el mismo correo con el que te inscribiste. Si te inscribiste con otro correo, cierra sesión y entra con ese."
     />
 
     <article v-for="inscripcion in inscripciones" v-else :key="inscripcion.id" class="card overflow-hidden">
@@ -106,14 +106,21 @@ onMounted(cargar)
           </div>
         </dl>
 
-        <div v-if="inscripcion.credencial.disponible" class="flex flex-wrap items-center gap-3 border-t border-white/10 pt-5">
-          <a
-            :href="urlPortal(`inscriptions/${inscripcion.id}/credential`)"
-            class="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-navy-950 hover:bg-brand-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
+        <div v-if="inscripcion.credencial.disponible || inscripcion.fotocheck?.disponible" class="flex flex-wrap items-center gap-3 border-t border-white/10 pt-5">
+          <NuxtLink
+            v-if="inscripcion.fotocheck?.disponible"
+            :to="{ path: '/mi-fotocheck', query: { inscripcion: String(inscripcion.id) } }"
+            class="inline-flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/15 ring-inset hover:bg-white/10"
           >
-            <Icon name="heroicons:arrow-down-tray" class="size-5" aria-hidden="true" /> Descargar credencial
-          </a>
-          <span v-if="inscripcion.credencial.enviadaEn" class="text-xs text-slate-400">También te la enviamos por correo el {{ fechaHoraLima(inscripcion.credencial.enviadaEn) }}.</span>
+            <Icon name="heroicons:identification" class="size-5" aria-hidden="true" /> Ver fotocheck
+          </NuxtLink>
+          <PortalBotonDescarga
+            v-if="inscripcion.credencial.disponible"
+            :ruta="`inscriptions/${inscripcion.id}/credential`"
+            :respaldo="`credencial-${inscripcion.id}.pdf`"
+            texto="Descargar credencial"
+          />
+          <span v-if="inscripcion.credencial.enviadaEn" class="text-xs text-slate-400">También te la enviamos por correo: {{ fechaHoraLima(inscripcion.credencial.enviadaEn) }}</span>
         </div>
       </div>
     </article>

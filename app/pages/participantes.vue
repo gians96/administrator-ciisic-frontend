@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import type { Meta, ParticipanteRef, Respuesta } from '~/types/api'
 import { fechaHoraLima, nombreCompleto } from '~/utils/formato'
-import { aErrorApi, mensajeError } from '~/utils/errores'
+import { mensajeError } from '~/utils/errores'
 import { AVISO_CAMBIO_CORREO_GOOGLE, mensajeDesvincularGoogle, tituloVinculoGoogle } from '~/utils/cuentaGoogle'
+import { avisoCambioCorreo, cambiaCorreo, camposErrorEdicion, type InscripcionDeParticipante } from '~/utils/participantes'
 
 definePageMeta({ permiso: 'participantes.gestionar' })
 useHead({ title: 'Participantes · Panel CIISIC' })
 
 interface ParticipanteDetalle extends ParticipanteRef {
-  inscripciones: Array<{ id: number, evento: { codigo: string, nombreCorto: string }, estado: { codigo: string, nombre: string }, tipoInscripcion: string | null, creadoEn: string }>
+  inscripciones: InscripcionDeParticipante[]
 }
 
 const { api } = useApi()
+const auth = useAuthStore()
 const toast = useToast()
 const { confirmar } = useConfirm()
 const participantes = ref<ParticipanteRef[]>([])
@@ -22,6 +24,15 @@ const guardando = ref(false)
 const desvinculando = ref(false)
 const errores = ref<Record<string, string>>({})
 const form = reactive({ nombres: '', apellidos: '', correo: '', celular: '' })
+
+const puedeRegistrar = computed(() => auth.puede('participantes.gestionar'))
+const puedeCortesia = computed(() => auth.puede('inscripciones.cortesia'))
+const nuevoAbierto = ref(false)
+/** Persona a inscribir como cortesía (`null`: modal cerrado). */
+const paraCortesia = ref<ParticipanteRef | null>(null)
+
+/** El correo escrito es otro: el backend avisará al anterior al guardar. */
+const correoCambiado = computed(() => detalle.value !== null && cambiaCorreo(detalle.value.correo, form.correo))
 
 async function cargar(pagina = 1) {
   try {
@@ -59,7 +70,7 @@ async function guardar() {
     detalle.value = null
     await cargar(meta.value?.page ?? 1)
   } catch (error) {
-    errores.value = aErrorApi(error).fields ?? {}
+    errores.value = camposErrorEdicion(error)
     toast.error(mensajeError(error))
   } finally {
     guardando.value = false
@@ -84,14 +95,48 @@ async function desvincularGoogle() {
     desvinculando.value = false
   }
 }
+
+// ─── Alta de participantes ───
+
+/** Muestra a la persona recién registrada en la lista (buscándola por su documento). */
+function alRegistrar(participante: ParticipanteRef) {
+  nuevoAbierto.value = false
+  toast.exito(`Se registró a ${nombreCompleto(participante)}.${puedeCortesia.value ? ' Puedes darle una inscripción de cortesía desde la lista.' : ''}`)
+  if (busqueda.value === participante.numeroDocumento) cargar()
+  else busqueda.value = participante.numeroDocumento
+}
+
+function abrirExistente(id: number) {
+  nuevoAbierto.value = false
+  abrir(id)
+}
+
+// ─── Inscripción de cortesía ───
+
+/** Tras la cortesía, el detalle abierto de esa persona muestra la inscripción nueva (sin tocar lo que se edita). */
+async function alInscribir(participanteId: number) {
+  paraCortesia.value = null
+  if (detalle.value?.id !== participanteId) return
+  try {
+    const { inscripciones } = (await api<Respuesta<ParticipanteDetalle>>(`participants/${participanteId}`)).data
+    if (detalle.value?.id === participanteId) detalle.value = { ...detalle.value, inscripciones }
+  } catch {
+    // Se verá al volver a abrir el detalle
+  }
+}
 </script>
 
 <template>
   <div class="space-y-6">
-    <div>
-      <p class="kicker">Configuración</p>
-      <h1 class="mt-1 text-3xl font-extrabold">Participantes</h1>
-      <p class="mt-1 text-sm text-slate-400">Personas registradas en cualquier evento. Aquí puedes corregir nombres, correo o celular.</p>
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <p class="kicker">Configuración</p>
+        <h1 class="mt-1 text-3xl font-extrabold">Participantes</h1>
+        <p class="mt-1 max-w-3xl text-sm text-slate-400">
+          Personas registradas en cualquier evento. Aquí puedes corregir nombres, correo o celular<template v-if="puedeRegistrar">, registrar a quien no se inscribió (ponentes, organizadores)</template><template v-if="puedeCortesia"> y darle una inscripción de cortesía</template>.
+        </p>
+      </div>
+      <AppButton v-if="puedeRegistrar" icon="heroicons:user-plus" @click="nuevoAbierto = true">Nuevo participante</AppButton>
     </div>
     <div class="relative max-w-md">
       <label for="p-buscar" class="sr-only">Buscar</label>
@@ -111,9 +156,22 @@ async function desvincularGoogle() {
                 <AppBadge v-if="p.googleVinculado" tono="ok" class="ml-1" :title="tituloVinculoGoogle(p) ?? undefined">
                   <Icon name="heroicons:link" class="size-3.5" aria-hidden="true" /> Google vinculado
                 </AppBadge>
-                <p class="text-xs text-slate-500">{{ p.celular }}</p>
+                <p class="text-xs text-slate-500">{{ p.celular || 'Sin celular' }}</p>
               </td>
-              <td class="text-right"><AppButton size="sm" variant="secondary" icon="heroicons:pencil-square" @click="abrir(p.id)">Ver / editar</AppButton></td>
+              <td class="text-right whitespace-nowrap">
+                <AppButton
+                  v-if="puedeCortesia"
+                  size="sm"
+                  variant="ghost"
+                  icon="heroicons:gift"
+                  :aria-label="`Inscribir a ${nombreCompleto(p)} como cortesía`"
+                  title="Inscribir como cortesía"
+                  @click="paraCortesia = p"
+                >
+                  Cortesía
+                </AppButton>
+                <AppButton size="sm" variant="secondary" icon="heroicons:pencil-square" @click="abrir(p.id)">Ver / editar</AppButton>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -126,8 +184,20 @@ async function desvincularGoogle() {
       <form id="form-participante" class="grid gap-4 sm:grid-cols-2" @submit.prevent="guardar">
         <AppField label="Nombres" for="pa-nombres" :error="errores.nombres"><input id="pa-nombres" v-model="form.nombres" class="field-control"></AppField>
         <AppField label="Apellidos" for="pa-apellidos" :error="errores.apellidos"><input id="pa-apellidos" v-model="form.apellidos" class="field-control"></AppField>
-        <AppField label="Correo" for="pa-correo" :error="errores.correo" :hint="detalle?.googleVinculado ? AVISO_CAMBIO_CORREO_GOOGLE : undefined">
-          <input id="pa-correo" v-model="form.correo" type="email" class="field-control">
+        <AppField label="Correo" for="pa-correo" :error="errores.correo" :hint="!correoCambiado && detalle?.googleVinculado ? AVISO_CAMBIO_CORREO_GOOGLE : undefined">
+          <input id="pa-correo" v-model="form.correo" type="email" class="field-control" :aria-describedby="correoCambiado ? 'pa-correo-aviso' : undefined">
+          <!-- Región viva siempre presente (vacía no ocupa espacio) para que se anuncie el aviso -->
+          <p
+            id="pa-correo-aviso"
+            class="text-xs text-amber-200"
+            :class="correoCambiado ? 'mt-2 flex gap-1.5 rounded-lg bg-amber-400/10 px-3 py-2 ring-1 ring-amber-400/30 ring-inset' : ''"
+            role="status"
+          >
+            <template v-if="correoCambiado && detalle">
+              <Icon name="heroicons:envelope" class="mt-px size-3.5 shrink-0" aria-hidden="true" />
+              <span>{{ avisoCambioCorreo(detalle.correo, detalle.googleVinculado) }}</span>
+            </template>
+          </p>
         </AppField>
         <AppField label="Celular" for="pa-celular" :error="errores.celular"><input id="pa-celular" v-model="form.celular" class="field-control"></AppField>
         <div v-if="detalle?.googleVinculado" class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white/5 px-4 py-3 sm:col-span-2">
@@ -148,9 +218,13 @@ async function desvincularGoogle() {
         </ul>
       </div>
       <template #acciones>
+        <AppButton v-if="puedeCortesia && detalle" variant="ghost" icon="heroicons:gift" class="sm:mr-auto" @click="paraCortesia = detalle">Inscribir como cortesía</AppButton>
         <AppButton variant="secondary" @click="detalle = null">Cerrar</AppButton>
         <AppButton type="submit" form="form-participante" :loading="guardando">Guardar</AppButton>
       </template>
     </AppModal>
+
+    <NuevoParticipante :abierto="nuevoAbierto" @cerrar="nuevoAbierto = false" @creado="alRegistrar" @abrir-existente="abrirExistente" />
+    <CortesiaParticipante :participante="paraCortesia" @cerrar="paraCortesia = null" @inscrito="alInscribir" />
   </div>
 </template>

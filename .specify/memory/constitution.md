@@ -36,10 +36,18 @@ cada commit. Las utilidades puras (formato, errores, filtros, sesión) tienen pr
 
 ### VI. Dos perfiles por audiencia; dentro del staff, roles y permisos por página
 El panel atiende a dos perfiles, separados por la audiencia del JWT (`ciisic-admin` y
-`ciisic-participante`). El inscrito entra solo con Google y únicamente llega a las páginas con
-`perfil: 'participante'` (`/mis-inscripciones`) y a `/api/portal/**`, que el BFF reenvía a
-`/api/v1/me/**`. El middleware y el BFF aplican la separación (`/api/backend/**` rechaza sesiones
-de inscrito con 403 `FORBIDDEN_PROFILE`); el BFF lee `aud` sin verificar solo para enrutar.
+`ciisic-participante`). El inscrito entra con Google **o con un código de 6 dígitos que llega a su
+correo**; el código siempre abre una sesión de participante (12 h, no se renueva), nunca del panel.
+El inscrito únicamente llega a las páginas del portal, que declaran
+`definePageMeta({ layout: 'participante', perfil: 'participante' })` y se listan en
+`NAVEGACION_PORTAL` (`app/utils/portal.ts`: inscripciones, fotocheck, asistencia, certificados y
+perfil), y a `/api/portal/**`, que el BFF reenvía a `/api/v1/me/**`. El middleware y el BFF aplican
+la separación (`/api/backend/**` rechaza sesiones de inscrito con 403 `FORBIDDEN_PROFILE`); el BFF lee
+`aud` sin verificar solo para enrutar.
+
+El staff inscrito con su mismo correo puede pasar a su propio portal (`/api/auth/portal`: directo si
+entró con Google; si no, con el código a su correo) en **un solo sentido**: el portal no tiene camino
+al panel y para volver se ingresa de nuevo.
 
 Dentro del staff hay roles (Owner, Administrador del sistema, Tesorero, Comisión tecnológica) y
 el panel decide **por permisos**, nunca por el código del rol: cada página de staff declara el
@@ -51,15 +59,18 @@ petición y responde 403 a lo que no corresponde; el panel solo evita ofrecerlo.
 
 ## Configuración
 
-La única variable de entorno es `NUXT_BACKEND_BASE_URL`. La cookie dura lo que el JWT
-(`expiraEn`); el del staff se renueva y el backend corta la sesión a las 12 h. El client ID de Google, la conexión con API_UNDC, la URL del panel y las rutas de
-la landing anterior se configuran en el backend desde la página Sistema (Owner,
-`sistema.configurar`).
+La única variable de entorno es `NUXT_BACKEND_BASE_URL` (en producción, la URL interna de Docker
+del backend, para que sus límites por IP vean la de cada visitante). La cookie dura lo que el JWT
+(`expiraEn`); el del staff se renueva y el backend corta la sesión a las 12 h; el del participante
+dura 12 h y no se renueva. El client ID de Google, la conexión con API_UNDC, la URL del panel y las
+rutas de la landing anterior se configuran en el backend desde la página Sistema (Owner,
+`sistema.configurar`); si se ofrece el acceso con código lo decide el backend (`accesoCodigo`).
 
 ## Stack
 
 Nuxt 4 (SPA, `ssr: false`) + Nitro, Vue 3, Pinia, `@nuxt/icon` (heroicons), Chart.js
-(`vue-chartjs`), Tailwind CSS v4, TypeScript estricto, ESLint (`@nuxt/eslint`), Vitest.
+(`vue-chartjs`), `vue-qrcode-reader` (escáner; el wasm de ZXing se sirve desde `public/`, no
+desde un CDN), Tailwind CSS v4, TypeScript estricto, ESLint (`@nuxt/eslint`), Vitest.
 Gestor de paquetes: bun.
 
 ## Estructura
@@ -67,17 +78,24 @@ Gestor de paquetes: bun.
 ```
 app/assets/css/main.css      tema Tailwind v4
 app/components/ui/           botones, campos, modales, badges, tablas, toasts…
-app/components/{layout,eventos,inscripciones,dashboard,charts,auth}/
+app/components/{layout,eventos,inscripciones,dashboard,charts,auth,administradores,
+                participantes,portal,asistencia}/
 app/composables/             useApi (BFF), usePortal (portal del inscrito), useToast, useConfirm
 app/stores/                  auth (sesión por perfil, acceso y permisos), evento seleccionado
-app/layouts/                 default (administración), participante (portal), blank (login)
-app/pages/                   resumen, inscripciones, asistencia, eventos, tipos,
+app/layouts/                 default (administración), escaner (escáner a pantalla completa),
+                             participante (portal), blank (login)
+app/plugins/                 fotocheck-guardado (borra la copia sin conexión al cerrar sesión)
+app/pages/                   resumen, inscripciones, asistencia, escanear, eventos, tipos,
                              consultas, ponencias, mensajes, participantes, administradores,
-                             correo, sistema, sin-acceso, mis-inscripciones
+                             correo, sistema, sin-acceso; portal: mis-inscripciones,
+                             mi-fotocheck, mi-asistencia, mis-certificados, mi-perfil
 app/utils/permisos.ts        catálogo de permisos, menú, inicio por cuenta, etiquetas de rol
-server/api/auth/             login / google / session / logout (cookie httpOnly)
+app/utils/portal.ts          navegación y tipos del portal del inscrito
+server/api/auth/             login / google / codigo / portal / config / session / logout
+                             (cookie httpOnly; IP real del cliente en server/utils/ip-cliente.ts)
 server/api/backend/[...path] proxy autenticado a backend-ciisic (staff; renueva el JWT)
-server/api/portal/[...path]  proxy del portal del inscrito (→ /api/v1/me)
+server/api/portal/           proxy del portal del inscrito (index y [...path] → /api/v1/me)
+public/zxing-wasm/<versión>/ wasm de ZXing del escáner (bun run escaner:wasm)
 specs/                       SDD (Spec Kit)
 ```
 
@@ -91,8 +109,14 @@ convencionales en español.
 Esta constitución prevalece sobre prácticas ad-hoc. Enmiendas: se documentan en este archivo con
 fecha y motivo, y se revisan en el PR correspondiente.
 
-**Versión**: 1.2.0 | **Ratificada**: 2026-09-29 | **Última enmienda**: 2026-10-01
+**Versión**: 1.3.0 | **Ratificada**: 2026-09-29 | **Última enmienda**: 2026-10-01
 
+- 1.3.0 (2026-10-01): principio VI, el inscrito entra con Google o con un código por correo (que
+  siempre abre el portal, 12 h sin renovación); las páginas del portal son las de
+  `NAVEGACION_PORTAL` con `perfil: 'participante'` (inscripciones, fotocheck, asistencia, certificados
+  y perfil); el staff pasa a su portal en un solo sentido. Configuración: URL interna del backend en
+  producción. Motivo: portal del participante con fotocheck virtual y escáner de asistencia por QR
+  (backend-ciisic spec 014, panel spec 009).
 - 1.2.0 (2026-10-01): principio VI, dos perfiles por audiencia y, dentro del staff, roles y
   permisos declarados por página con la meta `permiso` (reemplaza `soloSuperAdmin`); menús y
   botones con `puede(permiso)`; renovación del JWT del staff en el BFF; el backend es la autoridad.

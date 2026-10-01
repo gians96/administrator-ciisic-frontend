@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
     const { data } = await $fetch<RespuestaGoogle>(backendUrl(event, '/api/v1/auth/google'), {
       method: 'POST',
       body: { idToken: body.credential, nonce },
-      headers: { 'x-forwarded-for': getRequestIP(event, { xForwardedFor: true }) ?? '' },
+      headers: { 'x-forwarded-for': ipCliente(event) ?? '' },
     })
     guardarSesion(event, data.jwt, vidaSesionSegundos(data.expiraEn))
     return data.tipo === 'PARTICIPANTE'

@@ -14,6 +14,8 @@ export interface InscripcionPortal {
   motivoRechazo: string | null
   revisadoEn: string | null
   credencial: { disponible: boolean, enviadaEn: string | null }
+  /** Fotocheck virtual (spec 014): `true` solo si está aprobada. Falta con el backend anterior. */
+  fotocheck?: { disponible: boolean }
   creadoEn: string
 }
 

@@ -10,7 +10,8 @@
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
-    "test": "vitest run"
+    "test": "vitest run",
+    "escaner:wasm": "node -e \"const fs=require('node:fs');const v=require('./node_modules/zxing-wasm/package.json').version;const d='public/zxing-wasm/'+v;fs.mkdirSync(d,{recursive:true});fs.copyFileSync('node_modules/zxing-wasm/dist/reader/zxing_reader.wasm',d+'/zxing_reader.wasm');console.log(d+'/zxing_reader.wasm')\""
   },
   "dependencies": {
     "@nuxt/icon": "^2.5.1",
@@ -19,7 +20,8 @@
     "nuxt": "^4.5.2",
     "pinia": "^4.0.3",
     "vue": "^3.5.43",
-    "vue-chartjs": "^5.3.4"
+    "vue-chartjs": "^5.3.4",
+    "vue-qrcode-reader": "^5.7.3"
   },
   "devDependencies": {
     "@iconify-json/heroicons": "^1.2.3",
