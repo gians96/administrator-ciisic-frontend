@@ -14,6 +14,13 @@ export interface MetaAcceso {
   perfil?: 'admin' | 'participante'
   /** Permiso (o alguno de la lista) que exige la página al staff. Sin él, cualquier cuenta de staff. */
   permiso?: Permiso | readonly Permiso[]
+  /** Página pública: la abre cualquiera, sin sesión (verificación de certificados). */
+  publica?: boolean
+}
+
+/** La página no exige sesión: el middleware no la lee ni redirige (`/verificar`). */
+export function esPaginaPublica(meta: Pick<MetaAcceso, 'publica'> | null | undefined): boolean {
+  return meta?.publica === true
 }
 
 function objeto(valor: unknown): Record<string, unknown> | null {
@@ -42,12 +49,15 @@ export function esRutaInterna(ruta: unknown): ruta is string {
 }
 
 /**
- * A dónde redirigir antes de mostrar una página, o `null` para dejar pasar. El inscrito solo entra a
+ * A dónde redirigir antes de mostrar una página, o `null` para dejar pasar. Una página pública
+ * (`publica: true`) la abre cualquiera. El inscrito solo entra a
  * páginas con `perfil: 'participante'`. El staff no entra a ellas ni a las que exigen un permiso que
  * no tiene: va a su página de inicio (`inicioPara`). `ruta` (la que se intenta abrir) evita
  * redirigir a la misma página: en ese caso va a `/sin-acceso`.
  */
 export function redireccionPara(tipo: TipoSesion, meta: MetaAcceso, acceso: AccesoPanel | null = null, ruta?: string): string | null {
+  // Pública: la abre cualquiera (también tras el login, si se llegó a ella con `redirect`)
+  if (esPaginaPublica(meta)) return null
   const paginaDeParticipante = meta.perfil === 'participante'
   if (tipo === 'PARTICIPANTE') return paginaDeParticipante ? null : INICIO_PARTICIPANTE
   // Una cuenta por evento sin eventos no puede trabajar en ninguna página que exija permiso

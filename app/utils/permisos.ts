@@ -20,7 +20,7 @@ export const ETIQUETAS_PERMISO: Readonly<Record<Permiso, string>> = {
   'inscripciones.cancelar': 'Cancelar inscripciones',
   'inscripciones.cortesia': 'Registrar inscripciones de cortesía',
   'legacy.usar': 'Usar las rutas de la versión anterior',
-  'certificados.gestionar': 'Gestionar plantillas y emitir certificados',
+  'certificados.gestionar': 'Gestionar tipos, plantillas, emisión, anulación y proveedor de certificados',
 
   'resumen.ver': 'Ver el resumen del evento',
   'inscripciones.ver': 'Ver inscritos (nombre, documento, correo y celular)',
@@ -36,7 +36,7 @@ export const ETIQUETAS_PERMISO: Readonly<Record<Permiso, string>> = {
   'ponencias.ver': 'Ver y descargar ponencias',
   'mensajes.ver': 'Ver mensajes de contacto',
   'mensajes.eliminar': 'Eliminar mensajes de contacto',
-  'certificados.ver': 'Ver certificados',
+  'certificados.ver': 'Ver certificados y descargar los firmados',
   'certificados.operar': 'Generar, descargar para firmar y subir certificados firmados',
 }
 
@@ -198,6 +198,7 @@ export const MENU: readonly SeccionMenu[] = [
       { to: RUTA_ESCANER, label: 'Escanear asistencia', icon: 'heroicons:camera', permiso: 'asistencia.marcar' },
       { to: '/ponencias', label: 'Ponencias', icon: 'heroicons:document-text', permiso: 'ponencias.ver' },
       { to: '/mensajes', label: 'Mensajes', icon: 'heroicons:envelope', permiso: 'mensajes.ver' },
+      { to: '/certificados', label: 'Certificados', icon: 'heroicons:academic-cap', permiso: 'certificados.ver' },
     ],
   },
   {

@@ -6,6 +6,7 @@ import {
   dependenciasDe,
   esPermiso,
   etiquetaRol,
+  ETIQUETAS_PERMISO,
   ETIQUETAS_ROL,
   inicioPara,
   menuPara,
@@ -43,6 +44,16 @@ describe('permisos: catálogo', () => {
     expect(esPermiso('pagos.editar')).toBe(false)
     expect(esPermiso('toString')).toBe(false)
     expect(esPermiso(3)).toBe(false)
+  })
+
+  it('certificados (spec 015): gestionar es global; ver y operar, por evento, y operar implica ver', () => {
+    expect(PERMISOS).toEqual(expect.arrayContaining(['certificados.gestionar', 'certificados.ver', 'certificados.operar']))
+    expect(ETIQUETAS_PERMISO['certificados.ver']).toBe('Ver certificados y descargar los firmados')
+    expect(ETIQUETAS_PERMISO['certificados.operar']).toBe('Generar, descargar para firmar y subir certificados firmados')
+    expect(conDependencias(['certificados.operar'])).toEqual(['certificados.ver', 'certificados.operar'])
+    const item = MENU.flatMap((seccion) => seccion.items).find((elemento) => elemento.to === '/certificados')
+    expect(item).toMatchObject({ label: 'Certificados', permiso: 'certificados.ver' })
+    expect(MENU.find((seccion) => seccion.items.includes(item as never))?.titulo).toBe('Congreso')
   })
 
   it('cada ítem del menú exige un permiso del catálogo', () => {
@@ -107,19 +118,21 @@ describe('permisos: accesoDeSesion', () => {
 
 describe('permisos: menú', () => {
   it('Owner ve todo; Administrador, todo menos Sistema', () => {
-    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/asistencia', '/escanear', '/ponencias', '/mensajes', '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
+    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/asistencia', '/escanear', '/ponencias', '/mensajes', '/certificados', '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
     expect(rutas(ADMINISTRADOR)).not.toContain('/sistema')
     expect(rutas(ADMINISTRADOR)).toContain('/administradores')
   })
 
   it('Tesorero: solo el Congreso; la sección Configuración se oculta', () => {
     expect(menuPara(TESORERO).map((seccion) => seccion.titulo)).toEqual(['Congreso'])
-    expect(rutas(TESORERO)).toEqual(['/', '/inscripciones', '/asistencia', '/ponencias', '/mensajes'])
+    expect(rutas(TESORERO)).toEqual(['/', '/inscripciones', '/asistencia', '/ponencias', '/mensajes', '/certificados'])
   })
 
   it('Comisión: solo lo que se le asignó', () => {
     expect(rutas(COMISION)).toEqual(['/asistencia', '/escanear'])
     expect(rutas(acceso(['asistencia.ver']))).toEqual(['/asistencia'])
+    // Certificados: «Ver» u «Operar» (que implica «Ver») se eligen a mano para la Comisión
+    expect(rutas(acceso(['asistencia.marcar', 'asistencia.ver', 'certificados.ver', 'certificados.operar']))).toEqual(['/asistencia', '/escanear', '/certificados'])
     expect(menuPara(acceso([]))).toEqual([])
     expect(menuPara(null)).toEqual([])
   })
@@ -131,6 +144,7 @@ describe('permisos: página de inicio', () => {
     expect(inicioPara(ADMINISTRADOR)).toBe('/')
     expect(inicioPara(TESORERO)).toBe('/')
     expect(inicioPara(acceso(['mensajes.ver']))).toBe('/mensajes')
+    expect(inicioPara(acceso(['certificados.ver']))).toBe('/certificados')
     expect(inicioPara(acceso(['correo.configurar'], 'GLOBAL'))).toBe('/correo')
   })
 

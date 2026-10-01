@@ -12,6 +12,11 @@ declare module '#app' {
      * páginas `participante`; el staff que abre una de ellas vuelve a su inicio.
      */
     perfil?: 'admin' | 'participante'
+    /**
+     * Página pública (la verificación de certificados, `/verificar`): no exige sesión ni la lee; la abre
+     * cualquiera, con o sin sesión (staff o inscrito).
+     */
+    publica?: boolean
   }
 }
 

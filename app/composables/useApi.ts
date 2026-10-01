@@ -42,18 +42,26 @@ function iniciarReaccion(forzar: boolean, recargarEventos: boolean): Promise<voi
  * casos el error se relanza para que la pantalla lo muestre.
  */
 export function useApi() {
+  /**
+   * Reacción común a un error de la API del staff (401 → login; 403 de permisos o eventos → relee el
+   * acceso). La usan `api` y las subidas por XHR (`useSubida`); no relanza el error.
+   */
+  async function reaccionar(error: unknown, silenciar401 = false): Promise<void> {
+    const e = aErrorApi(error)
+    const reaccion = reaccionAError(e, silenciar401)
+    if (reaccion === 'LOGIN') {
+      useAuthStore().limpiar()
+      await navigateTo(rutaLoginTrasCierre(e.code, useRouter().currentRoute.value.fullPath))
+    } else if (reaccion === 'RELEER_ACCESO' && !reaccionEnCurso) {
+      await iniciarReaccion(false, true)
+    }
+  }
+
   async function api<T>(ruta: string, opciones: Opciones = {}): Promise<T> {
     try {
       return await $fetch<T>(`/api/backend/${ruta.replace(/^\/+/, '')}`, opciones as NitroFetchOptions<string>)
     } catch (error) {
-      const e = aErrorApi(error)
-      const reaccion = reaccionAError(e, opciones.silenciar401)
-      if (reaccion === 'LOGIN') {
-        useAuthStore().limpiar()
-        await navigateTo(rutaLoginTrasCierre(e.code, useRouter().currentRoute.value.fullPath))
-      } else if (reaccion === 'RELEER_ACCESO' && !reaccionEnCurso) {
-        await iniciarReaccion(false, true)
-      }
+      await reaccionar(error, opciones.silenciar401)
       throw error
     }
   }
@@ -72,5 +80,5 @@ export function useApi() {
     return `/api/backend/${ruta.replace(/^\/+/, '')}`
   }
 
-  return { api, urlArchivo, releerAcceso }
+  return { api, urlArchivo, releerAcceso, reaccionar }
 }

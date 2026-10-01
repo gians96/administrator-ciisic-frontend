@@ -1,12 +1,16 @@
-import { destinoTrasLogin, redireccionPara, rutaLoginTrasCierre } from '~/utils/sesion'
+import { destinoTrasLogin, esPaginaPublica, redireccionPara, rutaLoginTrasCierre } from '~/utils/sesion'
 
 /**
- * Protege todas las páginas salvo el login y aplica el perfil de la sesión: el inscrito solo entra a
+ * Protege todas las páginas salvo el login y las públicas (`publica: true`, la verificación de
+ * certificados: no leen la sesión) y aplica el perfil de la sesión: el inscrito solo entra a
  * las páginas `perfil: 'participante'`; el staff, a las que su acceso permite (`permiso` de la página).
  * Si la sesión no se pudo verificar (backend caído), va al login con el aviso `SESSION_UNAVAILABLE`
  * (la cookie se conserva y la siguiente navegación lo vuelve a intentar).
  */
 export default defineNuxtRouteMiddleware(async (to) => {
+  // Sin sesión ni consulta al BFF: un visitante (o un backend caído) no termina en el login
+  if (esPaginaPublica(to.meta)) return
+
   const auth = useAuthStore()
   if (!auth.verificado) await auth.cargarSesion()
 

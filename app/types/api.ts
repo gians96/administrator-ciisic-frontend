@@ -1,5 +1,5 @@
 // Tipos de la API administrativa de backend-ciisic
-// (contratos en backend-ciisic/specs/002…013/contracts).
+// (contratos en backend-ciisic/specs/002…015/contracts).
 
 export type CodigoEstado = 'PENDIENTE' | 'EN_REVISION' | 'APROBADO' | 'RECHAZADO' | 'CANCELADO'
 export type EstadoEvento = 'BORRADOR' | 'PUBLICADO' | 'FINALIZADO' | 'ARCHIVADO'
@@ -514,6 +514,8 @@ export interface ConfiguracionSistema {
   urlPanel: string | null
   /** Rutas del backend que usa la landing anterior (sin token de acceso). */
   rutasLegacy: { activas: boolean }
+  /** Credenciales de la API de certificados de la UNDC (spec 015); falta con el backend anterior. */
+  certificadosUndc?: CertificadosUndcSistema
   actualizadoPor: { id: number, nombres: string, apellidos: string } | null
   actualizadoEn: string
 }
@@ -524,4 +526,455 @@ export interface PruebaUndcApi {
   codigoHttp: number | null
   latenciaMs: number
   configuracion: ConfiguracionSistema
+}
+
+// ─── Certificados (backend-ciisic spec 015, `contracts/api-certificados.md`) ───
+
+/** Ciclo: PENDIENTE → (generar) PREPARADO → (subir firmado) EN_FIRMA | FIRMADO; cualquiera → ANULADO. */
+export type EstadoCertificado = 'PENDIENTE' | 'PREPARADO' | 'EN_FIRMA' | 'FIRMADO' | 'ANULADO'
+
+/** Cuántos certificados hay en cada estado (`meta.resumen` del listado, con los demás filtros). */
+export type ResumenEstados = Record<EstadoCertificado, number>
+
+/** Persona del staff que hizo algo (`creadoPor`, `emitidoPor`…). */
+export interface PersonaStaffRef {
+  id: number
+  nombres: string
+  apellidos: string
+}
+
+/** `GET /certificate-types`: PARTICIPANTE, ORGANIZADOR, PONENTE y los que se agreguen (no se borran). */
+export interface TipoCertificado {
+  id: number
+  /** `^[A-Z][A-Z0-9_]{1,39}$`; no cambia. */
+  codigo: string
+  nombre: string
+  /** Lo que estampa el campo `TIPO`. */
+  textoImpreso: string
+  activo: boolean
+  orden: number
+}
+
+/** `GET /certificate-fonts`. */
+export interface FuenteCertificado {
+  codigo: string
+  nombre: string
+}
+
+export type TipoCampoPlantilla = 'NOMBRE' | 'TIPO' | 'CODIGO' | 'QR' | 'FECHA_EMISION' | 'HORAS' | 'EVENTO' | 'DOCUMENTO' | 'DETALLE' | 'TEXTO'
+export type AlineacionCampo = 'IZQUIERDA' | 'CENTRO' | 'DERECHA'
+export type CapitalizacionCampo = 'ORIGINAL' | 'MAYUSCULAS' | 'TITULO'
+export type FormatoFechaCampo = 'LARGO' | 'CORTO'
+
+/**
+ * Campo de una plantilla, en puntos PDF absolutos de la página (origen abajo a la izquierda). En el
+ * texto, `y` es la línea base de la primera línea; en el QR, la esquina inferior izquierda. El backend
+ * guarda los campos normalizados (sin nulos y con las medidas a centésimas de pt).
+ */
+export interface CampoPlantilla {
+  /** `^[A-Za-z0-9_-]{1,40}$`, único en la plantilla. */
+  id: string
+  tipo: TipoCampoPlantilla
+  /** 1 o 2. */
+  pagina: number
+  x: number
+  y: number
+  /** Texto: ancho de la caja `[x, x + ancho]`; sin él, `x` es el ancla según la alineación. */
+  ancho?: number | null
+  /** Solo QR: 36–300 pt (por defecto 90). */
+  lado?: number | null
+  /** Código de `/certificate-fonts` (por defecto `MONTSERRAT`). */
+  fuente?: string | null
+  /** 4–200 pt (por defecto 12). */
+  tamano?: number | null
+  /** Con `ancho`: tamaño al que puede reducirse (no supera a `tamano`). */
+  tamanoMinimo?: number | null
+  /** `#rrggbb` (por defecto `#000000`). */
+  color?: string | null
+  alineacion?: AlineacionCampo | null
+  capitalizacion?: CapitalizacionCampo | null
+  /** 1–10 (por defecto 1). */
+  lineasMax?: number | null
+  /** 0,8–3 (por defecto 1,2). */
+  interlineado?: number | null
+  /** ≤500; obligatorio en `TEXTO`; en los demás reemplaza al valor. Admite marcadores (`{nombre}`…). */
+  texto?: string | null
+  formatoFecha?: FormatoFechaCampo | null
+}
+
+/** Plantilla de un evento: PDF de diseño (1–2 páginas, ≤5 MB) con sus campos. */
+export interface PlantillaCertificado {
+  id: number
+  eventoId: number
+  nombre: string
+  archivoOriginal: string
+  tamanoBytes: number
+  paginas: number
+  anchoPt: number
+  altoPt: number
+  campos: CampoPlantilla[]
+  horasPorDefecto: number | null
+  /** 1–5: con menos firmas el certificado queda `EN_FIRMA`. */
+  firmasRequeridas: number
+  /** Sube al cambiar los campos o el diseño; el editor la envía al guardar (`409 TEMPLATE_CHANGED`). */
+  version: number
+  activa: boolean
+  totalCertificados: number
+  /** Tiene certificados: no se borra (`409 TEMPLATE_IN_USE`), se desactiva. */
+  enUso: boolean
+  creadoPor: PersonaStaffRef | null
+  creadoEn: string
+  actualizadoEn: string
+}
+
+/** Aviso del estampado (vista previa y generación): el PDF se genera igual. */
+export interface AvisoEstampado {
+  /** `id` del campo, o `null` si es del documento. */
+  campo: string | null
+  /** `GLIFO_RESPALDO`, `GLIFO_FALTANTE`, `DESBORDA`, `PAGINA_INEXISTENTE`, `FUENTE_DESCONOCIDA`, `FUENTE_SIN_SUBCONJUNTO`, `URL_VERIFICACION_NO_CONFIGURADA`, `MAS_AVISOS`. */
+  codigo: string
+  mensaje: string
+}
+
+/** Elemento de `GET /events/:eventId/certificates` (y base del detalle). */
+export interface Certificado {
+  id: number
+  eventoId: number
+  /** Correlativo en el evento (no se reutiliza). */
+  numero: number
+  /** `<PREFIJO>-<AÑO>-<NNNNNN>-<XXXXXX>`, fijo desde la emisión. */
+  codigo: string
+  /** Se fija en la primera generación; `null` hasta entonces. */
+  codigoImpreso: string | null
+  estado: EstadoCertificado
+  tipo: { id: number, codigo: string, nombre: string, textoImpreso: string }
+  /** `null` si la plantilla se borró. */
+  plantilla: { id: number, nombre: string, version: number, firmasRequeridas: number } | null
+  plantillaVersion: number | null
+  /** La plantilla cambió después de generarlo (no se regenera solo). */
+  plantillaDesactualizada: boolean
+  participanteId: number
+  inscripcionId: number | null
+  ponenciaId: string | null
+  nombreImpreso: string
+  tipoDocumento: string
+  /** Completo solo con `certificados.gestionar` (si no, `****1234`). */
+  numeroDocumento: string
+  detalle: string | null
+  horas: number | null
+  /** `AAAA-MM-DD`. */
+  fechaEmision: string
+  tieneGenerado: boolean
+  tieneFirmado: boolean
+  generadoEn: string | null
+  descargadoParaFirmarEn: string | null
+  firmasDetectadas: number
+  firmadoEn: string | null
+  anuladoEn: string | null
+  creadoEn: string
+  actualizadoEn: string
+}
+
+/** `PREFIJO`: generado vigente con firmas agregadas; `METADATOS`: reescrito con el `Subject` vigente; `FORZADO`: aceptado a mano. */
+export type CoincidenciaFirmado = 'PREFIJO' | 'METADATOS' | 'FORZADO'
+
+/** Firma que verificó en el firmado vigente (CN del certificado; sin cadena de confianza). */
+export interface FirmanteCertificado {
+  nombre: string
+  emisor: string
+  serie: string
+  validoDesde: string | null
+  validoHasta: string | null
+  fechaFirma: string | null
+}
+
+/** `GET /certificates/:id`. */
+export interface CertificadoDetalle extends Certificado {
+  evento: { id: number, codigo: string, nombreCorto: string }
+  urlVerificacion: string | null
+  coincidencia: CoincidenciaFirmado | null
+  motivoForzado: string | null
+  /** `[]` sin firmado. */
+  firmantes: FirmanteCertificado[]
+  motivoAnulacion: string | null
+  codigoExterno: string | null
+  registroExterno: string | null
+  registroExternoError: string | null
+  registradoExternoEn: string | null
+  emitidoPor: PersonaStaffRef | null
+  editadoPor: PersonaStaffRef | null
+  firmadoCargadoPor: PersonaStaffRef | null
+  anuladoPor: PersonaStaffRef | null
+}
+
+/** `meta` del listado de certificados. */
+export interface MetaCertificados extends Meta {
+  resumen: ResumenEstados
+}
+
+// Emisión (`certificados.gestionar`)
+
+/** Aviso de una emisión (`CORREO_CONSERVADO`: la persona ya estaba registrada con otro correo). */
+export interface AvisoEmision {
+  codigo: string
+  mensaje: string
+}
+
+/** Persona nueva o existente (por documento) de la emisión individual: reglas del alta de participantes. */
+export interface PersonaEmision {
+  tipoDocumento: 'dni' | 'ce'
+  numeroDocumento: string
+  correo: string
+  nombres?: string
+  apellidos?: string
+  celular?: string
+}
+
+/** `POST /events/:eventId/certificates`: exactamente uno de `participanteId` o `persona`. */
+export interface CuerpoEmisionIndividual {
+  participanteId?: number
+  persona?: PersonaEmision
+  tipoCodigo: string
+  plantillaId: number
+  /** UUID: distingue dos certificados del mismo tipo para la misma persona. */
+  ponenciaId?: string | null
+  horas?: number | null
+  detalle?: string | null
+  fechaEmision?: string
+}
+
+export interface ResultadoEmisionIndividual {
+  certificado: Certificado
+  participante: { id: number, nuevo: boolean }
+  avisos: AvisoEmision[]
+}
+
+/** `POST /events/:eventId/certificates/from-inscriptions` (inscritos aprobados). */
+export interface CuerpoDesdeInscripciones {
+  tipoCodigo: string
+  plantillaId: number
+  horas?: number | null
+  fechaEmision?: string
+  filtro?: {
+    tipoInscripcionIds?: number[]
+    /** Sin `asistenciaMinima` → `422 VALIDATION_ERROR`. */
+    actividadIds?: number[]
+    /** 0–100: % de actividades con asistencia no anulada. */
+    asistenciaMinima?: number | null
+  }
+  simular?: boolean
+}
+
+export type ResultadoCandidato = 'CREAR' | 'YA_EMITIDO' | 'EXCLUIDO'
+
+export interface MuestraCandidato {
+  inscripcionId: number
+  participanteId: number
+  nombre: string
+  tipoDocumento: string
+  numeroDocumento: string
+  /** `null` sin filtro de asistencia. */
+  asistencia: { marcadas: number, total: number, porcentaje: number } | null
+  resultado: ResultadoCandidato
+}
+
+export type ResultadoDesdeInscripciones =
+  | { simular: true, candidatos: number, crear: number, yaEmitidos: number, excluidos: number, muestra: MuestraCandidato[] }
+  | { simular: false, candidatos: number, creados: number, yaEmitidos: number, excluidos: number }
+
+/** Fila de `POST /events/:eventId/certificates/import` (1–300 por solicitud). */
+export interface FilaImportacion {
+  tipoDocumento: string
+  numeroDocumento: string
+  correo: string
+  nombres?: string
+  apellidos?: string
+  detalle?: string
+  /** Vacío: las horas de la plantilla. */
+  horas?: number | null
+}
+
+export interface CuerpoImportacion {
+  tipoCodigo: string
+  plantillaId: number
+  fechaEmision?: string
+  filas: FilaImportacion[]
+  simular?: boolean
+}
+
+export type ResultadoFilaImportacion = 'CREAR' | 'CREADO' | 'YA_EMITIDO' | 'ERROR'
+
+export interface FilaResultadoImportacion {
+  /** Posición (1-based) en las filas de **esta** solicitud. */
+  fila: number
+  resultado: ResultadoFilaImportacion
+  /** `id: null` para una persona nueva al simular. */
+  participante: { id: number | null, nuevo: boolean } | null
+  /** `INVALID_ROW`, `DUPLICATE_ROW`, `EMAIL_IN_USE`, `NAMES_REQUIRED`, `LOOKUP_LIMIT` o el aviso `CORREO_CONSERVADO`. */
+  codigo: string | null
+  mensaje: string | null
+}
+
+export interface ResultadoImportacion {
+  simular: boolean
+  resumen: { total: number, porCrear: number, creados: number, yaEmitidos: number, errores: number }
+  filas: FilaResultadoImportacion[]
+}
+
+// Generación y firmados (`certificados.operar`)
+
+export type ResultadoGeneracionCertificado = 'GENERADO' | 'OMITIDO' | 'ERROR'
+
+export interface CertificadoProcesado {
+  id: number
+  codigo: string
+  resultado: ResultadoGeneracionCertificado
+  estado: EstadoCertificado
+  avisos: AvisoEstampado[]
+  /** `CERTIFICATE_NOT_FOUND`, `TEMPLATE_REQUIRED`, `TEMPLATE_FILE_MISSING`, `CERTIFICATE_CHANGED`, `GENERATION_FAILED`. */
+  codigoError: string | null
+  mensaje: string | null
+}
+
+/** `POST /events/:eventId/certificates/generate` (`{ ids }` 1–10 o `{ pendientes: true, despuesDeId }`). */
+export interface ResultadoGeneracion {
+  procesados: CertificadoProcesado[]
+  restantes: number
+  /** Cursor para la siguiente tanda de pendientes; `null` con `ids`. */
+  ultimoId: number | null
+  hayMas: boolean
+}
+
+export type ResultadoCargaArchivo =
+  | 'FIRMADO' | 'PARCIAL' | 'SIN_FIRMA' | 'NO_COINCIDE' | 'NO_ENCONTRADO' | 'OTRO_EVENTO'
+  | 'ANULADO' | 'YA_FIRMADO' | 'DUPLICADO' | 'INVALIDO'
+
+export interface ResumenCargaFirmados {
+  firmados: number
+  parciales: number
+  sinFirma: number
+  noCoincide: number
+  noEncontrados: number
+  otroEvento: number
+  anulados: number
+  yaFirmados: number
+  duplicados: number
+  invalidos: number
+}
+
+export interface DetalleCargaFirmado {
+  archivo: string
+  resultado: ResultadoCargaArchivo
+  certificadoId: number | null
+  codigo: string | null
+  estado: EstadoCertificado | null
+  firmas: number | null
+  firmasRequeridas: number | null
+  coincidencia: 'PREFIJO' | 'METADATOS' | null
+  codigoError: string | null
+  mensaje: string | null
+}
+
+/** `POST /events/:eventId/certificates/signed` (tanda de hasta 10 PDF y 25 MB). */
+export interface ResultadoCargaFirmados {
+  resumen: ResumenCargaFirmados
+  detalle: DetalleCargaFirmado[]
+}
+
+/** `PUT /certificates/:id/signed` (uno, sin emparejar por nombre). */
+export interface ResultadoFirmadoIndividual {
+  id: number
+  codigo: string
+  estado: EstadoCertificado
+  firmasDetectadas: number
+  firmasRequeridas: number
+  coincidencia: CoincidenciaFirmado
+  firmantes: FirmanteCertificado[]
+  firmadoEn: string | null
+}
+
+/** `DELETE /certificates/:id/signed`. */
+export interface ResultadoQuitarFirmado {
+  id: number
+  codigo: string
+  estado: EstadoCertificado
+}
+
+/** `POST /certificates/:id/annul`. */
+export interface ResultadoAnulacion {
+  id: number
+  codigo: string
+  estado: 'ANULADO'
+  anuladoEn: string
+  motivoAnulacion: string
+}
+
+// Configuración
+
+export type ProveedorCertificados = 'LOCAL' | 'UNDC'
+
+/** `GET|PUT /certificate-settings` (`certificados.gestionar`). */
+export interface ConfiguracionCertificados {
+  proveedor: ProveedorCertificados
+  /** `^[A-Z0-9]{2,20}$`. */
+  prefijo: string
+  /** Sin confirmar no se descarga para firmar (`409 PROVIDER_NOT_CONFIRMED`). */
+  proveedorConfirmado: boolean
+  /** `<url_panel>/verificar`; `null` sin la URL del panel en Sistema (no se genera). */
+  urlVerificacionBase: string | null
+  ejemploCodigo: string
+  ejemploUrlVerificacion: string | null
+  /** Hay certificados con el código en un PDF: el prefijo ya no cambia. */
+  prefijoBloqueado: boolean
+  certificadosGenerados: number
+  certificadosConOtroPrefijo: number
+  proveedores: Array<{ codigo: ProveedorCertificados, nombre: string, disponible: boolean }>
+  undc: { credencialesConfiguradas: boolean, disponible: boolean }
+  actualizadoEn: string | null
+}
+
+/** `certificadosUndc` de `GET /settings` (Sistema, solo Owner). El secreto nunca vuelve completo. */
+export interface CertificadosUndcSistema {
+  url: string | null
+  usuario: string | null
+  secretoEnmascarado: string | null
+  timeoutMs: number
+  configurada: boolean
+  disponible: boolean
+  ultimoEstado: 'OK' | 'ERROR' | null
+  ultimoError: string | null
+  ultimaPruebaEn: string | null
+}
+
+// Verificación pública y portal
+
+/**
+ * Verificación pública (`/api/publico/certificados/:codigo` → `/api/v1/public/certificates/:codigo`):
+ * solo FIRMADO (`VALIDO`) o `ANULADO`. Nunca lleva documento, correo, motivo ni PDF.
+ */
+export interface VerificacionCertificado {
+  codigo: string
+  estado: 'VALIDO' | 'ANULADO'
+  titular: string
+  tipo: string
+  evento: { nombre: string, fechaInicio: string, fechaFin: string }
+  fechaEmision: string
+  horas: number | null
+  /** `null` en un anulado que nunca se firmó. */
+  firmadoEn: string | null
+  /** Solo en los anulados. */
+  anuladoEn?: string | null
+}
+
+/** Elemento de `GET /me/certificates`: solo los FIRMADO propios. */
+export interface CertificadoPortal {
+  id: number
+  codigoImpreso: string
+  evento: { codigo: string, nombre: string, nombreCorto: string, fechaInicio: string, fechaFin: string }
+  tipo: { codigo: string, nombre: string }
+  fechaEmision: string
+  horas: number | null
+  detalle: string | null
+  firmadoEn: string
+  urlVerificacion: string | null
 }
