@@ -90,9 +90,11 @@ describe('permisos: accesoDeSesion', () => {
     expect(owner.eventoIds).toBeNull()
     expect(owner.permisos).toEqual(PERMISOS)
 
+    // Como en el backend: el Administrador no configura el sistema ni elimina inscripciones (spec 017)
     const administrador = accesoDeSesion({ rolCodigo: 'ADMIN' })
-    expect(administrador.permisos).toHaveLength(PERMISOS.length - 1)
+    expect(administrador.permisos).toHaveLength(PERMISOS.length - 2)
     expect(administrador.permisos).not.toContain('sistema.configurar')
+    expect(administrador.permisos).not.toContain('inscripciones.eliminar')
 
     for (const rolCodigo of ['TESORERO', 'COMISION', 'OTRO'] as const) {
       expect(accesoDeSesion({ rolCodigo: rolCodigo as 'TESORERO' }), rolCodigo).toEqual({ alcance: 'EVENTO', permisos: [], eventoIds: [], perfilParticipante: false })

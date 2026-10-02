@@ -172,10 +172,10 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–010
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–011
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
-escáner, «Disponible para» de los tipos). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
+escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
 `backend-ciisic/specs/013-roles-permisos/contracts/`; código por correo, portal, fotocheck,
 asistencia por QR, alta de participantes y cortesías en
 `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`.

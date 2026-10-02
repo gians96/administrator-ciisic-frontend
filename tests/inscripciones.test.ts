@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { Permiso } from '~/types/api'
 import { accionesInscripcion, descripcionInscripciones, hayAcciones, placeholderBusqueda } from '~/utils/inscripciones'
-import { PERMISOS } from '~/utils/permisos'
+import { PERMISOS, PERMISOS_SOLO_OWNER } from '~/utils/permisos'
 
 const con = (permisos: Permiso[]) => (permiso: Permiso) => permisos.includes(permiso)
 
-const ADMINISTRADOR = con(PERMISOS.filter((p) => p !== 'sistema.configurar'))
+const OWNER = con([...PERMISOS])
+const ADMINISTRADOR = con(PERMISOS.filter((p) => !PERMISOS_SOLO_OWNER.includes(p)))
 const TESORERO = con(['resumen.ver', 'inscripciones.ver', 'inscripciones.exportar', 'credenciales.reenviar', 'pagos.ver', 'inscripciones.validar'])
 const COMISION = con(['inscripciones.ver', 'credenciales.reenviar'])
 const SOLO_VER = con(['inscripciones.ver'])
@@ -13,12 +14,22 @@ const SOLO_VER = con(['inscripciones.ver'])
 describe('inscripciones: acciones del detalle', () => {
   it('el Administrador valida, cancela y reenvía', () => {
     expect(accionesInscripcion('PENDIENTE', ADMINISTRADOR)).toEqual({
-      verCredencial: false, reenviarCredencial: false, enRevision: true, rechazar: true, aprobar: true, cancelar: true,
+      verCredencial: false, reenviarCredencial: false, enRevision: true, rechazar: true, aprobar: true, cancelar: true, eliminar: false,
     })
     expect(accionesInscripcion('APROBADO', ADMINISTRADOR)).toEqual({
-      verCredencial: true, reenviarCredencial: true, enRevision: false, rechazar: true, aprobar: false, cancelar: true,
+      verCredencial: true, reenviarCredencial: true, enRevision: false, rechazar: true, aprobar: false, cancelar: true, eliminar: false,
     })
     expect(accionesInscripcion('CANCELADO', ADMINISTRADOR).cancelar).toBe(false)
+  })
+
+  it('solo el Owner elimina, y solo inscripciones rechazadas o canceladas (spec 017 del backend)', () => {
+    expect(accionesInscripcion('RECHAZADO', OWNER).eliminar).toBe(true)
+    expect(accionesInscripcion('CANCELADO', OWNER).eliminar).toBe(true)
+    for (const estado of ['PENDIENTE', 'EN_REVISION', 'APROBADO'] as const) expect(accionesInscripcion(estado, OWNER).eliminar).toBe(false)
+    for (const estado of ['RECHAZADO', 'CANCELADO'] as const) {
+      expect(accionesInscripcion(estado, ADMINISTRADOR).eliminar).toBe(false)
+      expect(accionesInscripcion(estado, TESORERO).eliminar).toBe(false)
+    }
   })
 
   it('el Tesorero valida pero no cancela (sin inscripciones.cancelar)', () => {

@@ -11,8 +11,8 @@ Cada cuenta de staff tiene un rol, y el panel muestra pantallas y botones según
 
 | Rol | Alcance | Qué hace |
 |---|---|---|
-| **Owner** | Todos los eventos | Todo. Único que configura Sistema y que gestiona Owners y Administradores |
-| **Administrador del sistema** | Todos los eventos | Todo menos Sistema. Gestiona Tesoreros y Comisión |
+| **Owner** | Todos los eventos | Todo. Único que configura Sistema, que elimina inscripciones (rechazadas o canceladas) y que gestiona Owners y Administradores |
+| **Administrador del sistema** | Todos los eventos | Todo menos Sistema y eliminar inscripciones. Gestiona Tesoreros y Comisión |
 | **Tesorero** | Sus eventos | Resumen e inscripciones con montos y vouchers, validar pagos (sin cancelar ni eliminar), exportar, reenviar credenciales; ver asistencia, ponencias y mensajes |
 | **Comisión tecnológica** | Sus eventos | Los permisos elegidos para su cuenta (por defecto, marcar asistencia); nunca pagos, validación ni configuración |
 
@@ -21,7 +21,7 @@ Cada cuenta de staff tiene un rol, y el panel muestra pantallas y botones según
 | Pantalla | Qué permite | Permiso de la página | Acciones con permiso propio |
 |---|---|---|---|
 | Resumen (`/`) | KPIs del evento, inscripciones por día/estado/tipo, recaudado, tarjeta "Semana Sistémica" (congreso + deportes) | `resumen.ver` | Montos: `pagos.ver` |
-| Inscripciones | Filtros, detalle con verificación UNDC y de correo (Google) | `inscripciones.ver` | Montos, pago y voucher: `pagos.ver` · aprobar/rechazar/en revisión: `inscripciones.validar` · cancelar: `inscripciones.cancelar` · eliminar: `inscripciones.eliminar` · CSV: `inscripciones.exportar` · reenviar credencial: `credenciales.reenviar` |
+| Inscripciones | Filtros, detalle con verificación UNDC y de correo (Google) | `inscripciones.ver` | Montos, pago y voucher: `pagos.ver` · aprobar/rechazar/en revisión: `inscripciones.validar` · cancelar: `inscripciones.cancelar` · eliminar (solo rechazadas o canceladas; solo el Owner): `inscripciones.eliminar` · CSV: `inscripciones.exportar` · reenviar credencial: `credenciales.reenviar` |
 | Asistencia | Registro por actividad (hora de Lima), método (QR, QR anterior, documento, manual) y quién registró; marca con el QR (código del fotocheck o QR anterior, con aviso ámbar) o el documento | `asistencia.ver` | Marcar: `asistencia.marcar` · fuera de horario: `asistencia.fuera_horario` · anular: `asistencia.anular` · exportar: `asistencia.exportar` · documento completo: `inscripciones.ver` |
 | Escanear asistencia (`/escanear`) | Escáner para la puerta a pantalla completa (sin menú lateral): cámara, lector USB o DNI sobre una actividad del evento seleccionado; resultado verde, ámbar («QR antiguo: verifica el DNI» o «Ya estaba registrada») o rojo, con nombre, documento, tipo y foto; últimas 10 lecturas. Se abre también desde «Abrir escáner» en Asistencia | `asistencia.marcar` | Fuera de horario: `asistencia.fuera_horario` |
 | Ponencias | Consulta y descarga | `ponencias.ver` | — |
@@ -40,7 +40,7 @@ Cada cuenta de staff tiene un rol, y el panel muestra pantallas y botones según
 | Pantalla | Owner | Administrador del sistema | Tesorero | Comisión tecnológica |
 |---|---|---|---|---|
 | Resumen | Sí | Sí | Sí, con montos | Con `resumen.ver`, sin montos |
-| Inscripciones | Todo | Todo | Con pagos y validación; sin cancelar ni eliminar | Con `inscripciones.ver`, sin pagos ni validación; CSV y reenviar si se los dieron |
+| Inscripciones | Todo (eliminar solo rechazadas o canceladas) | Todo menos eliminar | Con pagos y validación; sin cancelar ni eliminar | Con `inscripciones.ver`, sin pagos ni validación; CSV y reenviar si se los dieron |
 | Asistencia | Todo | Todo | Ver y exportar (no marca) | Según sus permisos (marcar incluye ver) |
 | Escanear asistencia | Sí | Sí | — | Si marca asistencia |
 | Ponencias · Mensajes | Sí (y eliminar mensajes) | Sí (y eliminar mensajes) | Ver | Ver, si se los dieron |

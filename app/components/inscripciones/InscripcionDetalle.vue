@@ -6,7 +6,7 @@ import { fechaCorreoVerificado, textoCorreoVerificado } from '~/utils/cuentaGoog
 import { accionesInscripcion, hayAcciones } from '~/utils/inscripciones'
 
 const props = defineProps<{ inscripcionId: number | null }>()
-const emit = defineEmits<{ cerrar: [], actualizada: [detalle: InscripcionDetalle] }>()
+const emit = defineEmits<{ cerrar: [], actualizada: [detalle: InscripcionDetalle], eliminada: [id: number] }>()
 
 const { api, urlArchivo, releerAcceso } = useApi()
 const auth = useAuthStore()
@@ -96,6 +96,30 @@ async function cancelar() {
     peligro: true,
   })
   if (ok) await cambiarEstado('CANCELADO')
+}
+
+/** Solo el Owner y solo rechazadas o canceladas (spec 017 del backend): borra la fila, el voucher y la credencial. */
+async function eliminar() {
+  if (!detalle.value) return
+  const inscripcion = detalle.value
+  const ok = await confirmar({
+    titulo: 'Eliminar inscripción',
+    mensaje: `¿Eliminar la inscripción de ${nombreCompleto(inscripcion.participante)}? Se borran también su voucher y su credencial, y no se puede deshacer. Para volver a inscribirse no hace falta eliminarla: una inscripción rechazada o cancelada se reutiliza al enviar el formulario de nuevo.`,
+    textoConfirmar: 'Eliminar inscripción',
+    peligro: true,
+  })
+  if (!ok) return
+  procesando.value = 'eliminar'
+  try {
+    await api(`inscriptions/${inscripcion.id}`, { method: 'DELETE' })
+    toast.exito('Inscripción eliminada.')
+    emit('eliminada', inscripcion.id)
+  } catch (error) {
+    // Un 403 (permiso retirado) ya hace que useApi relea el acceso y oculte el botón
+    toast.error(mensajeError(error))
+  } finally {
+    procesando.value = null
+  }
 }
 
 async function rechazar() {
@@ -226,6 +250,7 @@ const correoVerificado = computed(() => textoCorreoVerificado(detalle.value?.ver
     </div>
 
     <template v-if="detalle && acciones && hayAcciones(acciones)" #acciones>
+      <AppButton v-if="acciones.eliminar" variant="ghost" icon="heroicons:trash" :loading="procesando === 'eliminar'" @click="eliminar">Eliminar</AppButton>
       <AppButton v-if="acciones.cancelar" variant="ghost" icon="heroicons:no-symbol" :loading="procesando === 'CANCELADO'" @click="cancelar">Cancelar inscripción</AppButton>
       <template v-if="acciones.verCredencial">
         <a

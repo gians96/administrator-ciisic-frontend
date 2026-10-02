@@ -12,12 +12,18 @@ export interface AccionesInscripcion {
   rechazar: boolean
   aprobar: boolean
   cancelar: boolean
+  /** Borrar una rechazada o cancelada (solo el Owner tiene `inscripciones.eliminar`, spec 017 del backend). */
+  eliminar: boolean
 }
+
+/** Estados que se pueden eliminar: los mismos que liberan el lugar para volver a inscribirse. */
+const ESTADOS_ELIMINABLES: readonly CodigoEstado[] = ['RECHAZADO', 'CANCELADO']
 
 /**
  * Acciones según el estado y los permisos: validar (en revisión, rechazar, aprobar) con
  * `inscripciones.validar`; cancelar exige además `inscripciones.cancelar` (el backend responde
- * `STATUS_NOT_ALLOWED` sin él); reenviar la credencial de una aprobada con `credenciales.reenviar`.
+ * `STATUS_NOT_ALLOWED` sin él); reenviar la credencial de una aprobada con `credenciales.reenviar`;
+ * eliminar una rechazada o cancelada con `inscripciones.eliminar` (solo el Owner).
  */
 export function accionesInscripcion(estado: CodigoEstado, puede: Puede): AccionesInscripcion {
   const aprobada = estado === 'APROBADO'
@@ -29,6 +35,7 @@ export function accionesInscripcion(estado: CodigoEstado, puede: Puede): Accione
     rechazar: validar && estado !== 'RECHAZADO',
     aprobar: validar && !aprobada,
     cancelar: validar && puede('inscripciones.cancelar') && estado !== 'CANCELADO',
+    eliminar: puede('inscripciones.eliminar') && ESTADOS_ELIMINABLES.includes(estado),
   }
 }
 

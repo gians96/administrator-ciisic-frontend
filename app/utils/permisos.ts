@@ -140,10 +140,13 @@ export function tienePermiso(acceso: AccesoPanel | null | undefined, permiso: Pe
   return buscados.some((p) => acceso.permisos.includes(p))
 }
 
+/** Permisos que solo tiene el Owner (`PERMISOS_SOLO_OWNER` del backend, spec 017). */
+export const PERMISOS_SOLO_OWNER: readonly Permiso[] = ['sistema.configurar', 'inscripciones.eliminar']
+
 /** Acceso por rol para sesiones sin `acceso` (respuestas anteriores a la spec 013). */
 function accesoPorRol(codigo: unknown): AccesoPanel {
   if (codigo === 'SUPERADMIN') return { alcance: 'GLOBAL', permisos: [...PERMISOS], eventoIds: null, perfilParticipante: false }
-  if (codigo === 'ADMIN') return { alcance: 'GLOBAL', permisos: PERMISOS.filter((p) => p !== 'sistema.configurar'), eventoIds: null, perfilParticipante: false }
+  if (codigo === 'ADMIN') return { alcance: 'GLOBAL', permisos: PERMISOS.filter((p) => !PERMISOS_SOLO_OWNER.includes(p)), eventoIds: null, perfilParticipante: false }
   return { ...SIN_ACCESO, permisos: [], eventoIds: [] }
 }
 
@@ -154,7 +157,7 @@ function esAlcance(valor: unknown): valor is AlcanceRol {
 /**
  * Acceso de la cuenta de staff a partir del usuario de la sesión: `usuario.acceso` normalizado
  * (permisos conocidos, ids de evento válidos). Sin `acceso`, se deduce del rol: Owner todos,
- * Administrador todos menos `sistema.configurar`, cualquier otro ninguno.
+ * Administrador todos menos los de `PERMISOS_SOLO_OWNER`, cualquier otro ninguno.
  */
 export function accesoDeSesion(usuario: Pick<Usuario, 'rolCodigo' | 'acceso'> | null | undefined): AccesoPanel {
   if (!usuario) return { ...SIN_ACCESO, permisos: [], eventoIds: [] }

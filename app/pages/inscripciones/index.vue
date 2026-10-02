@@ -108,6 +108,12 @@ watch(() => eventos.seleccionadoId, (id, anterior) => {
   cargar()
 }, { immediate: true })
 
+/** Eliminada desde el detalle (solo el Owner): se cierra y se recarga la página actual. */
+function alEliminar() {
+  seleccionada.value = null
+  cargar()
+}
+
 function alActualizar(detalle: InscripcionDetalle) {
   const fila = filas.value.find((item) => item.id === detalle.id)
   if (fila) {
@@ -244,6 +250,6 @@ function limpiar() {
       </section>
     </template>
 
-    <InscripcionDetalle :inscripcion-id="seleccionada" @cerrar="seleccionada = null" @actualizada="alActualizar" />
+    <InscripcionDetalle :inscripcion-id="seleccionada" @cerrar="seleccionada = null" @actualizada="alActualizar" @eliminada="alEliminar" />
   </div>
 </template>
