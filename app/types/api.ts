@@ -178,6 +178,12 @@ export type EventoListado = EventoResumido & Partial<Omit<Evento, keyof EventoRe
 
 export interface Caracteristica { icon: string, text: string }
 
+/**
+ * A quién se ofrece un tipo (spec 016 del backend): a todos, solo a la comunidad UNDC (quien recibe
+ * el precio institucional) o solo a los externos.
+ */
+export type DisponiblePara = 'TODOS' | 'INSTITUCIONAL' | 'EXTERNOS'
+
 export interface TipoInscripcion {
   id: number
   categoriaId: number
@@ -190,6 +196,8 @@ export interface TipoInscripcion {
   precio: number | null
   /** `null` sin `pagos.ver`. */
   precioInstitucional: number | null
+  /** Ausente con un backend anterior a la spec 016: equivale a `TODOS`. */
+  disponiblePara?: DisponiblePara
   activo: boolean
   orden: number
   totalInscripciones?: number

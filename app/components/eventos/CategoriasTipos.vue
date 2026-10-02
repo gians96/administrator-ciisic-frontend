@@ -3,6 +3,7 @@ import type { Caracteristica, Categoria, Respuesta, TipoInscripcion } from '~/ty
 import { numero, soles } from '~/utils/formato'
 import { aErrorApi, mensajeError } from '~/utils/errores'
 import { clonarLista } from '~/utils/clonar'
+import { OPCIONES_DISPONIBILIDAD, ayudaDisponibilidad, cuerpoTipo, type FormularioTipo } from '~/utils/tiposInscripcion'
 
 const props = defineProps<{ eventoId: number }>()
 
@@ -79,7 +80,8 @@ async function eliminarCategoria(categoria: Categoria) {
 const tipoModal = ref(false)
 const tipoCategoria = ref<Categoria | null>(null)
 const tipoEditando = ref<TipoInscripcion | null>(null)
-const tipoForm = reactive({ codigo: '', nombre: '', etiqueta: '', descripcion: '', precio: 0, precioInstitucional: 0, activo: true, orden: 0 })
+const tipoForm = reactive<FormularioTipo>({ codigo: '', nombre: '', etiqueta: '', descripcion: '', precio: 0, precioInstitucional: 0, disponiblePara: 'TODOS', activo: true, orden: 0 })
+const soloExternos = computed(() => tipoForm.disponiblePara === 'EXTERNOS')
 const caracteristicas = ref<Caracteristica[]>([])
 /**
  * Los precios llegan en `null` sin `pagos.ver`: al editar no se muestran ni se envían, así el backend
@@ -100,6 +102,7 @@ function abrirTipo(categoria: Categoria, tipo?: TipoInscripcion) {
     descripcion: tipo?.descripcion ?? '',
     precio: tipo?.precio ?? 0,
     precioInstitucional: tipo?.precioInstitucional ?? 0,
+    disponiblePara: tipo?.disponiblePara ?? 'TODOS',
     activo: tipo?.activo ?? true,
     orden: tipo?.orden ?? categoria.tipos.length + 1,
   })
@@ -110,18 +113,15 @@ function abrirTipo(categoria: Categoria, tipo?: TipoInscripcion) {
 
 async function guardarTipo() {
   if (!tipoCategoria.value) return
-  guardando.value = true
   errores.value = {}
-  const { precio, precioInstitucional, ...resto } = tipoForm
-  const body = {
-    ...resto,
-    codigo: tipoForm.codigo.trim().toLowerCase(),
-    etiqueta: tipoForm.etiqueta.trim() || null,
-    descripcion: tipoForm.descripcion.trim() || null,
-    ...(preciosOcultos.value ? {} : { precio: Number(precio), precioInstitucional: Number(precioInstitucional) }),
-    orden: Number(tipoForm.orden) || 0,
-    caracteristicas: caracteristicas.value.filter((c) => c.text.trim()).map((c) => ({ icon: c.icon.trim() || 'heroicons:check', text: c.text.trim() })),
+  const resultado = cuerpoTipo(tipoForm, caracteristicas.value, { preciosOcultos: preciosOcultos.value })
+  if (!resultado.ok) {
+    errores.value = resultado.errores
+    toast.error('Revisa los precios del tipo de inscripción.')
+    return
   }
+  const { body } = resultado
+  guardando.value = true
   try {
     if (tipoEditando.value) await api(`registration-types/${tipoEditando.value.id}`, { method: 'PUT', body })
     else await api(`registration-categories/${tipoCategoria.value.id}/types`, { method: 'POST', body })
@@ -163,7 +163,7 @@ async function eliminarTipo(tipo: TipoInscripcion) {
   <div class="space-y-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <p class="max-w-2xl text-sm text-slate-400">
-        Las categorías agrupan los planes (p. ej. Estudiantes y Público general). Una categoría <strong class="text-slate-200">estudiantil</strong> activa la verificación UNDC: solo los estudiantes verificados pagan el precio institucional.
+        Las categorías agrupan los planes (p. ej. Estudiantes y Público general). Una categoría <strong class="text-slate-200">estudiantil</strong> activa la verificación UNDC: solo los estudiantes verificados pagan el precio institucional. Con <strong class="text-slate-200">Disponible para</strong> un tipo se ofrece a todos, solo a la comunidad UNDC o solo a los externos.
       </p>
       <AppButton icon="heroicons:plus" @click="abrirCategoria()">Nueva categoría</AppButton>
     </div>
@@ -195,11 +195,18 @@ async function eliminarTipo(tipo: TipoInscripcion) {
           <tbody>
             <tr v-for="tipo in categoria.tipos" :key="tipo.id">
               <td>
-                <p class="font-medium text-white">{{ tipo.nombre }} <AppBadge v-if="tipo.etiqueta" tono="brand" class="ml-1">{{ tipo.etiqueta }}</AppBadge></p>
+                <p class="font-medium text-white">
+                  {{ tipo.nombre }} <AppBadge v-if="tipo.etiqueta" tono="brand" class="ml-1">{{ tipo.etiqueta }}</AppBadge>
+                  <AppBadge v-if="tipo.disponiblePara === 'EXTERNOS'" tono="warn" class="ml-1">Solo externos</AppBadge>
+                  <AppBadge v-else-if="tipo.disponiblePara === 'INSTITUCIONAL'" tono="info" class="ml-1">Solo UNDC</AppBadge>
+                </p>
                 <p class="font-mono text-xs text-slate-500">{{ tipo.codigo }}</p>
               </td>
               <td class="text-right tabular-nums">{{ soles(tipo.precio) }}</td>
-              <td class="text-right tabular-nums">{{ soles(tipo.precioInstitucional) }}</td>
+              <td class="text-right tabular-nums whitespace-nowrap">
+                <span v-if="tipo.disponiblePara === 'EXTERNOS'" class="text-slate-500">No aplica</span>
+                <template v-else>{{ soles(tipo.precioInstitucional) }}</template>
+              </td>
               <td class="text-right tabular-nums">{{ numero(tipo.totalInscripciones) }}</td>
               <td>
                 <button type="button" class="cursor-pointer" :aria-label="tipo.activo ? 'Desactivar tipo' : 'Activar tipo'" @click="alternarActivo(tipo)">
@@ -259,13 +266,21 @@ async function eliminarTipo(tipo: TipoInscripcion) {
           <AppField label="Precio regular (S/)" for="tipo-precio" required :error="errores.precio">
             <input id="tipo-precio" v-model.number="tipoForm.precio" type="number" min="0" step="0.01" class="field-control">
           </AppField>
-          <AppField label="Precio UNDC / institucional (S/)" for="tipo-precio-inst" required :error="errores.precioInstitucional ?? errores.body">
-            <input id="tipo-precio-inst" v-model.number="tipoForm.precioInstitucional" type="number" min="0" step="0.01" class="field-control">
+          <AppField
+            label="Precio UNDC / institucional (S/)" for="tipo-precio-inst" :required="!soloExternos" :error="errores.precioInstitucional ?? errores.body"
+            :hint="soloExternos ? 'No aplica: este tipo no se ofrece a la comunidad UNDC.' : '0 = gratis para la comunidad UNDC.'"
+          >
+            <input id="tipo-precio-inst" v-model.number="tipoForm.precioInstitucional" type="number" min="0" step="0.01" class="field-control" :disabled="soloExternos">
           </AppField>
         </template>
         <p v-else class="rounded-xl bg-white/5 px-4 py-3 text-sm text-slate-300 md:col-span-2">
           Tu cuenta no puede ver los precios: se conservan los actuales.
         </p>
+        <AppField label="Disponible para" for="tipo-disponible" class="md:col-span-2" :error="errores.disponiblePara" :hint="ayudaDisponibilidad(tipoCategoria?.esEstudiantil === true)">
+          <select id="tipo-disponible" v-model="tipoForm.disponiblePara" class="field-control">
+            <option v-for="opcion in OPCIONES_DISPONIBILIDAD" :key="opcion.valor" :value="opcion.valor">{{ opcion.etiqueta }}</option>
+          </select>
+        </AppField>
         <AppField label="Descripción" for="tipo-desc" class="md:col-span-2">
           <textarea id="tipo-desc" v-model="tipoForm.descripcion" rows="2" class="field-control" maxlength="1000" />
         </AppField>
