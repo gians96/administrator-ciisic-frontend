@@ -27,7 +27,7 @@ Cada cuenta de staff tiene un rol, y el panel muestra pantallas y botones según
 | Ponencias | Consulta y descarga | `ponencias.ver` | — |
 | Mensajes | Consulta | `mensajes.ver` | Eliminar: `mensajes.eliminar` |
 | Eventos (lista, nuevo y detalle) | General (datos, remitente), Datos de pago (cuentas y billeteras con su QR: arrastrar y soltar), Categorías y tipos, Actividades, Integraciones (deportes-fi), **Acceso** (tokens de la landing) | `eventos.configurar` | Eliminar: `eventos.eliminar` · credencial de correo: `correo.configurar` |
-| Tipos de inscripción | Planes del evento | `eventos.configurar` | — |
+| Tipos de inscripción | Planes del evento: precio, precio UNDC y **Disponible para** (todos, solo comunidad UNDC o solo externos; spec 010) | `eventos.configurar` | — |
 | Consultas DNI | Pool de tokens (Decolecta/apiperu), uso, bitácora, consulta manual | `consultas_dni.gestionar` | — |
 | Participantes | Consulta y edición (el celular puede quedar vacío); desvincular Google; «Nuevo participante» sin inscripción (ponentes, organizadores, inscripción en persona; con DNI, nombres de RENIEC) | `participantes.gestionar` | «Inscripción de cortesía» (aprobada, sin pago, credencial opcional): `inscripciones.cortesia` |
 | Correo | Credenciales de Brevo, prueba de cuenta, correo de prueba | `correo.configurar` | — |
