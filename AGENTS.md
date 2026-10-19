@@ -122,11 +122,17 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
 - **Modalidad de asistencia** (spec 012): cada tipo es `PRESENCIAL` (por defecto) o `VIRTUAL`; los virtuales viven
   dentro de las categorías existentes (Estudiantes y Público general), con `precio == precioInstitucional`.
   Todo es tolerante (`modalidadDe`, `esVirtual` en `app/utils/modalidad.ts`): ausente, `null` o desconocida =
-  presencial, y contra un backend sin la spec 018 las pantallas se ven como antes (el filtro «Modalidad» solo se
-  ofrece si los tipos traen `modalidad`: `backendConModalidad`). **Nada se bloquea**: el escáner solo muestra un
-  aviso ámbar que no espera «Continuar» (eso es solo del QR anterior), y el portal muestra el fotocheck y el QR
-  igual. Los textos son neutros (sin enlaces, horas ni certificado) hasta que la organización responda cómo se
-  entrega el acceso, qué certificados y asistencia corresponden a los virtuales y si se exige constancia.
+  presencial, y contra un backend sin la spec 018 las pantallas se ven como antes. Lo nuevo aparece solo cuando se
+  usa: el filtro «Modalidad» del listado y el bloque Presencial / Virtual del Resumen requieren un tipo virtual
+  (`hayTiposVirtuales`, `filasModalidadVisibles`), no solo un backend con la 018. **Orden de despliegue: el backend
+  018 primero.** El backend anterior descarta `modalidad` sin error y el tipo quedaría presencial: el editor de
+  tipos lo advierte (`backendSinModalidad`, `modalidadVirtualNoGuardada`). La tarifa única se precarga solo al
+  crear un tipo (nunca al editar) y se confirma al guardar si los precios difieren (`avisoTarifaUnica`).
+  **Nada se bloquea**: el escáner y la pantalla Asistencia solo muestran un aviso ámbar (`resultadoDeMarca`,
+  `tonoDeMarca`/`textoMarca`) que no espera «Continuar» (eso es solo del QR anterior), y el portal muestra el
+  fotocheck y el QR igual. Los textos son neutros (sin enlaces, horas ni certificado) hasta que la organización
+  responda cómo se entrega el acceso, qué certificados y asistencia corresponden a los virtuales y si se exige
+  constancia.
 - Foto del perfil: recodificada con canvas (recorte cuadrado centrado, JPEG de 600 × 600 px, mínimo
   200 px) y con la casilla de consentimiento obligatoria; el multipart lleva solo `file` y
   `consentimiento=true`.

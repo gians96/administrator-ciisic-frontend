@@ -155,7 +155,9 @@ perfil del inscrito, la atiende `server/api/portal/index.ts` → `/api/v1/me`):
 - Inscripción virtual (spec 012): si `inscripcion.tipoInscripcion.modalidad` es `VIRTUAL`, la marca ya quedó
   registrada y el resultado es ámbar «Asistencia registrada» con «Inscripción virtual: verifica si corresponde
   el ingreso presencial» (`resultadoDeMarca`). No bloquea ni espera «Continuar» (eso es solo del QR anterior,
-  al que se le suma el aviso): se cierra solo y la cámara no se pausa.
+  al que se le suma el aviso): se cierra solo y la cámara no se pausa. La pantalla Asistencia (`/asistencia`:
+  lector USB y documento) usa el mismo POST y el mismo criterio: `tonoDeMarca` la pone en ámbar y `textoMarca`
+  suma el aviso al mensaje de la marca.
 
 ## Alta de participantes y cortesías (spec 009)
 
@@ -175,16 +177,25 @@ perfil del inscrito, la atiende `server/api/portal/index.ts` → `/api/v1/me`):
   transparente: la clave y el filtro `?modalidad=` pasan tal cual).
 - `app/utils/modalidad.ts` concentra la tolerancia: `modalidadDe` (solo `'VIRTUAL'` es virtual; ausente,
   `null` o desconocida = presencial), `esVirtual`, `etiquetaModalidad`, `etiquetaDeInsignia` (omite la etiqueta
-  que solo repite «VIRTUAL»), `backendConModalidad` y los textos neutros del portal. La insignia es
-  `AppBadgeVirtual`. Contra un backend sin la spec 018 las pantallas se ven como antes.
+  que solo repite «VIRTUAL»), `backendConModalidad`, `hayTiposVirtuales`, `backendSinModalidad`,
+  `modalidadVirtualNoGuardada` y los textos neutros del portal. La insignia es `AppBadgeVirtual`. Contra un
+  backend sin la spec 018 las pantallas se ven como antes, salvo el editor de tipos, que avisa que no puede
+  guardar la modalidad.
 - Editor de tipos (`CategoriasTipos.vue` con `app/utils/tiposInscripcion.ts`): selector «Modalidad»;
   `cuerpoTipo` envía `modalidad` siempre (también sin `pagos.ver`: no es un precio) y `formularioDeTipo` parte de
-  `PRESENCIAL` si el backend no la devuelve. Con «Virtual» el Precio UNDC se precarga con el regular si sigue en
-  el valor de fábrica y hay «Igualar al precio regular» (tarifa única).
+  `PRESENCIAL` si el backend no la devuelve. En un tipo **nuevo**, «Virtual» precarga el Precio UNDC con el
+  regular si sigue en el valor de fábrica, volver a «Presencial» lo restaura (`precioUndcAlCambiarModalidad`) y
+  hay «Igualar al precio regular» (tarifa única); al **editar** un tipo no se toca ningún precio. Si un virtual
+  se guarda con el precio UNDC distinto del regular (`avisoTarifaUnica`, p. ej. 0), se pide confirmación.
+  Orden de despliegue: el backend con la spec 018 va **primero**. Un backend anterior descarta la clave
+  `modalidad` sin error (validación `stripUnknown`) y el tipo quedaría presencial: con «Virtual» elegido y
+  ningún tipo con modalidad, el selector muestra una advertencia (`backendSinModalidad`), y tras guardar, si la
+  respuesta no trae el tipo como virtual, un aviso lo dice (`modalidadVirtualNoGuardada`) en lugar de «guardado».
 - Inscripciones: filtro `modalidad` en `app/utils/filtros.ts` (lista y CSV por `aParametros`); el selector solo
-  se ofrece si los tipos traen `modalidad`, porque un backend anterior ignoraría el filtro sin avisar. Resumen:
-  `filasPorModalidad` arma el bloque Presencial / Virtual desde `totales.porModalidad` (sin el dato, no hay
-  bloque; los montos llegan en `null` sin `pagos.ver`).
+  se ofrece cuando existe un tipo virtual (`hayTiposVirtuales`; implica que el backend envía la modalidad, y un
+  backend anterior ignoraría el filtro sin avisar). Resumen: `filasModalidadVisibles` (sobre `filasPorModalidad`)
+  arma el bloque Presencial / Virtual desde `totales.porModalidad` solo cuando el evento ya tiene un tipo o
+  inscripciones virtuales (sin el dato o sin virtuales, no hay bloque; los montos llegan en `null` sin `pagos.ver`).
 - Portal: `explicacionEstado` y `lugarDelEvento` (`app/utils/misInscripciones.ts`) dan el texto neutro y
   «Modalidad virtual» en lugar de la sede; el fotocheck se muestra completo (QR incluido) con la insignia
   «Virtual» y una nota. «Mi asistencia» no cambia: `GET /me/attendances` no trae la modalidad.

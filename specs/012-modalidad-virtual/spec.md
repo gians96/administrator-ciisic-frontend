@@ -20,7 +20,8 @@ presencial (con kit o sin kit). Contrato: `backend-ciisic/specs/018-modalidad-vi
    `disponiblePara` no cambian.
 3. **Todo es aditivo y tolerante**: `modalidad` ausente, `null` o desconocida se lee `PRESENCIAL` (también
    el tipo `null` de una cortesía). «Backend nuevo + panel viejo» y «panel nuevo + backend viejo» siguen
-   funcionando sin errores y, contra un backend sin la spec 018, las pantallas se ven exactamente como hoy.
+   funcionando sin errores y, contra un backend sin la spec 018, las pantallas se ven como hoy; la única
+   excepción es el editor de tipos, que **avisa** que la modalidad no se puede guardar (ver «Orden de despliegue»).
 4. Sin variables de entorno nuevas; el BFF (`server/`) es un proxy transparente y no cambia.
 
 ## Terminología: no confundir
@@ -40,29 +41,39 @@ presencial (con kit o sin kit). Contrato: `backend-ciisic/specs/018-modalidad-vi
 
 1. **Given** el formulario de un tipo (Eventos → Categorías y tipos, o Tipos de inscripción), **Then** hay
    un selector «Modalidad» (Presencial / Virtual) con su ayuda; un tipo nuevo nace Presencial.
-2. **Given** elijo «Virtual» y el Precio UNDC sigue en su valor de fábrica (0 o vacío), **Then** se
-   precarga con el precio regular (tarifa única); si ya escribí otro valor, no se toca. Mientras sean
-   distintos aparece «Igualar al precio regular» y la ayuda del campo avisa que con 0 la comunidad UNDC
-   se inscribe gratis. Nada de esto es obligatorio.
+2. **Given** creo un tipo **nuevo** y elijo «Virtual» con el Precio UNDC en su valor de fábrica (0 o vacío),
+   **Then** se precarga con el precio regular (tarifa única); si ya escribí otro valor, no se toca, y si
+   vuelvo a «Presencial» sin haberlo cambiado a mano, se restaura el valor anterior. **Given** edito un
+   tipo **existente**, **Then** elegir «Virtual» o «Presencial» no toca ningún precio (un Precio UNDC de 0
+   es un dato real: «gratis para la comunidad UNDC»). Mientras los precios sean distintos aparece «Igualar
+   al precio regular» y la ayuda del campo avisa que con 0 la comunidad UNDC se inscribe gratis.
+   **Given** guardo un virtual con el precio UNDC distinto del regular (p. ej. elegí «Virtual» antes de
+   escribir 30 y quedó en 0), **Then** se pide confirmación («Tarifa única … ¿Guardar así?»); no bloquea.
 3. **Given** un tipo virtual en la tabla, **Then** lleva la insignia «Virtual» (la etiqueta que solo dice
    «VIRTUAL» no se repite).
 4. **Given** edito un tipo que el backend aún no devuelve con modalidad, **Then** el formulario parte de
    Presencial y todo sigue funcionando.
 5. **Given** una cuenta sin `pagos.ver`, **Then** puede cambiar la modalidad (no es un precio) y no se
-   envían precios.
+   envían precios (ni se pide la confirmación de tarifa única).
+6. **Given** un backend anterior a la spec 018 (hay tipos y ninguno trae `modalidad`) y elijo «Virtual»,
+   **Then** el selector muestra una advertencia («el servidor aún no admite la modalidad virtual … Despliega
+   primero el backend»). **Given** guardo un tipo «Virtual» y la respuesta del backend no lo devuelve como
+   virtual, **Then** en lugar de «Tipo de inscripción guardado.» se avisa que se guardó como PRESENCIAL.
 
 ### User Story 2 - Distinguir a los inscritos virtuales (Priority: P1)
 
 **Acceptance Scenarios**:
 
-1. **Given** el listado de inscripciones, **Then** la columna Tipo muestra «Virtual» en las virtuales y el
-   filtro «Modalidad» (Presencial y virtual / Solo presencial / Solo virtual) se combina con los demás
-   filtros; «Exportar CSV» hereda el filtro y el backend agrega su columna «Modalidad de asistencia».
+1. **Given** el listado de inscripciones, **Then** la columna Tipo muestra «Virtual» en las virtuales y, si
+   existe algún tipo virtual, el filtro «Modalidad» (Presencial y virtual / Solo presencial / Solo virtual) se
+   combina con los demás filtros; «Exportar CSV» hereda el filtro y el backend agrega su columna «Modalidad de
+   asistencia». Sin ningún tipo virtual el filtro no se ofrece (siempre devolvería lo mismo o nada).
 2. **Given** el detalle de una inscripción, **Then** muestra «Modalidad de asistencia» y, si es virtual, la
    insignia «Virtual». La verificación de estudiante y la marca «validar» siguen siendo las de la categoría.
-3. **Given** el Resumen con `totales.porModalidad`, **Then** un bloque compacto compara Presencial y Virtual
-   (inscripciones, aprobadas y, con `pagos.ver`, monto); sin ese dato no se muestra nada. La tabla «Por
-   tipo» marca los tipos virtuales.
+3. **Given** el Resumen con `totales.porModalidad` y un evento que ya tiene un tipo virtual (o inscripciones
+   virtuales), **Then** un bloque compacto compara Presencial y Virtual (inscripciones, aprobadas y, con
+   `pagos.ver`, monto); sin ese dato, o sin tipos ni inscripciones virtuales, no se muestra nada (el backend
+   envía siempre las dos filas y «Virtual: 0» sería ruido). La tabla «Por tipo» marca los tipos virtuales.
 
 ### User Story 3 - El escáner avisa, no bloquea (Priority: P1)
 
@@ -74,6 +85,9 @@ presencial (con kit o sin kit). Contrato: `backend-ciisic/specs/018-modalidad-vi
    es solo del QR anterior). La cámara no se pausa.
 2. **Given** el QR anterior de una inscripción virtual, **Then** sigue esperando «Continuar» y el aviso
    virtual se suma a su mensaje.
+3. **Given** la pantalla Asistencia (`/asistencia`: lector USB o documento, el mismo `POST /activities/:id/attendances`),
+   **Then** la marca de un virtual sale en ámbar y su mensaje suma el mismo aviso (`tonoDeMarca` y `textoMarca`);
+   nada se bloquea.
 
 ### User Story 4 - El inscrito virtual lee un texto neutro (Priority: P2)
 
@@ -92,11 +106,24 @@ presencial (con kit o sin kit). Contrato: `backend-ciisic/specs/018-modalidad-vi
 - Backend anterior a la spec 018 (sin `modalidad`): todo se lee Presencial; el filtro «Modalidad» no se
   ofrece (el backend anterior ignoraría `?modalidad=` sin avisar y el listado parecería filtrado sin
   estarlo) salvo que la URL ya lo traiga; el detalle no muestra la fila; el Resumen no muestra el bloque.
+- Backend con la spec 018 pero **sin tipos virtuales creados**: el Resumen no muestra el bloque y el
+  listado no ofrece el filtro «Modalidad»; aparecen cuando existe el primer tipo virtual (o inscripciones
+  virtuales). El detalle de una inscripción sí muestra la fila «Modalidad de asistencia» (Presencial).
 - Una modalidad desconocida (`HIBRIDA`, `null`…) se trata como Presencial en pantalla y viaja como
   `PRESENCIAL` al guardar un tipo (el backend responde 422 con `fields.modalidad` a otro valor).
 - «Mi asistencia» no cambia: `GET /me/attendances` no trae la modalidad (ver «Pendientes»).
 - Un tipo nuevo nace activo y la landing lo ofrece apenas se guarda: crear los virtuales con «Activo»
   apagado hasta que el backend con la spec 018 esté desplegado.
+
+## Orden de despliegue
+
+Cada repositorio se despliega solo con su push a `main`. Para crear los tipos virtuales **el backend con la
+spec 018 se despliega primero**: el backend anterior valida con `stripUnknown`, descarta la clave
+`modalidad` sin error y guarda el tipo presencial (conserva la etiqueta «VIRTUAL», así que la fila parece
+correcta). Y el script `configurar-virtual.sql` solo inserta, nunca actualiza, así que no corregiría ese tipo.
+Por eso el editor advierte bajo el selector (`backendSinModalidad`) y, tras guardar, avisa si la respuesta no
+trae el tipo como virtual (`modalidadVirtualNoGuardada`). Con «panel nuevo + backend anterior» lo demás se
+ve como antes.
 
 ## Requirements
 
@@ -107,11 +134,13 @@ presencial (con kit o sin kit). Contrato: `backend-ciisic/specs/018-modalidad-vi
   `etiquetaDeInsignia`, `backendConModalidad`, textos neutros) y `app/components/ui/AppBadgeVirtual.vue`.
 - **FR-003**: `app/utils/tiposInscripcion.ts`: `OPCIONES_MODALIDAD`, `FormularioTipo.modalidad`,
   `formularioDeTipo`, `cuerpoTipo` (envía `modalidad`, también sin `pagos.ver`), tarifa única
-  (`precioUndcAlElegirVirtual`, `sePuedeIgualarPrecioUndc`) y ayudas; `CategoriasTipos.vue`.
+  (`precioUndcAlElegirVirtual`, `precioUndcAlCambiarModalidad`, `sePuedeIgualarPrecioUndc`, `avisoTarifaUnica`)
+  y ayudas; `CategoriasTipos.vue` (advertencia y aviso de un backend sin la spec 018).
 - **FR-004**: `app/utils/filtros.ts` (`modalidad` en el filtro, la URL y `aParametros`) y
   `app/pages/inscripciones/index.vue` (insignia, filtro, `limpiar()`, rejilla); `InscripcionDetalle.vue`.
-- **FR-005**: `app/utils/resumen.ts` (`filasPorModalidad`) y `app/pages/index.vue` (bloque y tabla).
-- **FR-006**: `app/utils/asistencia.ts` (`resultadoDeMarca` con el aviso virtual, sin `esperaContinuar`).
+- **FR-005**: `app/utils/resumen.ts` (`filasPorModalidad`, `filasModalidadVisibles`) y `app/pages/index.vue` (bloque y tabla).
+- **FR-006**: `app/utils/asistencia.ts` (`resultadoDeMarca` con el aviso virtual, sin `esperaContinuar`; `tonoDeMarca`
+  y `textoMarca` para `/asistencia`).
 - **FR-007**: `app/utils/misInscripciones.ts` (`explicacionEstado`, `lugarDelEvento`), `mis-inscripciones.vue`,
   `PortalTarjetaFotocheck.vue`, `mi-fotocheck.vue`.
 - **FR-008**: pruebas Vitest de toda la lógica nueva (utils puras); `docs/` y `AGENTS.md` al día.
@@ -139,5 +168,7 @@ enlaces, horas ni certificado) y nada se bloquea: el escáner solo avisa y el fo
 
 - **SC-001**: Crear «ESTUDIANTES · VIRTUAL» a S/ 30 / S/ 30 toma un formulario, sin SQL.
 - **SC-002**: El staff distingue un inscrito virtual en el listado, el detalle, el Resumen y el escáner.
-- **SC-003**: Contra un backend sin la spec 018 las pantallas se ven exactamente como antes.
+- **SC-003**: Contra un backend sin la spec 018 las pantallas se ven como antes; el editor de tipos avisa (no
+  calla) que la modalidad virtual no se guardaría. Con la 018 y sin tipos virtuales, el Resumen y el listado
+  tampoco muestran el bloque ni el filtro de modalidad.
 - **SC-004**: `lint`, `typecheck`, `test` y `build` en verde.

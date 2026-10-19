@@ -12,6 +12,10 @@
 - [x] T010 `docs/overview.md` (filas y glosario), `docs/arquitectura.md`, `AGENTS.md` (índice 001–012, regla y terminología)
 - [x] T011 `bun run lint`, `bun run typecheck`, `bun run test` y `bun run build` en verde, 2026-10-19
 - [x] T012 Prueba en el navegador contra un backend simulado, con y sin `modalidad` (editor y precarga de la tarifa única, insignias, filtro y CSV, detalle, Resumen, aviso del escáner, portal y fotocheck; sin `modalidad` todo se ve como antes), 2026-10-19
+- [x] T016 Revisión: aviso virtual también en `/asistencia` (`tonoDeMarca`, `textoMarca`), con pruebas
+- [x] T017 Revisión: el editor de tipos advierte (`backendSinModalidad`) y avisa tras guardar (`modalidadVirtualNoGuardada`) si el backend no admite la modalidad; orden de despliegue documentado
+- [x] T018 Revisión: Resumen (`filasModalidadVisibles`) y filtro «Modalidad» (`hayTiposVirtuales`) solo cuando hay tipos o inscripciones virtuales
+- [x] T019 Revisión: precio UNDC — precarga solo al crear, se restaura al volver a «Presencial» (`precioUndcAlCambiarModalidad`) y confirmación si la tarifa de un virtual no es única (`avisoTarifaUnica`)
 - [ ] T013 Prueba integrada contra backend-ciisic real con la spec 018 (crear «ESTUDIANTES · VIRTUAL» a 30 / 30, filtrar y exportar el CSV, Resumen, marcar un virtual en el escáner, portal) y contra el 013/014
 - [ ] T014 «Mi asistencia»: nota para los virtuales cuando `GET /me/attendances` traiga la modalidad (pedirlo al backend)
 - [ ] T015 Revisar los textos cuando la organización responda cómo se entrega el acceso, los certificados y la asistencia de los virtuales
