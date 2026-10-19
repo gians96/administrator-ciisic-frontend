@@ -3,7 +3,19 @@ import type { Caracteristica, Categoria, Respuesta, TipoInscripcion } from '~/ty
 import { numero, soles } from '~/utils/formato'
 import { aErrorApi, mensajeError } from '~/utils/errores'
 import { clonarLista } from '~/utils/clonar'
-import { OPCIONES_DISPONIBILIDAD, ayudaDisponibilidad, cuerpoTipo, type FormularioTipo } from '~/utils/tiposInscripcion'
+import { esVirtual, etiquetaDeInsignia, modalidadDe } from '~/utils/modalidad'
+import {
+  OPCIONES_DISPONIBILIDAD,
+  OPCIONES_MODALIDAD,
+  ayudaDisponibilidad,
+  ayudaModalidad,
+  ayudaPrecioUndc,
+  cuerpoTipo,
+  formularioDeTipo,
+  precioUndcAlElegirVirtual,
+  sePuedeIgualarPrecioUndc,
+  type FormularioTipo,
+} from '~/utils/tiposInscripcion'
 
 const props = defineProps<{ eventoId: number }>()
 
@@ -80,7 +92,7 @@ async function eliminarCategoria(categoria: Categoria) {
 const tipoModal = ref(false)
 const tipoCategoria = ref<Categoria | null>(null)
 const tipoEditando = ref<TipoInscripcion | null>(null)
-const tipoForm = reactive<FormularioTipo>({ codigo: '', nombre: '', etiqueta: '', descripcion: '', precio: 0, precioInstitucional: 0, disponiblePara: 'TODOS', activo: true, orden: 0 })
+const tipoForm = reactive<FormularioTipo>({ codigo: '', nombre: '', etiqueta: '', descripcion: '', precio: 0, precioInstitucional: 0, disponiblePara: 'TODOS', modalidad: 'PRESENCIAL', activo: true, orden: 0 })
 const soloExternos = computed(() => tipoForm.disponiblePara === 'EXTERNOS')
 const caracteristicas = ref<Caracteristica[]>([])
 /**
@@ -95,20 +107,24 @@ function abrirTipo(categoria: Categoria, tipo?: TipoInscripcion) {
   tipoCategoria.value = categoria
   tipoEditando.value = tipo ?? null
   errores.value = {}
-  Object.assign(tipoForm, {
-    codigo: tipo?.codigo ?? '',
-    nombre: tipo?.nombre ?? categoria.nombre,
-    etiqueta: tipo?.etiqueta ?? '',
-    descripcion: tipo?.descripcion ?? '',
-    precio: tipo?.precio ?? 0,
-    precioInstitucional: tipo?.precioInstitucional ?? 0,
-    disponiblePara: tipo?.disponiblePara ?? 'TODOS',
-    activo: tipo?.activo ?? true,
-    orden: tipo?.orden ?? categoria.tipos.length + 1,
-  })
+  Object.assign(tipoForm, formularioDeTipo(tipo, categoria))
   caracteristicas.value = clonarLista(tipo?.caracteristicas)
   preciosOcultos.value = Boolean(tipo) && (tipo?.precio === null || tipo?.precioInstitucional === null)
   tipoModal.value = true
+}
+
+/**
+ * Tarifa única de un tipo virtual: al elegir «Virtual», el precio UNDC se iguala al regular solo si aún
+ * está en el valor de fábrica (no pisa lo que la persona ya escribió). Solo con el cambio hecho por la
+ * persona: abrir un tipo para editarlo no toca sus precios.
+ */
+function alElegirModalidad(evento: Event) {
+  tipoForm.modalidad = modalidadDe((evento.target as HTMLSelectElement).value)
+  if (tipoForm.modalidad === 'VIRTUAL' && !preciosOcultos.value) tipoForm.precioInstitucional = precioUndcAlElegirVirtual(tipoForm)
+}
+
+function igualarPrecioUndc() {
+  tipoForm.precioInstitucional = Number(tipoForm.precio)
 }
 
 async function guardarTipo() {
@@ -163,7 +179,7 @@ async function eliminarTipo(tipo: TipoInscripcion) {
   <div class="space-y-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <p class="max-w-2xl text-sm text-slate-400">
-        Las categorías agrupan los planes (p. ej. Estudiantes y Público general). Una categoría <strong class="text-slate-200">estudiantil</strong> activa la verificación UNDC: solo los estudiantes verificados pagan el precio institucional. Con <strong class="text-slate-200">Disponible para</strong> un tipo se ofrece a todos, solo a la comunidad UNDC o solo a los externos.
+        Las categorías agrupan los planes (p. ej. Estudiantes y Público general). Una categoría <strong class="text-slate-200">estudiantil</strong> activa la verificación UNDC: solo los estudiantes verificados pagan el precio institucional. Con <strong class="text-slate-200">Disponible para</strong> un tipo se ofrece a todos, solo a la comunidad UNDC o solo a los externos; con <strong class="text-slate-200">Modalidad</strong> es presencial o virtual (un tipo virtual vive en la misma categoría y hereda su verificación).
       </p>
       <AppButton icon="heroicons:plus" @click="abrirCategoria()">Nueva categoría</AppButton>
     </div>
@@ -196,7 +212,8 @@ async function eliminarTipo(tipo: TipoInscripcion) {
             <tr v-for="tipo in categoria.tipos" :key="tipo.id">
               <td>
                 <p class="font-medium text-white">
-                  {{ tipo.nombre }} <AppBadge v-if="tipo.etiqueta" tono="brand" class="ml-1">{{ tipo.etiqueta }}</AppBadge>
+                  {{ tipo.nombre }} <AppBadge v-if="etiquetaDeInsignia(tipo)" tono="brand" class="ml-1">{{ etiquetaDeInsignia(tipo) }}</AppBadge>
+                  <AppBadgeVirtual v-if="esVirtual(tipo)" class="ml-1" />
                   <AppBadge v-if="tipo.disponiblePara === 'EXTERNOS'" tono="warn" class="ml-1">Solo externos</AppBadge>
                   <AppBadge v-else-if="tipo.disponiblePara === 'INSTITUCIONAL'" tono="info" class="ml-1">Solo UNDC</AppBadge>
                 </p>
@@ -253,10 +270,10 @@ async function eliminarTipo(tipo: TipoInscripcion) {
         <AppField label="Nombre" for="tipo-nombre" required :error="errores.nombre">
           <input id="tipo-nombre" v-model="tipoForm.nombre" class="field-control" maxlength="120">
         </AppField>
-        <AppField label="Código" for="tipo-codigo" required :error="errores.codigo" hint="estudiantes_con_kit, general_sin_kit…">
+        <AppField label="Código" for="tipo-codigo" required :error="errores.codigo" hint="estudiantes_con_kit, general_sin_kit, estudiantes_virtual…">
           <input id="tipo-codigo" v-model="tipoForm.codigo" class="field-control font-mono" maxlength="80">
         </AppField>
-        <AppField label="Etiqueta" for="tipo-etiqueta" hint="Se muestra como insignia: CON KIT, SIN KIT…">
+        <AppField label="Etiqueta" for="tipo-etiqueta" hint="Se muestra como insignia: CON KIT, SIN KIT, VIRTUAL…">
           <input id="tipo-etiqueta" v-model="tipoForm.etiqueta" class="field-control" maxlength="40">
         </AppField>
         <AppField label="Orden" for="tipo-orden">
@@ -268,9 +285,17 @@ async function eliminarTipo(tipo: TipoInscripcion) {
           </AppField>
           <AppField
             label="Precio UNDC / institucional (S/)" for="tipo-precio-inst" :required="!soloExternos" :error="errores.precioInstitucional ?? errores.body"
-            :hint="soloExternos ? 'No aplica: este tipo no se ofrece a la comunidad UNDC.' : '0 = gratis para la comunidad UNDC.'"
+            :hint="ayudaPrecioUndc(tipoForm.disponiblePara, tipoForm.modalidad)"
           >
             <input id="tipo-precio-inst" v-model.number="tipoForm.precioInstitucional" type="number" min="0" step="0.01" class="field-control" :disabled="soloExternos">
+            <button
+              v-if="sePuedeIgualarPrecioUndc(tipoForm)"
+              type="button"
+              class="mt-1.5 cursor-pointer text-xs font-medium text-brand-300 underline underline-offset-2 hover:text-brand-200"
+              @click="igualarPrecioUndc"
+            >
+              Igualar al precio regular (S/ {{ tipoForm.precio }})
+            </button>
           </AppField>
         </template>
         <p v-else class="rounded-xl bg-white/5 px-4 py-3 text-sm text-slate-300 md:col-span-2">
@@ -279,6 +304,11 @@ async function eliminarTipo(tipo: TipoInscripcion) {
         <AppField label="Disponible para" for="tipo-disponible" class="md:col-span-2" :error="errores.disponiblePara" :hint="ayudaDisponibilidad(tipoCategoria?.esEstudiantil === true)">
           <select id="tipo-disponible" v-model="tipoForm.disponiblePara" class="field-control">
             <option v-for="opcion in OPCIONES_DISPONIBILIDAD" :key="opcion.valor" :value="opcion.valor">{{ opcion.etiqueta }}</option>
+          </select>
+        </AppField>
+        <AppField label="Modalidad" for="tipo-modalidad" class="md:col-span-2" :error="errores.modalidad" :hint="ayudaModalidad(tipoForm.modalidad)">
+          <select id="tipo-modalidad" :value="tipoForm.modalidad" class="field-control" @change="alElegirModalidad">
+            <option v-for="opcion in OPCIONES_MODALIDAD" :key="opcion.valor" :value="opcion.valor">{{ opcion.etiqueta }}</option>
           </select>
         </AppField>
         <AppField label="Descripción" for="tipo-desc" class="md:col-span-2">

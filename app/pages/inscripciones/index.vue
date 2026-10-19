@@ -4,6 +4,7 @@ import { ESTADOS, fechaDia, fechaHoraLima, modalidadPago, nombreCompleto, soles 
 import { aParametros, filtrosDesdeQuery, type FiltrosInscripcion } from '~/utils/filtros'
 import { mensajeError } from '~/utils/errores'
 import { descripcionInscripciones, placeholderBusqueda } from '~/utils/inscripciones'
+import { backendConModalidad, esVirtual, etiquetaDeInsignia } from '~/utils/modalidad'
 
 definePageMeta({ permiso: 'inscripciones.ver' })
 useHead({ title: 'Inscripciones · Panel CIISIC' })
@@ -25,6 +26,13 @@ const busqueda = ref(filtros.q)
 
 /** Sin `pagos.ver` el monto y los datos de pago llegan en `null`: se ocultan sus columnas. */
 const conPagos = computed(() => auth.puede('pagos.ver'))
+
+/**
+ * El filtro «Modalidad» solo se ofrece si el backend ya envía la modalidad de los tipos (spec 018); un
+ * backend anterior lo ignoraría sin avisar y el listado parecería filtrado sin estarlo. Si la URL ya trae
+ * una modalidad, se muestra para poder quitarla.
+ */
+const conFiltroModalidad = computed(() => backendConModalidad(categorias.value) || filtros.modalidad !== '')
 
 const tipos = computed(() => categorias.value
   .filter((categoria) => !filtros.categoria || categoria.codigo === filtros.categoria)
@@ -94,7 +102,7 @@ watch(busqueda, (valor) => {
   }, 350)
 })
 
-watch(() => [filtros.estado, filtros.categoria, filtros.tipoInscripcionId, filtros.esEstudianteUndc], () => aplicar())
+watch(() => [filtros.estado, filtros.categoria, filtros.modalidad, filtros.tipoInscripcionId, filtros.esEstudianteUndc], () => aplicar())
 
 watch(() => eventos.seleccionadoId, (id, anterior) => {
   // Las filas del evento anterior no quedan a la vista bajo el nuevo (ni sin evento)
@@ -124,7 +132,7 @@ function alActualizar(detalle: InscripcionDetalle) {
 
 function limpiar() {
   busqueda.value = ''
-  Object.assign(filtros, { estado: '', categoria: '', tipoInscripcionId: '', esEstudianteUndc: '', q: '', page: 1 })
+  Object.assign(filtros, { estado: '', categoria: '', modalidad: '', tipoInscripcionId: '', esEstudianteUndc: '', q: '', page: 1 })
 }
 </script>
 
@@ -151,7 +159,7 @@ function limpiar() {
 
     <template v-else>
       <section class="card p-4">
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1.4fr_1fr_auto]">
+        <div class="grid gap-3 md:grid-cols-2" :class="conFiltroModalidad ? 'xl:grid-cols-[1.5fr_1fr_1fr_1fr_1.4fr_1fr_auto]' : 'xl:grid-cols-[2fr_1fr_1fr_1.4fr_1fr_auto]'">
           <div class="relative">
             <label for="buscar" class="sr-only">Buscar</label>
             <Icon name="heroicons:magnifying-glass" class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" aria-hidden="true" />
@@ -169,6 +177,14 @@ function limpiar() {
             <select id="f-categoria" v-model="filtros.categoria" class="field-control" @change="filtros.tipoInscripcionId = ''">
               <option value="">Todas las categorías</option>
               <option v-for="categoria in categorias" :key="categoria.id" :value="categoria.codigo">{{ categoria.nombre }}</option>
+            </select>
+          </div>
+          <div v-if="conFiltroModalidad">
+            <label for="f-modalidad" class="sr-only">Modalidad de asistencia</label>
+            <select id="f-modalidad" v-model="filtros.modalidad" class="field-control">
+              <option value="">Presencial y virtual</option>
+              <option value="PRESENCIAL">Solo presencial</option>
+              <option value="VIRTUAL">Solo virtual</option>
             </select>
           </div>
           <div>
@@ -222,7 +238,8 @@ function limpiar() {
                 <td>
                   <p class="text-white">{{ fila.tipoInscripcion?.nombre ?? '—' }}</p>
                   <div class="mt-0.5 flex flex-wrap gap-1">
-                    <AppBadge v-if="fila.tipoInscripcion?.etiqueta" tono="neutral">{{ fila.tipoInscripcion.etiqueta }}</AppBadge>
+                    <AppBadge v-if="etiquetaDeInsignia(fila.tipoInscripcion)" tono="neutral">{{ etiquetaDeInsignia(fila.tipoInscripcion) }}</AppBadge>
+                    <AppBadgeVirtual v-if="esVirtual(fila.tipoInscripcion)" />
                     <AppBadge v-if="fila.esEstudianteUndc" tono="brand">UNDC</AppBadge>
                   </div>
                 </td>

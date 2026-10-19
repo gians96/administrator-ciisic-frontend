@@ -2,6 +2,8 @@
 import type { Respuesta, ResumenEvento, ResumenSemana } from '~/types/api'
 import { COLOR_GRAFICO_ESTADO, fechaDia, numero, soles } from '~/utils/formato'
 import { mensajeError } from '~/utils/errores'
+import { esVirtual, etiquetaDeInsignia } from '~/utils/modalidad'
+import { filasPorModalidad } from '~/utils/resumen'
 
 definePageMeta({ permiso: 'resumen.ver' })
 useHead({ title: 'Resumen · Panel CIISIC' })
@@ -53,6 +55,8 @@ watch(() => eventos.seleccionadoId, cargar, { immediate: true })
 
 const porDia = computed(() => resumen.value?.porDia.slice(-30) ?? [])
 const estadosConDatos = computed(() => resumen.value?.porEstado.filter((estado) => estado.total > 0) ?? [])
+/** Presencial vs virtual (spec 018 del backend); sin el dato —un backend anterior— el bloque no se muestra. */
+const modalidades = computed(() => filasPorModalidad(resumen.value?.totales.porModalidad))
 </script>
 
 <template>
@@ -109,6 +113,24 @@ const estadosConDatos = computed(() => resumen.value?.porEstado.filter((estado) 
         </section>
       </div>
 
+      <section v-if="modalidades.length" class="card p-6" aria-labelledby="resumen-modalidad">
+        <h2 id="resumen-modalidad" class="text-lg font-bold">Por modalidad de asistencia</h2>
+        <p class="mb-4 text-xs text-slate-400">Presencial y virtual, según el tipo de inscripción</p>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div v-for="fila in modalidades" :key="fila.modalidad" class="rounded-xl bg-white/5 p-4">
+            <p class="flex items-center gap-2 text-sm font-semibold text-white">
+              <Icon :name="fila.modalidad === 'VIRTUAL' ? 'heroicons:computer-desktop' : 'heroicons:building-office-2'" class="size-4 text-brand-300" aria-hidden="true" />
+              {{ fila.nombre }}
+            </p>
+            <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm" :class="conPagos ? 'sm:grid-cols-3' : ''">
+              <div><dt class="text-xs text-slate-400">Inscripciones</dt><dd class="font-semibold text-white tabular-nums">{{ numero(fila.inscripciones) }}</dd></div>
+              <div><dt class="text-xs text-slate-400">Aprobadas</dt><dd class="font-semibold text-white tabular-nums">{{ numero(fila.aprobadas) }}</dd></div>
+              <div v-if="conPagos"><dt class="text-xs text-slate-400">Monto aprobado</dt><dd class="font-semibold text-white tabular-nums">{{ soles(fila.montoAprobado) }}</dd></div>
+            </dl>
+          </div>
+        </div>
+      </section>
+
       <section class="card overflow-hidden">
         <header class="border-b border-white/10 px-6 py-4">
           <h2 class="text-lg font-bold">Por tipo de inscripción</h2>
@@ -123,7 +145,10 @@ const estadosConDatos = computed(() => resumen.value?.porEstado.filter((estado) 
             </thead>
             <tbody>
               <tr v-for="tipo in resumen?.porTipo ?? []" :key="tipo.tipoInscripcionId">
-                <td class="text-white">{{ tipo.nombre }} <AppBadge v-if="tipo.etiqueta" tono="brand" class="ml-1">{{ tipo.etiqueta }}</AppBadge></td>
+                <td class="text-white">
+                  {{ tipo.nombre }} <AppBadge v-if="etiquetaDeInsignia(tipo)" tono="brand" class="ml-1">{{ etiquetaDeInsignia(tipo) }}</AppBadge>
+                  <AppBadgeVirtual v-if="esVirtual(tipo)" class="ml-1" />
+                </td>
                 <td>{{ tipo.categoria }}</td>
                 <td class="text-right tabular-nums">{{ numero(tipo.total) }}</td>
                 <td class="text-right tabular-nums">{{ numero(tipo.aprobadas) }}</td>

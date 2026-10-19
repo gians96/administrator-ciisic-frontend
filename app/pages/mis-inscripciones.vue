@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { aErrorApi } from '~/utils/errores'
 import { fechaDia, fechaHoraLima, modalidadPago, soles } from '~/utils/formato'
-import { explicacionEstado, ordenarInscripciones, rangoFechas, type InscripcionPortal } from '~/utils/misInscripciones'
+import { esVirtual, etiquetaDeInsignia } from '~/utils/modalidad'
+import { explicacionEstado, lugarDelEvento, ordenarInscripciones, rangoFechas, type InscripcionPortal } from '~/utils/misInscripciones'
 
 definePageMeta({ layout: 'participante', perfil: 'participante' })
 useHead({ title: 'Mis inscripciones · CIISIC' })
@@ -62,7 +63,7 @@ onMounted(cargar)
           <h2 class="mt-1 text-xl font-bold">{{ inscripcion.evento.nombre }}</h2>
           <p class="mt-1 text-sm text-slate-400">
             <span class="whitespace-nowrap">{{ rangoFechas(inscripcion.evento.fechaInicio, inscripcion.evento.fechaFin) }}</span>
-            <template v-if="inscripcion.evento.sede"> · {{ inscripcion.evento.sede }}</template>
+            <template v-if="lugarDelEvento(inscripcion)"> · {{ lugarDelEvento(inscripcion) }}</template>
           </p>
         </div>
         <AppBadge :estado="inscripcion.estado.codigo" class="text-sm">{{ inscripcion.estado.nombre }}</AppBadge>
@@ -80,7 +81,8 @@ onMounted(cargar)
             <dt class="text-xs uppercase tracking-wider text-slate-500">Inscripción</dt>
             <dd class="mt-1 text-slate-200">
               {{ inscripcion.tipoInscripcion?.nombre ?? '—' }}
-              <AppBadge v-if="inscripcion.tipoInscripcion?.etiqueta" tono="brand" class="ml-1">{{ inscripcion.tipoInscripcion.etiqueta }}</AppBadge>
+              <AppBadge v-if="etiquetaDeInsignia(inscripcion.tipoInscripcion)" tono="brand" class="ml-1">{{ etiquetaDeInsignia(inscripcion.tipoInscripcion) }}</AppBadge>
+              <AppBadgeVirtual v-if="esVirtual(inscripcion.tipoInscripcion)" class="ml-1" />
             </dd>
             <dd v-if="inscripcion.clasificacion" class="text-slate-400">{{ inscripcion.clasificacion.nombre }}</dd>
           </div>

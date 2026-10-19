@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import { esVirtual, etiquetaDeInsignia } from '~/utils/modalidad'
 import { rangoFechas } from '~/utils/misInscripciones'
 import { iniciales } from '~/utils/perfil'
 import type { FotocheckPortal } from '~/utils/portal'
 
 /**
  * Fotocheck virtual con aspecto de credencial: evento, foto (o iniciales), nombre, documento enmascarado,
- * tipo de inscripción, el QR (solo lleva el código de 10 caracteres) y el código en texto. La franja
- * animada y el reloj «en vivo» ayudan a distinguirlo de una captura de pantalla.
+ * tipo de inscripción (con la insignia «Virtual» si lo es; el fotocheck y el QR se muestran igual), el
+ * QR (solo lleva el código de 10 caracteres) y el código en texto. La franja animada y el reloj «en
+ * vivo» ayudan a distinguirlo de una captura de pantalla.
  */
 const props = defineProps<{ fotocheck: FotocheckPortal, foto: string | null }>()
 
@@ -40,7 +42,8 @@ const fechas = computed(() => {
         <p class="mt-1 font-mono text-sm text-slate-300">{{ documento }}</p>
         <p v-if="fotocheck.tipoInscripcion" class="mt-1.5 flex flex-wrap items-center gap-1.5 text-sm text-slate-200">
           {{ fotocheck.tipoInscripcion.nombre }}
-          <AppBadge v-if="fotocheck.tipoInscripcion.etiqueta" tono="brand">{{ fotocheck.tipoInscripcion.etiqueta }}</AppBadge>
+          <AppBadge v-if="etiquetaDeInsignia(fotocheck.tipoInscripcion)" tono="brand">{{ etiquetaDeInsignia(fotocheck.tipoInscripcion) }}</AppBadge>
+          <AppBadgeVirtual v-if="esVirtual(fotocheck.tipoInscripcion)" />
         </p>
       </div>
     </div>

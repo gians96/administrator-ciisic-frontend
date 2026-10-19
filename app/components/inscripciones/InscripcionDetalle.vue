@@ -4,6 +4,7 @@ import { fechaDia, fechaHoraLima, modalidadPago, nombreCompleto, soles } from '~
 import { aErrorApi, mensajeError } from '~/utils/errores'
 import { fechaCorreoVerificado, textoCorreoVerificado } from '~/utils/cuentaGoogle'
 import { accionesInscripcion, hayAcciones } from '~/utils/inscripciones'
+import { esVirtual, etiquetaModalidad } from '~/utils/modalidad'
 
 const props = defineProps<{ inscripcionId: number | null }>()
 const emit = defineEmits<{ cerrar: [], actualizada: [detalle: InscripcionDetalle], eliminada: [id: number] }>()
@@ -169,6 +170,7 @@ const correoVerificado = computed(() => textoCorreoVerificado(detalle.value?.ver
           <Icon name="heroicons:check-badge" class="size-3.5" aria-hidden="true" /> Estudiante UNDC verificado
         </AppBadge>
         <AppBadge v-else-if="detalle.tipoInscripcion?.categoria.esEstudiantil" tono="warn">Estudiante externo · validar</AppBadge>
+        <AppBadgeVirtual v-if="esVirtual(detalle.tipoInscripcion)" />
         <span class="text-xs text-slate-400">Registrada el {{ fechaHoraLima(detalle.creadoEn) }}</span>
       </div>
 
@@ -195,6 +197,7 @@ const correoVerificado = computed(() => textoCorreoVerificado(detalle.value?.ver
           <dl class="mt-3 space-y-1.5 text-sm">
             <div class="flex justify-between gap-3"><dt class="text-slate-400">Tipo</dt><dd class="text-right text-white">{{ detalle.tipoInscripcion?.nombre ?? '—' }} {{ detalle.tipoInscripcion?.etiqueta ? `· ${detalle.tipoInscripcion.etiqueta}` : '' }}</dd></div>
             <div class="flex justify-between gap-3"><dt class="text-slate-400">Categoría</dt><dd class="text-white">{{ detalle.tipoInscripcion?.categoria.nombre ?? '—' }}</dd></div>
+            <div v-if="detalle.tipoInscripcion?.modalidad" class="flex justify-between gap-3"><dt class="text-slate-400">Modalidad de asistencia</dt><dd class="text-white">{{ etiquetaModalidad(detalle.tipoInscripcion.modalidad) }}</dd></div>
             <div class="flex justify-between gap-3"><dt class="text-slate-400">Clasificación</dt><dd class="text-white">{{ detalle.clasificacion?.nombre ?? '—' }}</dd></div>
             <div v-if="conPagos" class="flex justify-between gap-3"><dt class="text-slate-400">Monto</dt><dd class="font-semibold text-white">{{ soles(detalle.pago.monto) }}<span v-if="detalle.pago.descuento" class="ml-1 text-xs text-emerald-300">(−{{ soles(detalle.pago.descuento) }})</span></dd></div>
           </dl>

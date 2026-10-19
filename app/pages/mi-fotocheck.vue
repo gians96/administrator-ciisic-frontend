@@ -12,6 +12,7 @@ import {
   leerFotocheckGuardado,
   motivoSinFotocheck,
 } from '~/utils/fotocheck'
+import { esVirtual, INDICACIONES_VIRTUAL } from '~/utils/modalidad'
 import type { InscripcionPortal } from '~/utils/misInscripciones'
 import { esNoDisponible, type FotocheckPortal } from '~/utils/portal'
 import { hoyEnLima } from '~/utils/tokensAcceso'
@@ -45,6 +46,8 @@ const idSelector = useId()
 const opciones = computed(() => inscripcionesConFotocheck(inscripciones.value, hoyEnLima()))
 const inscripcionActual = computed(() => inscripciones.value.find((inscripcion) => inscripcion.id === seleccionada.value) ?? null)
 const motivo = computed(() => motivoSinFotocheck(inscripciones.value))
+/** La inscripción es virtual (spec 018 del backend): el fotocheck y el QR se muestran igual; solo se avisa. */
+const inscripcionVirtual = computed(() => esVirtual(fotocheck.value?.tipoInscripcion))
 
 /** Evita que una respuesta tardía (otra inscripción elegida antes) pise a la última. */
 let solicitud = 0
@@ -235,6 +238,11 @@ watch(() => route.query.inscripcion, (valor) => {
           <button type="button" class="mt-1 font-semibold text-amber-200 underline underline-offset-2 hover:text-white" @click="cargar">Volver a intentar</button>
         </div>
       </div>
+
+      <p v-if="inscripcionVirtual" class="mx-auto flex max-w-sm items-start gap-3 rounded-xl bg-blue-400/10 px-4 py-3 text-sm text-blue-100 ring-1 ring-blue-400/30">
+        <Icon name="heroicons:computer-desktop" class="mt-0.5 size-5 shrink-0 text-blue-300" aria-hidden="true" />
+        <span>Tu inscripción es virtual. {{ INDICACIONES_VIRTUAL }}</span>
+      </p>
 
       <PortalTarjetaFotocheck :fotocheck="fotocheck" :foto="foto" />
 
