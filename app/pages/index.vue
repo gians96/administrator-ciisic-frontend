@@ -3,7 +3,7 @@ import type { Respuesta, ResumenEvento, ResumenSemana } from '~/types/api'
 import { COLOR_GRAFICO_ESTADO, fechaDia, numero, soles } from '~/utils/formato'
 import { mensajeError } from '~/utils/errores'
 import { esVirtual, etiquetaDeInsignia } from '~/utils/modalidad'
-import { filasPorModalidad } from '~/utils/resumen'
+import { filasModalidadVisibles } from '~/utils/resumen'
 
 definePageMeta({ permiso: 'resumen.ver' })
 useHead({ title: 'Resumen · Panel CIISIC' })
@@ -55,8 +55,11 @@ watch(() => eventos.seleccionadoId, cargar, { immediate: true })
 
 const porDia = computed(() => resumen.value?.porDia.slice(-30) ?? [])
 const estadosConDatos = computed(() => resumen.value?.porEstado.filter((estado) => estado.total > 0) ?? [])
-/** Presencial vs virtual (spec 018 del backend); sin el dato —un backend anterior— el bloque no se muestra. */
-const modalidades = computed(() => filasPorModalidad(resumen.value?.totales.porModalidad))
+/**
+ * Presencial vs virtual (spec 018 del backend). El bloque solo se muestra cuando el evento ya usa la
+ * modalidad virtual: sin el dato —un backend anterior— o sin tipos ni inscripciones virtuales no hay bloque.
+ */
+const modalidades = computed(() => filasModalidadVisibles(resumen.value))
 </script>
 
 <template>

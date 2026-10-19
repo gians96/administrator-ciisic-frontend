@@ -4,7 +4,7 @@ import { ESTADOS, fechaDia, fechaHoraLima, modalidadPago, nombreCompleto, soles 
 import { aParametros, filtrosDesdeQuery, type FiltrosInscripcion } from '~/utils/filtros'
 import { mensajeError } from '~/utils/errores'
 import { descripcionInscripciones, placeholderBusqueda } from '~/utils/inscripciones'
-import { backendConModalidad, esVirtual, etiquetaDeInsignia } from '~/utils/modalidad'
+import { esVirtual, etiquetaDeInsignia, hayTiposVirtuales } from '~/utils/modalidad'
 
 definePageMeta({ permiso: 'inscripciones.ver' })
 useHead({ title: 'Inscripciones · Panel CIISIC' })
@@ -28,11 +28,12 @@ const busqueda = ref(filtros.q)
 const conPagos = computed(() => auth.puede('pagos.ver'))
 
 /**
- * El filtro «Modalidad» solo se ofrece si el backend ya envía la modalidad de los tipos (spec 018); un
- * backend anterior lo ignoraría sin avisar y el listado parecería filtrado sin estarlo. Si la URL ya trae
- * una modalidad, se muestra para poder quitarla.
+ * El filtro «Modalidad» solo se ofrece cuando existe algún tipo virtual (spec 018): un backend anterior lo
+ * ignoraría sin avisar y el listado parecería filtrado sin estarlo, y sin tipos virtuales siempre
+ * devolvería lo mismo o nada. Un tipo virtual implica que el backend sí envía la modalidad. Si la URL ya
+ * trae una modalidad, se muestra para poder quitarla.
  */
-const conFiltroModalidad = computed(() => backendConModalidad(categorias.value) || filtros.modalidad !== '')
+const conFiltroModalidad = computed(() => hayTiposVirtuales(categorias.value) || filtros.modalidad !== '')
 
 const tipos = computed(() => categorias.value
   .filter((categoria) => !filtros.categoria || categoria.codigo === filtros.categoria)

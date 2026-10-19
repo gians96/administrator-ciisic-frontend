@@ -1,5 +1,5 @@
-import type { ModalidadAsistencia, ResumenModalidad, ResumenSemana } from '~/types/api'
-import { etiquetaModalidad, MODALIDADES_ASISTENCIA, modalidadDe } from '~/utils/modalidad'
+import type { ModalidadAsistencia, ResumenEvento, ResumenModalidad, ResumenSemana } from '~/types/api'
+import { esVirtual, etiquetaModalidad, MODALIDADES_ASISTENCIA, modalidadDe } from '~/utils/modalidad'
 
 export interface ConteosDeportes {
   /** Integraciones que respondieron con su resumen. */
@@ -54,4 +54,17 @@ export function filasPorModalidad(porModalidad: readonly ResumenModalidad[] | nu
       montoAprobado: sinMontos ? null : suma('montoAprobado'),
     }
   })
+}
+
+/**
+ * Filas que el Resumen muestra: las de `filasPorModalidad`, pero solo cuando la modalidad virtual ya se usa
+ * en el evento (algún tipo de `porTipo` es virtual, o ya hay inscripciones virtuales). El backend con la
+ * spec 018 envía siempre las dos filas; sin tipos virtuales, «Virtual: 0 / 0 / S/ 0» sería ruido para quien
+ * aún no usa la modalidad. Sin el dato (backend anterior) o sin virtuales, ninguna fila.
+ */
+export function filasModalidadVisibles(resumen: { totales: Pick<ResumenEvento['totales'], 'porModalidad'>, porTipo: ReadonlyArray<{ modalidad?: unknown }> } | null | undefined): FilaModalidad[] {
+  const filas = filasPorModalidad(resumen?.totales.porModalidad)
+  const hayVirtual = filas.some((fila) => fila.modalidad === 'VIRTUAL' && fila.inscripciones > 0)
+    || (resumen?.porTipo ?? []).some((tipo) => esVirtual(tipo))
+  return hayVirtual ? filas : []
 }

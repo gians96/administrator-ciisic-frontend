@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ResumenDeportes, ResumenModalidad, ResumenSemana } from '~/types/api'
-import { conteosDeportes, filasPorModalidad } from '~/utils/resumen'
+import { conteosDeportes, filasModalidadVisibles, filasPorModalidad } from '~/utils/resumen'
 
 const resumenDeportes = (aprobados: number, total: number, participantes: number): ResumenDeportes => ({
   event: { id: 1, name: 'Deportes', startDate: '2026-10-26', endDate: '2026-10-30' },
@@ -70,5 +70,40 @@ describe('resumen: presencial vs virtual', () => {
     const filas = filasPorModalidad([fila('PRESENCIAL', 10, 8, 960), fila('HIBRIDA', 2, 1, 120), fila('VIRTUAL', 1, 1, 30)])
     expect(filas[0]).toMatchObject({ modalidad: 'PRESENCIAL', inscripciones: 12, aprobadas: 9, montoAprobado: 1080 })
     expect(filas[1]).toMatchObject({ modalidad: 'VIRTUAL', inscripciones: 1, aprobadas: 1, montoAprobado: 30 })
+  })
+})
+
+describe('resumen: cuándo se muestra el bloque Presencial / Virtual', () => {
+  const dos = (virtual: number, presencial = 100): ResumenModalidad[] => [
+    { modalidad: 'PRESENCIAL', inscripciones: presencial, aprobadas: presencial - 10, montoAprobado: 9600 },
+    { modalidad: 'VIRTUAL', inscripciones: virtual, aprobadas: virtual, montoAprobado: virtual * 30 },
+  ]
+  const porTipo = (...modalidades: Array<string | undefined>) => modalidades.map((modalidad) => ({ modalidad }))
+
+  it('un backend con la spec 018 pero sin tipos virtuales ni inscripciones virtuales no muestra «Virtual: 0»', () => {
+    expect(filasModalidadVisibles({ totales: { porModalidad: dos(0) }, porTipo: porTipo('PRESENCIAL', 'PRESENCIAL') })).toEqual([])
+    expect(filasModalidadVisibles({ totales: { porModalidad: dos(0) }, porTipo: [] })).toEqual([])
+  })
+
+  it('se muestra cuando el evento ya tiene un tipo virtual, aunque aún no tenga inscripciones', () => {
+    const filas = filasModalidadVisibles({ totales: { porModalidad: dos(0) }, porTipo: porTipo('PRESENCIAL', 'VIRTUAL') })
+    expect(filas.map((f) => f.modalidad)).toEqual(['PRESENCIAL', 'VIRTUAL'])
+    expect(filas[1]).toMatchObject({ inscripciones: 0, aprobadas: 0 })
+  })
+
+  it('se muestra cuando ya hay inscripciones virtuales aunque porTipo no traiga la modalidad', () => {
+    expect(filasModalidadVisibles({ totales: { porModalidad: dos(3) }, porTipo: porTipo(undefined) })).toHaveLength(2)
+  })
+
+  it('sin el dato (backend anterior), sin resumen o con montos null: igual que filasPorModalidad', () => {
+    expect(filasModalidadVisibles({ totales: {}, porTipo: porTipo('VIRTUAL') })).toEqual([])
+    expect(filasModalidadVisibles(null)).toEqual([])
+    expect(filasModalidadVisibles(undefined)).toEqual([])
+    const sinPagos = filasModalidadVisibles({
+      totales: { porModalidad: [{ modalidad: 'PRESENCIAL', inscripciones: 5, aprobadas: 3, montoAprobado: null }, { modalidad: 'VIRTUAL', inscripciones: 2, aprobadas: 1, montoAprobado: null }] },
+      porTipo: [],
+    })
+    expect(sinPagos.map((f) => f.montoAprobado)).toEqual([null, null])
+    expect(sinPagos.map((f) => f.inscripciones)).toEqual([5, 2])
   })
 })
