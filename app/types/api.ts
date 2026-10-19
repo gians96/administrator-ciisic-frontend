@@ -184,6 +184,15 @@ export interface Caracteristica { icon: string, text: string }
  */
 export type DisponiblePara = 'TODOS' | 'INSTITUCIONAL' | 'EXTERNOS'
 
+/**
+ * Modalidad de asistencia del TIPO de inscripción (spec 018 del backend): presencial (la de siempre) o
+ * virtual. Vive siempre dentro del objeto del tipo (`tipo.modalidad`, `tipoInscripcion.modalidad`),
+ * nunca en la raíz de una inscripción: ahí `modalidadPago` / `pago.modalidad` es la modalidad de
+ * **pago** (banco, billetera, cortesía). Tampoco es el «fotocheck virtual» del portal. Ausente, `null`
+ * o desconocida equivale a `PRESENCIAL` (`modalidadDe` en `app/utils/modalidad.ts`).
+ */
+export type ModalidadAsistencia = 'PRESENCIAL' | 'VIRTUAL'
+
 export interface TipoInscripcion {
   id: number
   categoriaId: number
@@ -198,6 +207,8 @@ export interface TipoInscripcion {
   precioInstitucional: number | null
   /** Ausente con un backend anterior a la spec 016: equivale a `TODOS`. */
   disponiblePara?: DisponiblePara
+  /** Ausente con un backend anterior a la spec 018: equivale a `PRESENCIAL`. */
+  modalidad?: ModalidadAsistencia
   activo: boolean
   orden: number
   totalInscripciones?: number
@@ -245,7 +256,8 @@ export interface InscripcionFila {
   id: number
   creadoEn: string
   participante: ParticipanteRef
-  tipoInscripcion: { id: number, nombre: string, etiqueta: string | null, categoria: string } | null
+  /** `modalidad` (de asistencia) falta con un backend anterior a la spec 018. */
+  tipoInscripcion: { id: number, nombre: string, etiqueta: string | null, categoria: string, modalidad?: ModalidadAsistencia } | null
   clasificacion: { id: number, nombre: string } | null
   estado: EstadoRef
   /** Sin `pagos.ver`: `monto`, `modalidadPago`, `numeroOperacion` y `fechaPago` en `null` y `tieneVoucher: false`. */
@@ -276,9 +288,10 @@ export interface InscripcionDetalle {
   creadoEn: string
   actualizadoEn: string
   participante: ParticipanteRef
-  /** `precio` y `precioInstitucional` en `null` sin `pagos.ver`. */
+  /** `precio` y `precioInstitucional` en `null` sin `pagos.ver`; `modalidad` (de asistencia) falta con un backend anterior a la spec 018. */
   tipoInscripcion: {
     id: number, codigo: string, nombre: string, etiqueta: string | null, precio: number | null, precioInstitucional: number | null
+    modalidad?: ModalidadAsistencia
     categoria: { id: number, codigo: string, nombre: string, esEstudiantil: boolean }
   } | null
   clasificacion: { id: number, nombre: string } | null
@@ -302,14 +315,29 @@ export interface InscripcionDetalle {
   credencialEnviada?: boolean | null
 }
 
-/** Sin `pagos.ver` los montos llegan en `null` (los conteos se conservan). */
+/** Una fila de `totales.porModalidad` (spec 018 del backend); `montoAprobado` en `null` sin `pagos.ver`. */
+export interface ResumenModalidad {
+  modalidad: ModalidadAsistencia
+  inscripciones: number
+  aprobadas: number
+  montoAprobado: number | null
+}
+
+/**
+ * Sin `pagos.ver` los montos llegan en `null` (los conteos se conservan). `totales.porModalidad` y
+ * `porTipo[].modalidad` faltan con un backend anterior a la spec 018.
+ */
 export interface ResumenEvento {
   totales: {
     inscripciones: number, pendientes: number, enRevision: number, aprobadas: number, rechazadas: number, canceladas: number
     montoAprobado: number | null, montoPendiente: number | null, estudiantesUndc: number
+    porModalidad?: ResumenModalidad[]
   }
   porEstado: Array<{ codigo: CodigoEstado, nombre: string, total: number, monto: number | null }>
-  porTipo: Array<{ tipoInscripcionId: number, nombre: string, etiqueta: string | null, categoria: string, total: number, aprobadas: number, montoAprobado: number | null }>
+  porTipo: Array<{
+    tipoInscripcionId: number, nombre: string, etiqueta: string | null, categoria: string, total: number, aprobadas: number, montoAprobado: number | null
+    modalidad?: ModalidadAsistencia
+  }>
   porDia: Array<{ fecha: string, total: number }>
 }
 

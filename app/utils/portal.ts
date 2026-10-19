@@ -1,3 +1,4 @@
+import type { ModalidadAsistencia } from '~/types/api'
 import { aErrorApi } from '~/utils/errores'
 
 /**
@@ -85,7 +86,8 @@ export interface FotocheckPortal {
   qr: string
   evento: { nombre: string, nombreCorto: string, fechaInicio: string, fechaFin: string, sede: string | null }
   participante: { nombres: string, apellidos: string, tipoDocumento: string, documentoEnmascarado: string }
-  tipoInscripcion: { nombre: string, etiqueta: string | null } | null
+  /** `modalidad` (de asistencia, spec 018 del backend) falta con un backend anterior: equivale a `PRESENCIAL`. */
+  tipoInscripcion: { nombre: string, etiqueta: string | null, modalidad?: ModalidadAsistencia } | null
   foto: { tiene: boolean }
 }
 
