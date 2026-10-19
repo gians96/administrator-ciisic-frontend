@@ -7,6 +7,8 @@ import {
   actividadInicial,
   actividadParaEscaner,
   agregarRegistro,
+  AVISO_INSCRIPCION_VIRTUAL,
+  CIERRE_AVISO_VIRTUAL_MS,
   CIERRE_EXITO_MS,
   conservarValorTrasError,
   cuerpoLectura,
@@ -38,6 +40,7 @@ import {
   ventanaActividad,
   type FormMarca,
   type MarcaAsistencia,
+  type TipoInscripcionMarca,
 } from '~/utils/asistencia'
 import { aErrorApi } from '~/utils/errores'
 
@@ -276,6 +279,69 @@ describe('escáner: resultado de la marca', () => {
     expect(resultado.titulo).toBe('QR antiguo: verifica el DNI')
     expect(resultado.persona?.documento).toBe('DNI 70001234')
     expect(resultado.cierraEnMs).toBeNull()
+  })
+
+  describe('inscripción virtual (spec 012)', () => {
+    const virtual = (cambios: Partial<MarcaAsistencia> = {}): MarcaAsistencia => ({
+      ...MARCA_014,
+      inscripcion: { id: 500, tipoInscripcion: { nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', modalidad: 'VIRTUAL' } },
+      ...cambios,
+    })
+
+    it('ámbar con el aviso, sin deshacer ni bloquear: la asistencia ya quedó registrada', () => {
+      const resultado = resultadoDeMarca(virtual())
+      expect(resultado).toEqual({
+        tono: 'alerta',
+        titulo: 'Asistencia registrada',
+        mensaje: AVISO_INSCRIPCION_VIRTUAL,
+        persona: { nombre: 'ANA PÉREZ GARCÍA', documento: 'DNI 70001234', tipoInscripcion: 'ESTUDIANTES · VIRTUAL', fotoInscripcionId: 500 },
+        fueraDeHorario: false,
+        cierraEnMs: CIERRE_AVISO_VIRTUAL_MS,
+        reintentable: false,
+      })
+      expect(AVISO_INSCRIPCION_VIRTUAL).toBe('Inscripción virtual: verifica si corresponde el ingreso presencial.')
+    })
+
+    it('NO espera «Continuar» (eso es solo del QR anterior) y no pausa la cámara', () => {
+      const resultado = resultadoDeMarca(virtual())
+      expect(esperaContinuar(resultado)).toBe(false)
+      expect(pausaLaCamara(resultado)).toBe(false)
+      expect(resultado.cierraEnMs).toBeGreaterThan(0)
+    })
+
+    it('conserva «fuera de horario» y sin foto no pide la imagen', () => {
+      const resultado = resultadoDeMarca(virtual({ esFueraDeHorario: true, participante: { ...MARCA_014.participante, foto: { tiene: false } } }))
+      expect(resultado).toMatchObject({ tono: 'alerta', fueraDeHorario: true })
+      expect(resultado.persona?.fotoInscripcionId).toBeNull()
+    })
+
+    it('con el QR anterior sigue esperando «Continuar» y suma el aviso virtual al mensaje', () => {
+      const resultado = resultadoDeMarca(virtual({ metodo: 'QR_LEGADO', alerta: 'QR_LEGADO' }))
+      expect(resultado.titulo).toBe(TITULO_QR_LEGADO)
+      expect(esperaContinuar(resultado)).toBe(true)
+      expect(resultado.mensaje).toContain('Pide el DNI')
+      expect(resultado.mensaje).toContain(AVISO_INSCRIPCION_VIRTUAL)
+    })
+
+    it('el QR anterior de un presencial no menciona lo virtual', () => {
+      const resultado = resultadoDeMarca({ ...MARCA_014, metodo: 'QR_LEGADO', alerta: 'QR_LEGADO' })
+      expect(resultado.mensaje).not.toContain('virtual')
+    })
+
+    it('presencial, sin modalidad (backend anterior), con modalidad desconocida o sin tipo: verde como siempre', () => {
+      expect(resultadoDeMarca(MARCA_014)).toMatchObject({ tono: 'exito', mensaje: null, cierraEnMs: CIERRE_EXITO_MS })
+      const conTipo = (tipoInscripcion: TipoInscripcionMarca | null) => resultadoDeMarca({ ...MARCA_014, inscripcion: { id: 500, tipoInscripcion } })
+      const conModalidad = (modalidad: unknown) => conTipo({ nombre: 'ESTUDIANTES', etiqueta: 'CON KIT', modalidad: modalidad as TipoInscripcionMarca['modalidad'] })
+      expect(conModalidad('PRESENCIAL').tono).toBe('exito')
+      expect(conModalidad(null).tono).toBe('exito')
+      expect(conModalidad('HIBRIDA').tono).toBe('exito')
+      expect(conTipo(null).tono).toBe('exito')
+    })
+
+    it('la lista de lecturas recibe la marca virtual con su tono ámbar', () => {
+      const registro = registroDeResultado(resultadoDeMarca(virtual()), { id: 1, instante: 0, leido: 'Código K7Q2M9X4TB', actividad: 'Inauguración' })
+      expect(registro).toMatchObject({ tono: 'alerta', titulo: 'Asistencia registrada', detalle: 'ANA PÉREZ GARCÍA · DNI 70001234' })
+    })
   })
 
   it('nombre del tipo de inscripción', () => {

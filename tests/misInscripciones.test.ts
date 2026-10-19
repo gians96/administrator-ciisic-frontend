@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { explicacionEstado, ordenarInscripciones, rangoFechas, type InscripcionPortal } from '../app/utils/misInscripciones'
+import { explicacionEstado, lugarDelEvento, ordenarInscripciones, rangoFechas, type InscripcionPortal } from '../app/utils/misInscripciones'
 
 const base = (cambios: Partial<InscripcionPortal>): InscripcionPortal => ({
   id: 1,
@@ -24,6 +24,48 @@ describe('portal del inscrito', () => {
     expect(explicacionEstado(base({ estado: { codigo: 'APROBADO', nombre: 'Aprobado' }, credencial: { disponible: true, enviadaEn: null } }))).toContain('Descarga aquí')
     expect(explicacionEstado(base({ estado: { codigo: 'APROBADO', nombre: 'Aprobado' }, credencial: { disponible: true, enviadaEn: '2026-09-30T10:00:00Z' } }))).toContain('por correo')
     expect(explicacionEstado(base({ estado: { codigo: 'RECHAZADO', nombre: 'Rechazado' } }))).toContain('motivo')
+  })
+
+  it('una inscripción virtual aprobada recibe un texto neutro sobre las indicaciones de conexión', () => {
+    const virtual = base({
+      estado: { codigo: 'APROBADO', nombre: 'Aprobado' },
+      credencial: { disponible: true, enviadaEn: '2026-09-30T10:00:00Z' },
+      tipoInscripcion: { nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', categoria: 'ESTUDIANTES', modalidad: 'VIRTUAL' },
+    })
+    const texto = explicacionEstado(virtual)
+    expect(texto).toContain('virtual')
+    expect(texto).toContain('La organización te compartirá las indicaciones para conectarte')
+    // Cómo se entrega el acceso, el certificado y las horas siguen abiertos: no se promete nada de eso
+    expect(texto).not.toMatch(/https?:|certificad|horas|enlace/i)
+    expect(texto).not.toBe(explicacionEstado({ ...virtual, tipoInscripcion: null }))
+  })
+
+  it('los demás estados de una inscripción virtual se explican igual que siempre', () => {
+    const tipoInscripcion = { nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', categoria: 'ESTUDIANTES', modalidad: 'VIRTUAL' as const }
+    expect(explicacionEstado(base({ tipoInscripcion }))).toContain('revisará tu voucher')
+    expect(explicacionEstado(base({ tipoInscripcion, estado: { codigo: 'RECHAZADO', nombre: 'Rechazado' } }))).toContain('motivo')
+  })
+
+  it('presencial, sin modalidad (backend anterior) o desconocida: el texto de siempre', () => {
+    const aprobada = { estado: { codigo: 'APROBADO' as const, nombre: 'Aprobado' }, credencial: { disponible: true, enviadaEn: '2026-09-30T10:00:00Z' } }
+    const tipo = { nombre: 'ESTUDIANTES', etiqueta: 'CON KIT', categoria: 'ESTUDIANTES' }
+    const esperado = explicacionEstado(base({ ...aprobada }))
+    expect(esperado).toContain('por correo')
+    expect(explicacionEstado(base({ ...aprobada, tipoInscripcion: tipo }))).toBe(esperado)
+    expect(explicacionEstado(base({ ...aprobada, tipoInscripcion: { ...tipo, modalidad: 'PRESENCIAL' } }))).toBe(esperado)
+    expect(explicacionEstado(base({ ...aprobada, tipoInscripcion: { ...tipo, modalidad: 'HIBRIDA' as 'VIRTUAL' } }))).toBe(esperado)
+  })
+
+  it('en lugar de la sede muestra «Modalidad virtual» si la inscripción es virtual', () => {
+    const evento = { ...base({}).evento, sede: 'UNDC · Tacna' }
+    const tipo = { nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', categoria: 'ESTUDIANTES' }
+    expect(lugarDelEvento({ evento, tipoInscripcion: { ...tipo, modalidad: 'VIRTUAL' } })).toBe('Modalidad virtual')
+    expect(lugarDelEvento({ evento, tipoInscripcion: { ...tipo, modalidad: 'PRESENCIAL' } })).toBe('UNDC · Tacna')
+    expect(lugarDelEvento({ evento, tipoInscripcion: tipo })).toBe('UNDC · Tacna')
+    expect(lugarDelEvento({ evento, tipoInscripcion: null })).toBe('UNDC · Tacna')
+    expect(lugarDelEvento({ evento: { ...evento, sede: null }, tipoInscripcion: null })).toBeNull()
+    // Un virtual sin sede también dice que es virtual
+    expect(lugarDelEvento({ evento: { ...evento, sede: null }, tipoInscripcion: { ...tipo, modalidad: 'VIRTUAL' } })).toBe('Modalidad virtual')
   })
 
   it('muestra el rango de fechas del evento en hora de Lima', () => {

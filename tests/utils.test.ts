@@ -119,12 +119,28 @@ describe('errores de la API', () => {
 describe('filtros de inscripciones', () => {
   it('lee la query ignorando valores inválidos', () => {
     expect(filtrosDesdeQuery({ estado: 'pendiente', tipoInscripcionId: 'abc', esEstudianteUndc: 'quizas', page: '3' }))
-      .toEqual({ estado: 'PENDIENTE', categoria: '', tipoInscripcionId: '', esEstudianteUndc: '', q: '', page: 3 })
+      .toEqual({ estado: 'PENDIENTE', categoria: '', modalidad: '', tipoInscripcionId: '', esEstudianteUndc: '', q: '', page: 3 })
+  })
+
+  it('la modalidad de asistencia solo admite PRESENCIAL o VIRTUAL (en cualquier caso); otra cosa se ignora', () => {
+    expect(filtrosDesdeQuery({ modalidad: 'virtual' }).modalidad).toBe('VIRTUAL')
+    expect(filtrosDesdeQuery({ modalidad: 'PRESENCIAL' }).modalidad).toBe('PRESENCIAL')
+    // «banco» y «billetera» son modalidades de PAGO: no son un filtro de este listado
+    expect(filtrosDesdeQuery({ modalidad: 'banco' }).modalidad).toBe('')
+    expect(filtrosDesdeQuery({ modalidad: ['VIRTUAL'] }).modalidad).toBe('')
+    expect(filtrosDesdeQuery({}).modalidad).toBe('')
   })
 
   it('serializa solo los filtros con valor', () => {
-    expect(aParametros({ estado: 'APROBADO', categoria: '', tipoInscripcionId: '2', esEstudianteUndc: 'true', q: ' ana ', page: 2 }))
+    expect(aParametros({ estado: 'APROBADO', categoria: '', modalidad: '', tipoInscripcionId: '2', esEstudianteUndc: 'true', q: ' ana ', page: 2 }))
       .toEqual({ estado: 'APROBADO', tipoInscripcionId: '2', esEstudianteUndc: 'true', q: 'ana', page: '2' })
-    expect(aParametros({ estado: '', categoria: '', tipoInscripcionId: '', esEstudianteUndc: '', q: '', page: 5 }, false)).toEqual({})
+    expect(aParametros({ estado: '', categoria: '', modalidad: '', tipoInscripcionId: '', esEstudianteUndc: '', q: '', page: 5 }, false)).toEqual({})
+  })
+
+  it('envía la modalidad de asistencia a la lista y al CSV, combinada con la categoría', () => {
+    const filtros = { estado: '', categoria: 'ESTUDIANTES', modalidad: 'VIRTUAL', tipoInscripcionId: '', esEstudianteUndc: '', q: '', page: 2 }
+    expect(aParametros(filtros)).toEqual({ categoria: 'ESTUDIANTES', modalidad: 'VIRTUAL', page: '2' })
+    // El CSV usa los mismos filtros, sin la página
+    expect(aParametros(filtros, false)).toEqual({ categoria: 'ESTUDIANTES', modalidad: 'VIRTUAL' })
   })
 })

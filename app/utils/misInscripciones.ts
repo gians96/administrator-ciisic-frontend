@@ -1,10 +1,12 @@
-import type { CodigoEstado } from '~/types/api'
+import type { CodigoEstado, ModalidadAsistencia } from '~/types/api'
+import { esVirtual, INDICACIONES_VIRTUAL, LUGAR_VIRTUAL } from '~/utils/modalidad'
 
 /** Inscripción tal como la entrega el portal (`GET /api/v1/me/inscriptions`, spec 011 del backend). */
 export interface InscripcionPortal {
   id: number
   evento: { codigo: string, nombre: string, nombreCorto: string, fechaInicio: string, fechaFin: string, sede: string | null }
-  tipoInscripcion: { nombre: string, etiqueta: string | null, categoria: string } | null
+  /** `modalidad` (de asistencia, spec 018 del backend) falta con un backend anterior: equivale a `PRESENCIAL`. */
+  tipoInscripcion: { nombre: string, etiqueta: string | null, categoria: string, modalidad?: ModalidadAsistencia } | null
   clasificacion: { nombre: string } | null
   monto: number
   precioRegular: number
@@ -19,14 +21,19 @@ export interface InscripcionPortal {
   creadoEn: string
 }
 
-/** Texto que explica el estado al inscrito, en lenguaje simple. */
-export function explicacionEstado(inscripcion: Pick<InscripcionPortal, 'estado' | 'credencial'>): string {
+/**
+ * Texto que explica el estado al inscrito, en lenguaje simple. Una inscripción virtual aprobada recibe
+ * un texto neutro sobre las indicaciones de conexión (sin enlaces ni promesas: cómo se entrega el
+ * acceso aún lo define la organización).
+ */
+export function explicacionEstado(inscripcion: Pick<InscripcionPortal, 'estado' | 'credencial'> & Partial<Pick<InscripcionPortal, 'tipoInscripcion'>>): string {
   switch (inscripcion.estado.codigo) {
     case 'PENDIENTE':
       return 'Recibimos tu inscripción. El equipo revisará tu voucher de pago.'
     case 'EN_REVISION':
       return 'Estamos revisando tu voucher de pago.'
     case 'APROBADO':
+      if (esVirtual(inscripcion.tipoInscripcion)) return `Tu inscripción virtual está aprobada. ${INDICACIONES_VIRTUAL}`
       return inscripcion.credencial.enviadaEn
         ? 'Tu inscripción está aprobada. Te enviamos la credencial por correo y puedes descargarla aquí.'
         : 'Tu inscripción está aprobada. Descarga aquí tu credencial.'
@@ -37,6 +44,11 @@ export function explicacionEstado(inscripcion: Pick<InscripcionPortal, 'estado' 
     default:
       return ''
   }
+}
+
+/** Dónde es: la sede del evento o, si la inscripción es virtual, «Modalidad virtual». Sin sede, `null`. */
+export function lugarDelEvento(inscripcion: Pick<InscripcionPortal, 'evento'> & Partial<Pick<InscripcionPortal, 'tipoInscripcion'>>): string | null {
+  return esVirtual(inscripcion.tipoInscripcion) ? LUGAR_VIRTUAL : inscripcion.evento.sede
 }
 
 /** Rango de fechas del evento: «26 – 30 oct. 2026» o «30 oct. – 2 nov. 2026». */

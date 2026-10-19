@@ -1,6 +1,7 @@
-import type { Actividad } from '~/types/api'
+import type { Actividad, ModalidadAsistencia } from '~/types/api'
 import type { ErrorApi } from '~/utils/errores'
 import { interpretarLectura, type LecturaQr } from '~/utils/lecturaQr'
+import { esVirtual } from '~/utils/modalidad'
 
 /**
  * Asistencia (spec 013 del backend, con el QR del fotocheck de la spec 014): cuerpo de la marca,
@@ -36,10 +37,14 @@ export interface AsistenciaFila {
 /** Aviso de la marca (spec 014): `QR_LEGADO` se registró con el QR anterior (verificar el DNI y la foto). */
 export type AlertaAsistencia = 'QR_LEGADO'
 
-/** Tipo de inscripción de la marca (`null` si la inscripción no tiene). */
+/**
+ * Tipo de inscripción de la marca (`null` si la inscripción no tiene). `modalidad` (de asistencia, spec
+ * 018 del backend) falta con un backend anterior: equivale a `PRESENCIAL`.
+ */
 export interface TipoInscripcionMarca {
   nombre: string
   etiqueta: string | null
+  modalidad?: ModalidadAsistencia
 }
 
 /**
@@ -334,6 +339,13 @@ export interface ResultadoLectura {
 export const CIERRE_EXITO_MS = 2500
 export const CIERRE_YA_REGISTRADA_MS = 4000
 export const CIERRE_QR_NO_VALIDO_MS = 3000
+export const CIERRE_AVISO_VIRTUAL_MS = 4000
+
+/**
+ * Aviso ámbar de una marca de una inscripción virtual: la asistencia ya quedó registrada (no se
+ * bloquea ni se deshace nada); solo se pide al operador verificar si corresponde el ingreso presencial.
+ */
+export const AVISO_INSCRIPCION_VIRTUAL = 'Inscripción virtual: verifica si corresponde el ingreso presencial.'
 
 /** «ESTUDIANTES · CON KIT»; sin tipo, `null`. */
 export function nombreTipoInscripcion(tipo: TipoInscripcionMarca | null | undefined): string | null {
@@ -341,9 +353,14 @@ export function nombreTipoInscripcion(tipo: TipoInscripcionMarca | null | undefi
   return tipo.etiqueta ? `${tipo.nombre} · ${tipo.etiqueta}` : tipo.nombre
 }
 
+const MENSAJE_QR_LEGADO = 'Se registró con el QR anterior. Pide el DNI y compáralo con este documento y la foto; recuérdale usar el fotocheck de su portal.'
+
 /**
- * Resultado de una marca registrada: verde, o ámbar con `alerta: 'QR_LEGADO'` (el QR anterior es un id
- * secuencial y se puede falsificar: se verifica el DNI y la foto). La foto solo si la hay.
+ * Resultado de una marca registrada: verde; ámbar con `alerta: 'QR_LEGADO'` (el QR anterior es un id
+ * secuencial y se puede falsificar: se verifica el DNI y la foto); o ámbar con el aviso de inscripción
+ * virtual (`tipoInscripcion.modalidad === 'VIRTUAL'`), que NO bloquea: la asistencia ya está registrada
+ * y el aviso se cierra solo (no espera «Continuar»; eso es solo del QR anterior, que además suma el
+ * aviso virtual a su mensaje). La foto solo si la hay.
  */
 export function resultadoDeMarca(marca: MarcaAsistencia): ResultadoLectura {
   const { participante } = marca
@@ -353,14 +370,26 @@ export function resultadoDeMarca(marca: MarcaAsistencia): ResultadoLectura {
     tipoInscripcion: nombreTipoInscripcion(marca.inscripcion?.tipoInscripcion),
     fotoInscripcionId: participante.foto?.tiene && marca.inscripcion ? marca.inscripcion.id : null,
   }
+  const virtual = esVirtual(marca.inscripcion?.tipoInscripcion)
   if (marca.alerta === 'QR_LEGADO') {
     return {
       tono: 'alerta',
       titulo: TITULO_QR_LEGADO,
-      mensaje: 'Se registró con el QR anterior. Pide el DNI y compáralo con este documento y la foto; recuérdale usar el fotocheck de su portal.',
+      mensaje: virtual ? `${MENSAJE_QR_LEGADO} ${AVISO_INSCRIPCION_VIRTUAL}` : MENSAJE_QR_LEGADO,
       persona,
       fueraDeHorario: marca.esFueraDeHorario,
       cierraEnMs: null,
+      reintentable: false,
+    }
+  }
+  if (virtual) {
+    return {
+      tono: 'alerta',
+      titulo: 'Asistencia registrada',
+      mensaje: AVISO_INSCRIPCION_VIRTUAL,
+      persona,
+      fueraDeHorario: marca.esFueraDeHorario,
+      cierraEnMs: CIERRE_AVISO_VIRTUAL_MS,
       reintentable: false,
     }
   }
