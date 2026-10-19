@@ -160,13 +160,26 @@ export function conservarValorTrasError(modo: ModoLectura, codigo: string): bool
 
 export const TITULO_QR_LEGADO = 'QR antiguo: verifica el DNI'
 
-/** Mensaje de una marca registrada (el documento se muestra tal cual llega, enmascarado o no). */
-export function textoMarca(marca: Pick<MarcaAsistencia, 'esFueraDeHorario' | 'participante' | 'alerta'>): string {
+/**
+ * Tono del resultado de una marca registrada en la pantalla Asistencia (`/asistencia`): ámbar con el QR
+ * anterior o con una inscripción virtual (la marca ya quedó registrada; solo se pide verificar), verde en
+ * los demás casos. Es el mismo criterio que usa el escáner en `resultadoDeMarca`.
+ */
+export function tonoDeMarca(marca: Pick<MarcaAsistencia, 'alerta' | 'inscripcion'>): TonoResultado {
+  return marca.alerta === 'QR_LEGADO' || esVirtual(marca.inscripcion?.tipoInscripcion) ? 'alerta' : 'exito'
+}
+
+/**
+ * Mensaje de una marca registrada (el documento se muestra tal cual llega, enmascarado o no). En una
+ * inscripción virtual (`inscripcion.tipoInscripcion.modalidad`, spec 012) suma el aviso no bloqueante.
+ */
+export function textoMarca(marca: Pick<MarcaAsistencia, 'esFueraDeHorario' | 'participante' | 'alerta' | 'inscripcion'>): string {
   const { participante } = marca
   const nombre = `${participante.nombres} ${participante.apellidos}`.trim()
   const documento = `${participante.tipoDocumento.toUpperCase()} ${participante.numeroDocumento}`.trim()
   const prefijo = marca.alerta === 'QR_LEGADO' ? `⚠ ${TITULO_QR_LEGADO} ·` : '✓'
-  return `${prefijo} ${nombre} · ${documento}${marca.esFueraDeHorario ? ' · fuera de horario' : ''}`
+  const aviso = esVirtual(marca.inscripcion?.tipoInscripcion) ? ` · ${AVISO_INSCRIPCION_VIRTUAL}` : ''
+  return `${prefijo} ${nombre} · ${documento}${marca.esFueraDeHorario ? ' · fuera de horario' : ''}${aviso}`
 }
 
 /** Id positivo de un parámetro de la URL (`?evento=`, `?actividad=`); cualquier otro valor, `null`. */

@@ -36,6 +36,7 @@ import {
   textoMarca,
   textoVentana,
   TITULO_QR_LEGADO,
+  tonoDeMarca,
   ubicarArchivoZxing,
   ventanaActividad,
   type FormMarca,
@@ -125,6 +126,41 @@ describe('asistencia: textos', () => {
     const participante = { id: 1, nombres: 'Ana', apellidos: 'Díaz', tipoDocumento: 'dni', numeroDocumento: '70001234' }
     expect(textoMarca({ esFueraDeHorario: false, participante, alerta: 'QR_LEGADO' })).toBe('⚠ QR antiguo: verifica el DNI · Ana Díaz · DNI 70001234')
     expect(textoMarca({ esFueraDeHorario: false, participante, alerta: null })).toBe('✓ Ana Díaz · DNI 70001234')
+  })
+
+  describe('pantalla Asistencia: inscripción virtual (spec 012)', () => {
+    const participante = { id: 1, nombres: 'Ana', apellidos: 'Díaz', tipoDocumento: 'dni', numeroDocumento: '70001234' }
+    const conModalidad = (modalidad: unknown): Pick<MarcaAsistencia, 'alerta' | 'inscripcion'> => ({
+      alerta: null,
+      inscripcion: { id: 500, tipoInscripcion: { nombre: 'ESTUDIANTES', etiqueta: 'VIRTUAL', modalidad: modalidad as TipoInscripcionMarca['modalidad'] } },
+    })
+
+    it('la marca de un virtual suma el aviso al texto y sale en ámbar, igual que en el escáner', () => {
+      const marca = { esFueraDeHorario: false, participante, ...conModalidad('VIRTUAL') }
+      expect(textoMarca(marca)).toBe(`✓ Ana Díaz · DNI 70001234 · ${AVISO_INSCRIPCION_VIRTUAL}`)
+      expect(tonoDeMarca(marca)).toBe('alerta')
+      // mismo criterio que el escáner: ámbar con el mismo aviso
+      expect(resultadoDeMarca({ ...MARCA_014, ...conModalidad('VIRTUAL') })).toMatchObject({ tono: tonoDeMarca(marca), mensaje: AVISO_INSCRIPCION_VIRTUAL })
+    })
+
+    it('conserva «fuera de horario» y, con el QR anterior, suma el aviso después de verificar el DNI', () => {
+      expect(textoMarca({ esFueraDeHorario: true, participante, ...conModalidad('VIRTUAL') }))
+        .toBe(`✓ Ana Díaz · DNI 70001234 · fuera de horario · ${AVISO_INSCRIPCION_VIRTUAL}`)
+      const legado = { esFueraDeHorario: false, participante, alerta: 'QR_LEGADO' as const, inscripcion: conModalidad('VIRTUAL').inscripcion }
+      expect(textoMarca(legado)).toBe(`⚠ QR antiguo: verifica el DNI · Ana Díaz · DNI 70001234 · ${AVISO_INSCRIPCION_VIRTUAL}`)
+      expect(tonoDeMarca(legado)).toBe('alerta')
+    })
+
+    it('presencial, sin modalidad (backend anterior), desconocida, sin tipo o sin inscripción: verde y sin aviso', () => {
+      for (const modalidad of ['PRESENCIAL', undefined, null, 'HIBRIDA']) {
+        const marca = { esFueraDeHorario: false, participante, ...conModalidad(modalidad) }
+        expect(tonoDeMarca(marca), String(modalidad)).toBe('exito')
+        expect(textoMarca(marca), String(modalidad)).toBe('✓ Ana Díaz · DNI 70001234')
+      }
+      expect(tonoDeMarca({ alerta: null, inscripcion: { id: 500, tipoInscripcion: null } })).toBe('exito')
+      expect(tonoDeMarca({ alerta: null })).toBe('exito')
+      expect(tonoDeMarca({ alerta: 'QR_LEGADO' })).toBe('alerta')
+    })
   })
 })
 

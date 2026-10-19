@@ -10,6 +10,7 @@ import {
   idDeConsulta,
   resultadoDeError,
   textoMarca,
+  tonoDeMarca,
   TIPOS_DOCUMENTO_MARCA,
   type AsistenciaFila,
   type MarcaAsistencia,
@@ -39,7 +40,7 @@ const valor = ref('')
 const tipoDocumento = ref<TipoDocumentoMarca>('')
 const fueraDeHorario = ref(false)
 const registrando = ref(false)
-/** Resultado de la última marca: verde, ámbar (QR anterior o ya registrada) o rojo. */
+/** Resultado de la última marca: verde, ámbar (QR anterior, inscripción virtual o ya registrada) o rojo. */
 const ultimo = ref<{ tono: TonoResultado, texto: string } | null>(null)
 /** Última lectura del QR procesada: el lector USB a veces envía la misma dos veces (`debeProcesar`). */
 let lecturaReciente: LecturaReciente | null = null
@@ -168,8 +169,9 @@ async function registrar() {
   let enfocarTipo = false
   try {
     const r = await api<Respuesta<MarcaAsistencia>>(`activities/${id}/attendances`, { method: 'POST', body: resultado.body })
-    // Con el QR anterior (alerta QR_LEGADO) se pide verificar el DNI
-    ultimo.value = { tono: r.data.alerta === 'QR_LEGADO' ? 'alerta' : 'exito', texto: textoMarca(r.data) }
+    // Ámbar con el QR anterior (se pide verificar el DNI) o con una inscripción virtual (se avisa; la
+    // asistencia ya quedó registrada y nada se bloquea)
+    ultimo.value = { tono: tonoDeMarca(r.data), texto: textoMarca(r.data) }
     valor.value = ''
     tipoDocumento.value = ''
     await cargarAsistencias()
