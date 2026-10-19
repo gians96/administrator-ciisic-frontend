@@ -152,6 +152,10 @@ perfil del inscrito, la atiende `server/api/portal/index.ts` → `/api/v1/me`):
   rojo con el mensaje del backend, que trae la fecha o el horario; `ATTENDANCE_ALREADY_REGISTERED`, en
   ámbar con la hora. Sin red, con un 429 o con un 5xx se ofrece «Reintentar». Un `{ codigo }` rechazado con 422
   `VALIDATION_ERROR` es el backend 013: «QR no reconocido», registrar con el documento.
+- Inscripción virtual (spec 012): si `inscripcion.tipoInscripcion.modalidad` es `VIRTUAL`, la marca ya quedó
+  registrada y el resultado es ámbar «Asistencia registrada» con «Inscripción virtual: verifica si corresponde
+  el ingreso presencial» (`resultadoDeMarca`). No bloquea ni espera «Continuar» (eso es solo del QR anterior,
+  al que se le suma el aviso): se cierra solo y la cámara no se pausa.
 
 ## Alta de participantes y cortesías (spec 009)
 
@@ -161,6 +165,31 @@ perfil del inscrito, la atiende `server/api/portal/index.ts` → `/api/v1/me`):
 - «Inscripción de cortesía» (`inscripciones.cortesia`,
   `POST /api/backend/events/:eventId/courtesy-inscriptions`): aprobada, sin monto, con el tipo del
   evento seleccionado y la credencial opcional (`credencialEnviada: false` → ofrecer reenviarla).
+
+## Modalidad de asistencia (spec 012)
+
+- Contrato: `backend-ciisic/specs/018-modalidad-virtual/contracts/api-modalidad.md`. Todo es aditivo: la
+  clave `modalidad` (`PRESENCIAL` | `VIRTUAL`) va **siempre dentro del objeto del tipo**
+  (`tipo.modalidad`, `tipoInscripcion.modalidad`, `porTipo[].modalidad`), nunca en la raíz de una
+  inscripción, donde `modalidadPago` / `pago.modalidad` es la modalidad de **pago**. El BFF no la toca (proxy
+  transparente: la clave y el filtro `?modalidad=` pasan tal cual).
+- `app/utils/modalidad.ts` concentra la tolerancia: `modalidadDe` (solo `'VIRTUAL'` es virtual; ausente,
+  `null` o desconocida = presencial), `esVirtual`, `etiquetaModalidad`, `etiquetaDeInsignia` (omite la etiqueta
+  que solo repite «VIRTUAL»), `backendConModalidad` y los textos neutros del portal. La insignia es
+  `AppBadgeVirtual`. Contra un backend sin la spec 018 las pantallas se ven como antes.
+- Editor de tipos (`CategoriasTipos.vue` con `app/utils/tiposInscripcion.ts`): selector «Modalidad»;
+  `cuerpoTipo` envía `modalidad` siempre (también sin `pagos.ver`: no es un precio) y `formularioDeTipo` parte de
+  `PRESENCIAL` si el backend no la devuelve. Con «Virtual» el Precio UNDC se precarga con el regular si sigue en
+  el valor de fábrica y hay «Igualar al precio regular» (tarifa única).
+- Inscripciones: filtro `modalidad` en `app/utils/filtros.ts` (lista y CSV por `aParametros`); el selector solo
+  se ofrece si los tipos traen `modalidad`, porque un backend anterior ignoraría el filtro sin avisar. Resumen:
+  `filasPorModalidad` arma el bloque Presencial / Virtual desde `totales.porModalidad` (sin el dato, no hay
+  bloque; los montos llegan en `null` sin `pagos.ver`).
+- Portal: `explicacionEstado` y `lugarDelEvento` (`app/utils/misInscripciones.ts`) dan el texto neutro y
+  «Modalidad virtual» en lugar de la sede; el fotocheck se muestra completo (QR incluido) con la insignia
+  «Virtual» y una nota. «Mi asistencia» no cambia: `GET /me/attendances` no trae la modalidad.
+- Las preguntas de negocio abiertas (entrega del acceso, certificados y asistencia de los virtuales, constancia
+  de estudiante) no se resuelven aquí: los textos son neutros y nada se bloquea.
 
 ## Enrutamiento por perfil y permiso
 

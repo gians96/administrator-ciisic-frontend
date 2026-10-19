@@ -94,6 +94,10 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   sobre proxies de Vue.
 - Fechas con `app/utils/formato.ts` y `whitespace-nowrap` en tablas.
 - Textos en español; errores por código.
+- Terminología (spec 012): **modalidad de asistencia** (`ModalidadAsistencia`, `tipo.modalidad`: presencial o
+  virtual) ≠ **modalidad de pago** (`modalidadPago`, `pago.modalidad`: banco, billetera, cortesía) ≠
+  **fotocheck virtual** (la credencial digital del portal) ≠ «Modalidad 01/02/03» (tarjetas de `/planes` de la
+  landing). `modalidad` va siempre dentro del objeto del tipo, nunca en la raíz de una inscripción.
 
 ## Reglas de negocio clave (no romper)
 
@@ -115,6 +119,14 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   la cámara se pausa (`pausaLaCamara`); al cerrar un error el mismo QR se puede volver a escanear
   (`recienteTrasCerrar`). «Fuera de horario» se desmarca al cambiar de actividad. El wasm de ZXing se
   configura una sola vez (`usarZxingDelPanel`) y se sirve con caché inmutable.
+- **Modalidad de asistencia** (spec 012): cada tipo es `PRESENCIAL` (por defecto) o `VIRTUAL`; los virtuales viven
+  dentro de las categorías existentes (Estudiantes y Público general), con `precio == precioInstitucional`.
+  Todo es tolerante (`modalidadDe`, `esVirtual` en `app/utils/modalidad.ts`): ausente, `null` o desconocida =
+  presencial, y contra un backend sin la spec 018 las pantallas se ven como antes (el filtro «Modalidad» solo se
+  ofrece si los tipos traen `modalidad`: `backendConModalidad`). **Nada se bloquea**: el escáner solo muestra un
+  aviso ámbar que no espera «Continuar» (eso es solo del QR anterior), y el portal muestra el fotocheck y el QR
+  igual. Los textos son neutros (sin enlaces, horas ni certificado) hasta que la organización responda cómo se
+  entrega el acceso, qué certificados y asistencia corresponden a los virtuales y si se exige constancia.
 - Foto del perfil: recodificada con canvas (recorte cuadrado centrado, JPEG de 600 × 600 px, mínimo
   200 px) y con la casilla de consentimiento obligatoria; el multipart lleva solo `file` y
   `consentimiento=true`.
@@ -172,13 +184,15 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–011
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–012
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
-escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
+escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de
+asistencia). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
 `backend-ciisic/specs/013-roles-permisos/contracts/`; código por correo, portal, fotocheck,
 asistencia por QR, alta de participantes y cortesías en
-`backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`.
+`backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`; modalidad virtual en
+`backend-ciisic/specs/018-modalidad-virtual/contracts/`.
 
 ## Antes de dar por terminado
 
