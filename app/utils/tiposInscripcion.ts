@@ -147,6 +147,24 @@ export function avisoTarifaUnica(
 }
 
 /**
+ * Confirmación antes de cambiar la modalidad de un tipo que ya tiene inscripciones: la modalidad se lee
+ * del tipo en vivo (no queda copiada en cada inscripción), así que el cambio reclasifica de golpe a todos
+ * los inscritos (filtro y CSV, resumen, aviso del escáner, rótulo de la credencial PDF y párrafo del correo
+ * en los reenvíos). Devuelve el texto de la confirmación, o `null` si no hace falta (tipo nuevo, sin
+ * inscripciones, `totalInscripciones` desconocido o modalidad sin cambio).
+ */
+export function avisoCambioModalidad(
+  actual: Pick<TipoInscripcion, 'modalidad' | 'totalInscripciones'> | null | undefined,
+  nueva: ModalidadAsistencia,
+): string | null {
+  const total = Number(actual?.totalInscripciones ?? 0)
+  if (!actual || !(total > 0) || modalidadDe(actual.modalidad) === nueva) return null
+  const personas = total === 1 ? '1 inscripción' : `${total} inscripciones`
+  const destino = nueva === 'VIRTUAL' ? 'virtual' : 'presencial'
+  return `Este tipo ya tiene ${personas}. Cambiar su modalidad a ${destino} las reclasifica a todas de inmediato (filtros, CSV, resumen, aviso del escáner, credencial y correo). ¿Guardar así?`
+}
+
+/**
  * Cuerpo de `POST /registration-categories/:id/types` y `PUT /registration-types/:id`.
  * - Un precio vacío es un error (antes viajaba como 0, y 0 es «gratis»).
  * - «Solo externos» no usa el precio UNDC: se envía igual al regular para cumplir `precioInstitucional <= precio`.

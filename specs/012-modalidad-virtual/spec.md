@@ -113,7 +113,10 @@ presencial (con kit o sin kit). Contrato: `backend-ciisic/specs/018-modalidad-vi
   `PRESENCIAL` al guardar un tipo (el backend responde 422 con `fields.modalidad` a otro valor).
 - «Mi asistencia» no cambia: `GET /me/attendances` no trae la modalidad (ver «Pendientes»).
 - Un tipo nuevo nace activo y la landing lo ofrece apenas se guarda: crear los virtuales con «Activo»
-  apagado hasta que el backend con la spec 018 esté desplegado.
+  apagado hasta que el backend con la spec 018 esté desplegado **y** la landing nueva esté publicada (la
+  landing anterior los mostraría mezclados con los presenciales).
+- Cambiar la modalidad de un tipo que ya tiene inscripciones las reclasifica a todas (la modalidad se lee del
+  tipo en vivo): el editor pide confirmación con el número afectado (`avisoCambioModalidad`) y no bloquea.
 
 ## Orden de despliegue
 

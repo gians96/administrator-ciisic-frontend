@@ -3,6 +3,7 @@ import type { Categoria, TipoInscripcion } from '~/types/api'
 import {
   OPCIONES_DISPONIBILIDAD,
   OPCIONES_MODALIDAD,
+  avisoCambioModalidad,
   avisoTarifaUnica,
   ayudaDisponibilidad,
   ayudaModalidad,
@@ -244,6 +245,26 @@ describe('confirmación de la tarifa única de un tipo virtual', () => {
 
   it('un virtual solo para la comunidad UNDC con precios distintos también se confirma (el UNDC es el que paga)', () => {
     expect(avisoTarifaUnica({ ...virtual, disponiblePara: 'INSTITUCIONAL' }, visibles)).not.toBeNull()
+  })
+
+  it('cambiar la modalidad de un tipo con inscripciones se confirma, con el número afectado', () => {
+    const aviso = avisoCambioModalidad({ modalidad: 'VIRTUAL', totalInscripciones: 150 }, 'PRESENCIAL')
+    expect(aviso).toContain('150 inscripciones')
+    expect(aviso).toContain('presencial')
+    expect(aviso).toContain('¿Guardar así?')
+    expect(avisoCambioModalidad({ modalidad: 'PRESENCIAL', totalInscripciones: 1 }, 'VIRTUAL')).toContain('1 inscripción.')
+  })
+
+  it('sin cambio, sin inscripciones, tipo nuevo o total desconocido: no se pregunta', () => {
+    expect(avisoCambioModalidad({ modalidad: 'VIRTUAL', totalInscripciones: 150 }, 'VIRTUAL')).toBeNull()
+    expect(avisoCambioModalidad({ modalidad: 'VIRTUAL', totalInscripciones: 0 }, 'PRESENCIAL')).toBeNull()
+    expect(avisoCambioModalidad({ modalidad: 'VIRTUAL' }, 'PRESENCIAL')).toBeNull()
+    expect(avisoCambioModalidad(null, 'VIRTUAL')).toBeNull()
+  })
+
+  it('un tipo sin modalidad (backend anterior) cuenta como presencial: pasar a virtual con inscripciones se confirma', () => {
+    expect(avisoCambioModalidad({ totalInscripciones: 3 }, 'VIRTUAL')).toContain('3 inscripciones')
+    expect(avisoCambioModalidad({ modalidad: null as never, totalInscripciones: 3 }, 'PRESENCIAL')).toBeNull()
   })
 
   it('no promete certificado, horas ni enlaces', () => {

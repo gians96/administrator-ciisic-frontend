@@ -15,6 +15,7 @@ import {
 import {
   OPCIONES_DISPONIBILIDAD,
   OPCIONES_MODALIDAD,
+  avisoCambioModalidad,
   avisoTarifaUnica,
   ayudaDisponibilidad,
   ayudaModalidad,
@@ -162,6 +163,9 @@ async function guardarTipo() {
   // La tarifa de un virtual es única: un precio UNDC distinto (p. ej. 0) se confirma antes de guardar
   const aviso = avisoTarifaUnica(tipoForm, { preciosOcultos: preciosOcultos.value })
   if (aviso && !(await confirmar({ titulo: 'Tarifa única', mensaje: aviso, textoConfirmar: 'Guardar así' }))) return
+  // La modalidad se lee del tipo en vivo: cambiarla con inscripciones las reclasifica a todas
+  const avisoModalidad = avisoCambioModalidad(tipoEditando.value, tipoForm.modalidad)
+  if (avisoModalidad && !(await confirmar({ titulo: 'Cambiar la modalidad', mensaje: avisoModalidad, textoConfirmar: 'Guardar así' }))) return
   guardando.value = true
   try {
     const guardado = tipoEditando.value
