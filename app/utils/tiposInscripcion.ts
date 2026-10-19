@@ -3,6 +3,7 @@
 // cuerpo del formulario (funciones puras)
 // ============================================================================
 import type { Caracteristica, Categoria, DisponiblePara, ModalidadAsistencia, TipoInscripcion } from '~/types/api'
+import { soles } from '~/utils/formato'
 import { modalidadDe } from '~/utils/modalidad'
 
 export const OPCIONES_DISPONIBILIDAD: readonly { valor: DisponiblePara, etiqueta: string }[] = [
@@ -89,12 +90,60 @@ export function precioUndcAlElegirVirtual(form: Pick<FormularioTipo, 'precio' | 
   return sinEscribir && !vacio(form.precio) ? Number(form.precio) : form.precioInstitucional
 }
 
+/** Lo que la precarga del precio UNDC cambió, para poder deshacerla al volver a «Presencial». */
+export interface PrecargaPrecioUndc {
+  antes: number | ''
+  despues: number | ''
+}
+
+/**
+ * Qué queda en el Precio UNDC al cambiar la «Modalidad» del formulario (`modalidad` es la ya elegida).
+ * - «Virtual» en un tipo **nuevo** (`creando`): precarga con el precio regular si el UNDC sigue en el valor
+ *   de fábrica (`precioUndcAlElegirVirtual`) y recuerda lo que había (`precarga`).
+ * - «Virtual» al **editar** un tipo existente: no toca nada. Su Precio UNDC (incluso un 0 legítimo, «gratis
+ *   para la comunidad UNDC») es un dato real; si la tarifa no es única, `avisoTarifaUnica` lo avisa al guardar.
+ * - Volver a «Presencial»: si el Precio UNDC sigue siendo el que puso la precarga, restaura el anterior;
+ *   si la persona lo cambió a mano, no se toca.
+ */
+export function precioUndcAlCambiarModalidad(
+  modalidad: ModalidadAsistencia,
+  form: Pick<FormularioTipo, 'precio' | 'precioInstitucional'>,
+  estado: { creando: boolean, precarga: PrecargaPrecioUndc | null },
+): { precioInstitucional: number | '', precarga: PrecargaPrecioUndc | null } {
+  if (modalidad === 'VIRTUAL') {
+    if (!estado.creando) return { precioInstitucional: form.precioInstitucional, precarga: null }
+    const despues = precioUndcAlElegirVirtual(form)
+    if (despues === form.precioInstitucional) return { precioInstitucional: despues, precarga: estado.precarga }
+    return { precioInstitucional: despues, precarga: { antes: form.precioInstitucional, despues } }
+  }
+  const { precarga } = estado
+  if (precarga && form.precioInstitucional === precarga.despues) return { precioInstitucional: precarga.antes, precarga: null }
+  return { precioInstitucional: form.precioInstitucional, precarga: null }
+}
+
 /** Se ofrece «Igualar al precio regular»: tipo virtual que sí tiene precio UNDC y los dos precios difieren. */
 export function sePuedeIgualarPrecioUndc(form: Pick<FormularioTipo, 'modalidad' | 'disponiblePara' | 'precio' | 'precioInstitucional'>): boolean {
   return form.modalidad === 'VIRTUAL'
     && form.disponiblePara !== 'EXTERNOS'
     && !vacio(form.precio)
     && Number(form.precio) !== Number(form.precioInstitucional)
+}
+
+/**
+ * Confirmación antes de guardar un tipo virtual cuya tarifa no es única (precio regular distinto del
+ * precio UNDC): la tarifa virtual del congreso es la misma para la comunidad UNDC y los externos, y un
+ * Precio UNDC de 0 la deja gratis. No bloquea (el backend acepta el cuerpo): devuelve el texto de la
+ * confirmación, o `null` si no hace falta. Sin `pagos.ver` no se envían precios y no se avisa.
+ */
+export function avisoTarifaUnica(
+  form: Pick<FormularioTipo, 'modalidad' | 'disponiblePara' | 'precio' | 'precioInstitucional'>,
+  opciones: { preciosOcultos: boolean },
+): string | null {
+  if (opciones.preciosOcultos || !sePuedeIgualarPrecioUndc(form)) return null
+  const regular = soles(Number(form.precio))
+  const undc = soles(Number(form.precioInstitucional))
+  const gratis = Number(form.precioInstitucional) === 0 ? ' Con 0, la comunidad UNDC se inscribe gratis.' : ''
+  return `Un tipo virtual suele tener tarifa única, pero aquí el precio regular es ${regular} y el precio UNDC es ${undc}.${gratis} ¿Guardar así?`
 }
 
 /**

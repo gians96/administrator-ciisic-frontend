@@ -3,14 +3,17 @@ import type { Categoria, TipoInscripcion } from '~/types/api'
 import {
   OPCIONES_DISPONIBILIDAD,
   OPCIONES_MODALIDAD,
+  avisoTarifaUnica,
   ayudaDisponibilidad,
   ayudaModalidad,
   ayudaPrecioUndc,
   cuerpoTipo,
   formularioDeTipo,
+  precioUndcAlCambiarModalidad,
   precioUndcAlElegirVirtual,
   sePuedeIgualarPrecioUndc,
   type FormularioTipo,
+  type PrecargaPrecioUndc,
 } from '~/utils/tiposInscripcion'
 
 const formulario = (cambios: Partial<FormularioTipo> = {}): FormularioTipo => ({
@@ -158,6 +161,93 @@ describe('tarifa única de un tipo virtual', () => {
     expect(ayudaPrecioUndc('TODOS', 'PRESENCIAL')).toBe('0 = gratis para la comunidad UNDC.')
     expect(ayudaPrecioUndc('EXTERNOS', 'PRESENCIAL')).toContain('No aplica')
     expect(ayudaPrecioUndc('EXTERNOS', 'VIRTUAL')).toContain('No aplica')
+  })
+})
+
+describe('precio UNDC al cambiar la modalidad del formulario', () => {
+  const sinPrecarga = { creando: true, precarga: null }
+
+  it('en un tipo nuevo, «Virtual» con el precio UNDC de fábrica lo iguala al regular y recuerda lo que había', () => {
+    expect(precioUndcAlCambiarModalidad('VIRTUAL', { precio: 30, precioInstitucional: 0 }, sinPrecarga))
+      .toEqual({ precioInstitucional: 30, precarga: { antes: 0, despues: 30 } })
+    expect(precioUndcAlCambiarModalidad('VIRTUAL', { precio: 50, precioInstitucional: '' }, sinPrecarga))
+      .toEqual({ precioInstitucional: 50, precarga: { antes: '', despues: 50 } })
+  })
+
+  it('en un tipo nuevo, no pisa un precio UNDC que la persona ya escribió ni inventa uno sin precio regular', () => {
+    expect(precioUndcAlCambiarModalidad('VIRTUAL', { precio: 30, precioInstitucional: 25 }, sinPrecarga)).toEqual({ precioInstitucional: 25, precarga: null })
+    // sin cambio no hay nada que deshacer
+    expect(precioUndcAlCambiarModalidad('VIRTUAL', { precio: 0, precioInstitucional: 0 }, sinPrecarga)).toEqual({ precioInstitucional: 0, precarga: null })
+    expect(precioUndcAlCambiarModalidad('VIRTUAL', { precio: '', precioInstitucional: '' }, sinPrecarga)).toEqual({ precioInstitucional: '', precarga: null })
+  })
+
+  it('al EDITAR un tipo no toca el precio UNDC: un 0 legítimo (gratis para la comunidad UNDC) no se pisa', () => {
+    // Antes: elegir «Virtual» en un tipo de 120 / 0 dejaba el UNDC en 120 y volver a «Presencial» no lo restauraba
+    const editando = { creando: false, precarga: null }
+    expect(precioUndcAlCambiarModalidad('VIRTUAL', { precio: 120, precioInstitucional: 0 }, editando)).toEqual({ precioInstitucional: 0, precarga: null })
+    expect(precioUndcAlCambiarModalidad('PRESENCIAL', { precio: 120, precioInstitucional: 0 }, editando)).toEqual({ precioInstitucional: 0, precarga: null })
+  })
+
+  it('volver a «Presencial» restaura el precio UNDC que había antes de la precarga', () => {
+    const precarga: PrecargaPrecioUndc = { antes: 0, despues: 30 }
+    expect(precioUndcAlCambiarModalidad('PRESENCIAL', { precio: 30, precioInstitucional: 30 }, { creando: true, precarga }))
+      .toEqual({ precioInstitucional: 0, precarga: null })
+    expect(precioUndcAlCambiarModalidad('PRESENCIAL', { precio: 30, precioInstitucional: 30 }, { creando: true, precarga: { antes: '', despues: 30 } }))
+      .toEqual({ precioInstitucional: '', precarga: null })
+  })
+
+  it('volver a «Presencial» no pisa un precio UNDC que la persona cambió a mano después', () => {
+    expect(precioUndcAlCambiarModalidad('PRESENCIAL', { precio: 30, precioInstitucional: 25 }, { creando: true, precarga: { antes: 0, despues: 30 } }))
+      .toEqual({ precioInstitucional: 25, precarga: null })
+    expect(precioUndcAlCambiarModalidad('PRESENCIAL', { precio: 80, precioInstitucional: 60 }, sinPrecarga)).toEqual({ precioInstitucional: 60, precarga: null })
+  })
+
+  it('ida y vuelta completa en un tipo nuevo: Presencial → Virtual → Presencial deja el formulario como estaba', () => {
+    const inicial = { precio: 30, precioInstitucional: 0 }
+    const ida = precioUndcAlCambiarModalidad('VIRTUAL', inicial, sinPrecarga)
+    const vuelta = precioUndcAlCambiarModalidad('PRESENCIAL', { ...inicial, precioInstitucional: ida.precioInstitucional }, { creando: true, precarga: ida.precarga })
+    expect(vuelta.precioInstitucional).toBe(0)
+  })
+})
+
+describe('confirmación de la tarifa única de un tipo virtual', () => {
+  const virtual = { modalidad: 'VIRTUAL' as const, disponiblePara: 'TODOS' as const, precio: 30, precioInstitucional: 0 }
+  const visibles = { preciosOcultos: false }
+
+  it('un virtual de 30 con precio UNDC 0 se confirma: la comunidad UNDC se inscribiría gratis', () => {
+    // Caso: se elige «Virtual» antes de escribir el precio regular y el UNDC queda en 0
+    const aviso = avisoTarifaUnica(virtual, visibles)
+    expect(aviso).toContain('30')
+    expect(aviso).toContain('Con 0, la comunidad UNDC se inscribe gratis')
+    expect(aviso).toContain('¿Guardar así?')
+  })
+
+  it('un precio UNDC distinto de 0 también se confirma, sin la nota de «gratis»', () => {
+    const aviso = avisoTarifaUnica({ ...virtual, precio: 50, precioInstitucional: 40 }, visibles)
+    expect(aviso).toContain('50')
+    expect(aviso).toContain('40')
+    expect(aviso).not.toContain('gratis')
+  })
+
+  it('tarifa única (30 / 30 y 50 / 50): no se pregunta nada', () => {
+    expect(avisoTarifaUnica({ ...virtual, precioInstitucional: 30 }, visibles)).toBeNull()
+    expect(avisoTarifaUnica({ ...virtual, precio: 50, precioInstitucional: 50 }, visibles)).toBeNull()
+    // el precio sale del input numérico como número o como texto sin normalizar
+    expect(avisoTarifaUnica({ ...virtual, precioInstitucional: 30.0 }, visibles)).toBeNull()
+  })
+
+  it('presencial, solo externos y sin pagos.ver (no se envían precios): no se pregunta', () => {
+    expect(avisoTarifaUnica({ ...virtual, modalidad: 'PRESENCIAL' }, visibles)).toBeNull()
+    expect(avisoTarifaUnica({ ...virtual, disponiblePara: 'EXTERNOS' }, visibles)).toBeNull()
+    expect(avisoTarifaUnica(virtual, { preciosOcultos: true })).toBeNull()
+  })
+
+  it('un virtual solo para la comunidad UNDC con precios distintos también se confirma (el UNDC es el que paga)', () => {
+    expect(avisoTarifaUnica({ ...virtual, disponiblePara: 'INSTITUCIONAL' }, visibles)).not.toBeNull()
+  })
+
+  it('no promete certificado, horas ni enlaces', () => {
+    expect(avisoTarifaUnica(virtual, visibles)).not.toMatch(/https?:|www\.|certificad|horas/i)
   })
 })
 

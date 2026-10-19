@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { backendConModalidad, esVirtual, etiquetaDeInsignia, etiquetaModalidad, INDICACIONES_VIRTUAL, LUGAR_VIRTUAL, MODALIDADES_ASISTENCIA, modalidadDe } from '~/utils/modalidad'
+import {
+  AVISO_MODALIDAD_NO_GUARDADA,
+  AVISO_SERVIDOR_SIN_MODALIDAD,
+  backendConModalidad,
+  backendSinModalidad,
+  esVirtual,
+  etiquetaDeInsignia,
+  etiquetaModalidad,
+  hayTiposVirtuales,
+  INDICACIONES_VIRTUAL,
+  LUGAR_VIRTUAL,
+  MODALIDADES_ASISTENCIA,
+  modalidadDe,
+  modalidadVirtualNoGuardada,
+} from '~/utils/modalidad'
 import { modalidadPago } from '~/utils/formato'
 
 describe('modalidad de asistencia: tolerancia', () => {
@@ -73,6 +87,61 @@ describe('el backend envía la modalidad (spec 018)', () => {
     expect(backendConModalidad([{ tipos: [{}, {}] }])).toBe(false)
     expect(backendConModalidad([{ tipos: [] }])).toBe(false)
     expect(backendConModalidad([])).toBe(false)
+  })
+})
+
+describe('hay tipos virtuales (filtro «Modalidad» del listado)', () => {
+  it('es cierto con algún tipo virtual', () => {
+    expect(hayTiposVirtuales([{ tipos: [{ modalidad: 'PRESENCIAL' }] }, { tipos: [{}, { modalidad: 'VIRTUAL' }] }])).toBe(true)
+  })
+
+  it('es falso con la spec 018 desplegada pero sin ningún tipo virtual (aún no se crean): el filtro sería ruido', () => {
+    expect(hayTiposVirtuales([{ tipos: [{ modalidad: 'PRESENCIAL' }, { modalidad: 'PRESENCIAL' }] }])).toBe(false)
+    expect(backendConModalidad([{ tipos: [{ modalidad: 'PRESENCIAL' }] }])).toBe(true)
+  })
+
+  it('es falso con un backend anterior, con modalidades desconocidas, sin tipos o sin categorías', () => {
+    expect(hayTiposVirtuales([{ tipos: [{}, {}] }])).toBe(false)
+    expect(hayTiposVirtuales([{ tipos: [{ modalidad: 'HIBRIDA' }, { modalidad: null }] }])).toBe(false)
+    expect(hayTiposVirtuales([{ tipos: [] }])).toBe(false)
+    expect(hayTiposVirtuales([])).toBe(false)
+  })
+})
+
+describe('editor de tipos contra un backend sin la spec 018', () => {
+  it('detecta el backend anterior solo cuando hay tipos y ninguno trae modalidad', () => {
+    expect(backendSinModalidad([{ tipos: [{}, {}] }, { tipos: [{}] }])).toBe(true)
+    // con la 018 todos los tipos traen la clave, también los presenciales
+    expect(backendSinModalidad([{ tipos: [{ modalidad: 'PRESENCIAL' }] }])).toBe(false)
+    expect(backendSinModalidad([{ tipos: [{}, { modalidad: 'VIRTUAL' }] }])).toBe(false)
+  })
+
+  it('un evento sin tipos no permite saberlo: no se advierte', () => {
+    expect(backendSinModalidad([{ tipos: [] }])).toBe(false)
+    expect(backendSinModalidad([])).toBe(false)
+  })
+
+  it('un tipo guardado como VIRTUAL que vuelve presencial o sin modalidad se detecta (el backend anterior descarta la clave)', () => {
+    expect(modalidadVirtualNoGuardada('VIRTUAL', { modalidad: undefined })).toBe(true)
+    expect(modalidadVirtualNoGuardada('VIRTUAL', {})).toBe(true)
+    expect(modalidadVirtualNoGuardada('VIRTUAL', { modalidad: 'PRESENCIAL' })).toBe(true)
+  })
+
+  it('no hay falsa alarma: virtual guardado, presencial pedido, o sin respuesta para comparar', () => {
+    expect(modalidadVirtualNoGuardada('VIRTUAL', { modalidad: 'VIRTUAL' })).toBe(false)
+    expect(modalidadVirtualNoGuardada('PRESENCIAL', {})).toBe(false)
+    expect(modalidadVirtualNoGuardada('PRESENCIAL', { modalidad: 'PRESENCIAL' })).toBe(false)
+    expect(modalidadVirtualNoGuardada('VIRTUAL', undefined)).toBe(false)
+    expect(modalidadVirtualNoGuardada('VIRTUAL', null)).toBe(false)
+  })
+
+  it('los avisos explican el orden de despliegue y no prometen enlaces, horas ni certificado', () => {
+    for (const texto of [AVISO_SERVIDOR_SIN_MODALIDAD, AVISO_MODALIDAD_NO_GUARDADA]) {
+      expect(texto).toContain('spec 018')
+      expect(texto).toContain('Despliega primero el backend')
+      expect(texto).not.toMatch(/https?:|www\.|certificad|horas/i)
+    }
+    expect(AVISO_MODALIDAD_NO_GUARDADA).toContain('PRESENCIAL')
   })
 })
 

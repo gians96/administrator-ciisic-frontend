@@ -49,9 +49,42 @@ export function etiquetaDeInsignia(tipo: { etiqueta?: string | null, modalidad?:
 
 /**
  * El backend ya envía la modalidad de asistencia (spec 018): al menos un tipo de las categorías la trae.
- * Un backend anterior no la envía ni entiende el filtro `?modalidad=` (lo ignoraría sin avisar), así que
- * el listado de inscripciones solo ofrece ese filtro cuando es `true`. Sin tipos no se puede saber: `false`.
+ * Un backend anterior no la envía ni entiende el filtro `?modalidad=` (lo ignoraría sin avisar). Sin tipos
+ * no se puede saber: `false`. El editor de tipos lo usa (`backendSinModalidad`) para avisar que un tipo
+ * «Virtual» se guardaría presencial; el filtro del listado pide además un tipo virtual (`hayTiposVirtuales`).
  */
 export function backendConModalidad(categorias: readonly { tipos: readonly { modalidad?: unknown }[] }[]): boolean {
   return categorias.some((categoria) => categoria.tipos.some((tipo) => tipo.modalidad !== undefined))
 }
+
+/**
+ * Algún tipo de las categorías es virtual. Es lo que justifica mostrar el filtro «Modalidad» del listado:
+ * mientras no exista un tipo virtual (aunque el backend ya sea el de la spec 018) el filtro siempre
+ * devolvería lo mismo o nada. Un tipo virtual implica además que el backend sí envía la modalidad.
+ */
+export function hayTiposVirtuales(categorias: readonly { tipos: readonly { modalidad?: unknown }[] }[]): boolean {
+  return categorias.some((categoria) => categoria.tipos.some((tipo) => esVirtual(tipo)))
+}
+
+/**
+ * Hay tipos cargados y ninguno trae `modalidad`: el backend es anterior a la spec 018. Su validación
+ * descarta en silencio la clave `modalidad`, así que un tipo guardado como «Virtual» quedaría presencial.
+ * Sin tipos no se puede saber (un evento nuevo): `false`.
+ */
+export function backendSinModalidad(categorias: readonly { tipos: readonly { modalidad?: unknown }[] }[]): boolean {
+  return categorias.some((categoria) => categoria.tipos.length > 0) && !backendConModalidad(categorias)
+}
+
+/**
+ * Se pidió guardar el tipo como `VIRTUAL` y la respuesta del backend (el tipo guardado) no es virtual: un
+ * backend anterior a la spec 018 lo guardó presencial sin avisar. Sin respuesta no se puede saber: `false`.
+ */
+export function modalidadVirtualNoGuardada(enviada: unknown, guardado: { modalidad?: unknown } | null | undefined): boolean {
+  return Boolean(guardado) && modalidadDe(enviada) === 'VIRTUAL' && !esVirtual(guardado)
+}
+
+/** Advertencia bajo el selector «Modalidad» cuando se elige «Virtual» contra un backend sin la spec 018. */
+export const AVISO_SERVIDOR_SIN_MODALIDAD = 'El servidor aún no admite la modalidad virtual (spec 018 del backend): este tipo se guardaría como presencial. Despliega primero el backend.'
+
+/** Aviso tras guardar un tipo «Virtual» que el backend dejó presencial. */
+export const AVISO_MODALIDAD_NO_GUARDADA = 'El tipo se guardó como PRESENCIAL: el servidor aún no admite la modalidad virtual (spec 018 del backend). Despliega primero el backend y vuelve a elegir «Virtual» en este tipo.'

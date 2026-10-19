@@ -3,18 +3,28 @@ import type { Caracteristica, Categoria, Respuesta, TipoInscripcion } from '~/ty
 import { numero, soles } from '~/utils/formato'
 import { aErrorApi, mensajeError } from '~/utils/errores'
 import { clonarLista } from '~/utils/clonar'
-import { esVirtual, etiquetaDeInsignia, modalidadDe } from '~/utils/modalidad'
+import {
+  AVISO_MODALIDAD_NO_GUARDADA,
+  AVISO_SERVIDOR_SIN_MODALIDAD,
+  backendSinModalidad,
+  esVirtual,
+  etiquetaDeInsignia,
+  modalidadDe,
+  modalidadVirtualNoGuardada,
+} from '~/utils/modalidad'
 import {
   OPCIONES_DISPONIBILIDAD,
   OPCIONES_MODALIDAD,
+  avisoTarifaUnica,
   ayudaDisponibilidad,
   ayudaModalidad,
   ayudaPrecioUndc,
   cuerpoTipo,
   formularioDeTipo,
-  precioUndcAlElegirVirtual,
+  precioUndcAlCambiarModalidad,
   sePuedeIgualarPrecioUndc,
   type FormularioTipo,
+  type PrecargaPrecioUndc,
 } from '~/utils/tiposInscripcion'
 
 const props = defineProps<{ eventoId: number }>()
@@ -94,12 +104,19 @@ const tipoCategoria = ref<Categoria | null>(null)
 const tipoEditando = ref<TipoInscripcion | null>(null)
 const tipoForm = reactive<FormularioTipo>({ codigo: '', nombre: '', etiqueta: '', descripcion: '', precio: 0, precioInstitucional: 0, disponiblePara: 'TODOS', modalidad: 'PRESENCIAL', activo: true, orden: 0 })
 const soloExternos = computed(() => tipoForm.disponiblePara === 'EXTERNOS')
+/**
+ * El backend es anterior a la spec 018 (ningún tipo trae `modalidad`): descartaría la clave al guardar y un
+ * tipo «Virtual» quedaría presencial sin avisar. Se advierte bajo el selector al elegir «Virtual».
+ */
+const servidorSinModalidad = computed(() => backendSinModalidad(categorias.value))
 const caracteristicas = ref<Caracteristica[]>([])
 /**
  * Los precios llegan en `null` sin `pagos.ver`: al editar no se muestran ni se envían, así el backend
  * conserva los actuales (nunca se guardan en 0 por no conocerlos).
  */
 const preciosOcultos = ref(false)
+/** Lo que la precarga de la tarifa única cambió en el Precio UNDC, para deshacerlo al volver a «Presencial». */
+let precargaPrecioUndc: PrecargaPrecioUndc | null = null
 
 const ICONOS_SUGERIDOS = ['heroicons:academic-cap', 'heroicons:gift', 'heroicons:identification', 'heroicons:ticket', 'heroicons:x-mark', 'heroicons:sparkles', 'heroicons:computer-desktop']
 
@@ -110,17 +127,22 @@ function abrirTipo(categoria: Categoria, tipo?: TipoInscripcion) {
   Object.assign(tipoForm, formularioDeTipo(tipo, categoria))
   caracteristicas.value = clonarLista(tipo?.caracteristicas)
   preciosOcultos.value = Boolean(tipo) && (tipo?.precio === null || tipo?.precioInstitucional === null)
+  precargaPrecioUndc = null
   tipoModal.value = true
 }
 
 /**
- * Tarifa única de un tipo virtual: al elegir «Virtual», el precio UNDC se iguala al regular solo si aún
- * está en el valor de fábrica (no pisa lo que la persona ya escribió). Solo con el cambio hecho por la
- * persona: abrir un tipo para editarlo no toca sus precios.
+ * Tarifa única de un tipo virtual: en un tipo **nuevo**, al elegir «Virtual» el precio UNDC se iguala al
+ * regular solo si aún está en el valor de fábrica (no pisa lo que la persona ya escribió) y volver a
+ * «Presencial» lo restaura. Al editar un tipo existente no se toca ningún precio (ni abrirlo ni cambiar la
+ * modalidad): si la tarifa no es única, `guardarTipo` lo confirma.
  */
 function alElegirModalidad(evento: Event) {
   tipoForm.modalidad = modalidadDe((evento.target as HTMLSelectElement).value)
-  if (tipoForm.modalidad === 'VIRTUAL' && !preciosOcultos.value) tipoForm.precioInstitucional = precioUndcAlElegirVirtual(tipoForm)
+  if (preciosOcultos.value) return
+  const cambio = precioUndcAlCambiarModalidad(tipoForm.modalidad, tipoForm, { creando: !tipoEditando.value, precarga: precargaPrecioUndc })
+  tipoForm.precioInstitucional = cambio.precioInstitucional
+  precargaPrecioUndc = cambio.precarga
 }
 
 function igualarPrecioUndc() {
@@ -137,11 +159,17 @@ async function guardarTipo() {
     return
   }
   const { body } = resultado
+  // La tarifa de un virtual es única: un precio UNDC distinto (p. ej. 0) se confirma antes de guardar
+  const aviso = avisoTarifaUnica(tipoForm, { preciosOcultos: preciosOcultos.value })
+  if (aviso && !(await confirmar({ titulo: 'Tarifa única', mensaje: aviso, textoConfirmar: 'Guardar así' }))) return
   guardando.value = true
   try {
-    if (tipoEditando.value) await api(`registration-types/${tipoEditando.value.id}`, { method: 'PUT', body })
-    else await api(`registration-categories/${tipoCategoria.value.id}/types`, { method: 'POST', body })
-    toast.exito('Tipo de inscripción guardado.')
+    const guardado = tipoEditando.value
+      ? await api<Respuesta<TipoInscripcion>>(`registration-types/${tipoEditando.value.id}`, { method: 'PUT', body })
+      : await api<Respuesta<TipoInscripcion>>(`registration-categories/${tipoCategoria.value.id}/types`, { method: 'POST', body })
+    // Un backend sin la spec 018 descarta `modalidad` y responde bien: se avisa en lugar de dar por bueno
+    if (modalidadVirtualNoGuardada(body.modalidad, guardado?.data)) toast.error(AVISO_MODALIDAD_NO_GUARDADA)
+    else toast.exito('Tipo de inscripción guardado.')
     tipoModal.value = false
     await cargar()
   } catch (error) {
@@ -310,6 +338,7 @@ async function eliminarTipo(tipo: TipoInscripcion) {
           <select id="tipo-modalidad" :value="tipoForm.modalidad" class="field-control" @change="alElegirModalidad">
             <option v-for="opcion in OPCIONES_MODALIDAD" :key="opcion.valor" :value="opcion.valor">{{ opcion.etiqueta }}</option>
           </select>
+          <p v-if="servidorSinModalidad && tipoForm.modalidad === 'VIRTUAL'" class="mt-1.5 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-200" role="status">{{ AVISO_SERVIDOR_SIN_MODALIDAD }}</p>
         </AppField>
         <AppField label="Descripción" for="tipo-desc" class="md:col-span-2">
           <textarea id="tipo-desc" v-model="tipoForm.descripcion" rows="2" class="field-control" maxlength="1000" />
