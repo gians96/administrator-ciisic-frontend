@@ -9,4 +9,4 @@
 - [x] T007 Asistencia en puerta: `pages/ponencias-especializadas/asistencia.vue`
 - [x] T008 `docs/overview.md` (pantallas y roles) y AGENTS.md
 - [x] T009 Prueba en el navegador contra el backend local (programa, inscripciones, puerta)
-- [ ] T010 Producción: asignar los permisos `especializadas.*` a las cuentas de la Comisión (Equipo y administradores) tras desplegar el backend 018
+- [ ] T010 Producción: asignar los permisos `especializadas.*` a las cuentas de la Comisión (Equipo y administradores) tras desplegar el backend 019
