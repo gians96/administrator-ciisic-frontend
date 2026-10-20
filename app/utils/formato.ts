@@ -63,6 +63,7 @@ export const COLOR_GRAFICO_ESTADO: Record<CodigoEstado, string> = {
 export function modalidadPago(modalidad: string | null, banco?: string | null, billetera?: string | null): string {
   if (modalidad === 'banco') return `Banco${banco ? ` · ${banco.toUpperCase()}` : ''}`
   if (modalidad === 'billetera') return `Billetera${billetera ? ` · ${billetera.charAt(0).toUpperCase()}${billetera.slice(1)}` : ''}`
+  if (modalidad === 'delegacion') return 'Delegación'
   return '—'
 }
 

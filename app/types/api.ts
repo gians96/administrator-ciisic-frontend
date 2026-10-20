@@ -217,6 +217,62 @@ export interface Categoria {
   tipos: TipoInscripcion[]
 }
 
+// ─── Delegaciones ───
+
+export interface DelegacionRepresentante {
+  nombre: string | null
+  email: string | null
+  telefono: string | null
+}
+
+/** Pago conjunto del grupo: un solo voucher y un solo número de operación (spec 018). */
+export interface PagoDelegacion {
+  modalidad: 'banco' | 'billetera' | null
+  banco: string | null
+  billeteraDigital: string | null
+  tipoOperacion: string | null
+  numeroOperacion: string | null
+  fechaPago: string | null
+  montoTotalPagado: number
+  tieneVoucher: boolean
+}
+
+export interface Delegacion {
+  id: number
+  eventoId: number
+  nombre: string
+  codigoLink: string
+  institucion: string | null
+  representante: DelegacionRepresentante
+  minIntegrantes: number
+  precioEstandar: number
+  precioPromocional: number
+  /** Tarifa vigente por persona según el total actual. */
+  precioUnitario: number
+  totalIntegrantes: number
+  montoTotal: number
+  activo: boolean
+  creadoEn: string
+  actualizadoEn: string
+}
+
+export interface InscripcionDelegacion {
+  id: number
+  participante: ParticipanteRef
+  estado: EstadoRef
+  monto: number
+  creadoEn: string
+}
+
+/** Detalle de una delegación y sus integrantes. `registrados`/`omitidos` llegan al cargar una lista. */
+export interface DelegacionDetalle extends Delegacion {
+  /** Pago conjunto del grupo (solo en el detalle). */
+  pago?: PagoDelegacion
+  inscripciones: InscripcionDelegacion[]
+  registrados?: number
+  omitidos?: number
+}
+
 export interface EstadoRef { id?: number, codigo: CodigoEstado, nombre: string }
 
 export interface ParticipanteRef {

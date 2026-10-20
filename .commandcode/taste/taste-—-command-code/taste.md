@@ -1,0 +1,8 @@
+# Taste — Command Code
+- Writes to the agent in Spanish and expects responses, explanations, and closing summaries in Spanish. Confidence: 0.8
+- Expects a closing report that states exactly which files were modified, the exact path/URL where new assets must be placed, and the command to run the project for review. Confidence: 0.65
+- Prefers changes scoped to only the necessary files, extending the existing page in place rather than moving, removing, or redesigning existing sections. Confidence: 0.7
+- Expects new UI to reuse the project's existing palette, typography, components, and styling conventions instead of introducing a new visual system; asks the agent to inspect the codebase first to find the right insertion point and conventions. Confidence: 0.7
+- Expects assets to follow the repo's existing folder conventions (locate the existing asset folder such as the merchandising/public images directory and use the path the components already reference) rather than inventing a new location. Confidence: 0.6
+- Strongly rejects fabricated content: no invented prices, promotions, availability, delivery terms, logos, or technical specs, and no silently substituting a real product photo with a generic/internet image; fields without confirmed data are omitted instead of filled in. Confidence: 0.8
+- Expects post-implementation verification: typecheck/lint/tests/build plus real rendering checks at both desktop and mobile widths (e.g. 1440 px and 390 px) confirming no horizontal overflow, a correctly loaded image, and no new console/build errors — and that pre-existing failures are called out as such. Confidence: 0.7

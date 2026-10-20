@@ -86,6 +86,12 @@ export const MENSAJES_POR_CODIGO: Readonly<Record<string, string>> = {
   NAMES_REQUIRED: 'No se pudieron obtener los nombres del documento. Ingresa los nombres y apellidos.',
   PARTICIPANT_EXISTS: 'Ya existe un participante con ese documento.',
 
+  // Delegaciones
+  DELEGATION_NOT_FOUND: 'La delegación no existe o ya fue eliminada. Actualiza la lista.',
+  DELEGATION_INACTIVE: 'La delegación está inactiva: no admite nuevas inscripciones.',
+  DUPLICATE_PARTICIPANT: 'Hay documentos o correos repetidos en la carga. Revisa las filas marcadas.',
+  PARTICIPANT_ALREADY_REGISTERED: 'La persona ya tiene una inscripción en este evento (fuera de esta delegación).',
+
   // Configuración del sistema
   UNDC_API_NOT_CONFIGURED: 'Falta la URL o la API key de API_UNDC. Guárdalas y vuelve a probar la conexión.',
   INVALID_URL: 'La URL no es válida: usa https (http solo para localhost) y no incluyas usuario ni contraseña.',
