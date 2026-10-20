@@ -1,6 +1,6 @@
 # Feature Specification: Ponencias especializadas
 
-**Created**: 2026-10-20 · **Status**: Implementado · **Backend**: `backend-ciisic/specs/018-ponencias-especializadas/`
+**Created**: 2026-10-20 · **Status**: Implementado · **Backend**: `backend-ciisic/specs/019-ponencias-especializadas/`
 
 Pantallas del panel para el programa de ponencias especializadas, sus inscripciones y la asistencia en
 puerta. El backend es la autoridad (permisos, cupos, cruces y nombres del DNI); el panel solo los presenta.
@@ -45,7 +45,7 @@ No confundir con `/ponencias`, que son los trabajos del Call for Papers.
 
 ## Compatibilidad
 
-Con un backend sin la spec 018 las cuentas no reciben los permisos nuevos y el menú no muestra la sección;
+Con un backend sin la spec 019 las cuentas no reciben los permisos nuevos y el menú no muestra la sección;
 abrir la URL lleva a la página de inicio de la cuenta.
 
 ## Criterios de éxito

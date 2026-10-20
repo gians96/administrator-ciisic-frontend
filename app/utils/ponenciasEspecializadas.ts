@@ -8,7 +8,7 @@ import {
 } from '~/utils/participantes'
 
 /**
- * Ponencias especializadas (backend-ciisic spec 018, `contracts/api-ponencias-especializadas.md`):
+ * Ponencias especializadas (backend-ciisic spec 019, `contracts/api-ponencias-especializadas.md`):
  * programa, inscripciones con filtros y asistencia en puerta con el DNI. No son los «papers» del
  * Call for Papers (esos son `/ponencias`).
  */

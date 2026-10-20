@@ -86,7 +86,7 @@ export const MENSAJES_POR_CODIGO: Readonly<Record<string, string>> = {
   NAMES_REQUIRED: 'No se pudieron obtener los nombres del documento. Ingresa los nombres y apellidos.',
   PARTICIPANT_EXISTS: 'Ya existe un participante con ese documento.',
 
-  // Ponencias especializadas (spec 018 del backend)
+  // Ponencias especializadas (spec 019 del backend)
   TALK_NOT_FOUND: 'La ponencia no existe o ya fue eliminada. Actualiza la lista.',
   REGISTRATION_NOT_FOUND: 'La inscripción no existe. Actualiza la lista.',
   ALREADY_ATTENDED: 'La persona ya asistió: anula primero la asistencia para cancelar la inscripción.',
