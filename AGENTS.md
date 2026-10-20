@@ -8,7 +8,8 @@ Panel del Congreso CIISIC (UNDC) con **dos perfiles**:
 - **Staff**: Owner, Administrador del sistema (ambos con todos los eventos), Tesorero y Comisión
   tecnológica (solo sus eventos). Cada cuenta ve las pantallas y botones que sus **permisos**
   permiten: resumen, inscripciones, asistencia, escáner de asistencia (QR del fotocheck, lector USB
-  o DNI), ponencias, mensajes, eventos, tipos de inscripción, consultas DNI, participantes (con
+  o DNI), ponencias (papers) y **ponencias especializadas** (programa, inscripciones con filtros y
+  asistencia en puerta con el DNI), mensajes, eventos, tipos de inscripción, consultas DNI, participantes (con
   alta y cortesías), correo, equipo y administradores, y sistema (solo Owner). Tabla de permisos por
   pantalla y por rol en [`docs/overview.md`](docs/overview.md).
 - **Portal del inscrito** (entra con Google o con un código a su correo): inscripciones (estado,
@@ -133,6 +134,13 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   fotocheck y el QR igual. Los textos son neutros (sin enlaces, horas ni certificado) hasta que la organización
   responda cómo se entrega el acceso, qué certificados y asistencia corresponden a los virtuales y si se exige
   constancia.
+- Ponencias especializadas (spec 012; **no** son los papers de `/ponencias`): sus tres pantallas están en
+  `app/pages/ponencias-especializadas/` y su lógica pura en `app/utils/ponenciasEspecializadas.ts`. El programa se
+  edita solo con `especializadas.gestionar`; inscribir y corregir, con `especializadas.inscribir`; la puerta
+  y anular asistencia, con `especializadas.asistencia`. En la puerta un DNI sin nombres abre los campos de
+  nombres (`NAMES_REQUIRED`) y conserva el documento; el aviso ámbar cuenta cuando se inscribe en el acto, se
+  libera el cupo de otra ponencia del mismo horario o llega fuera de horario. El menú marca un solo ítem
+  activo (`itemActivo`: la ruta más específica) porque `/ponencias` es prefijo de `/ponencias-especializadas`.
 - Foto del perfil: recodificada con canvas (recorte cuadrado centrado, JPEG de 600 × 600 px, mínimo
   200 px) y con la casilla de consentimiento obligatoria; el multipart lleva solo `file` y
   `consentimiento=true`.

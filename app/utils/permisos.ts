@@ -21,6 +21,7 @@ export const ETIQUETAS_PERMISO: Readonly<Record<Permiso, string>> = {
   'inscripciones.cortesia': 'Registrar inscripciones de cortesía',
   'legacy.usar': 'Usar las rutas de la versión anterior',
   'certificados.gestionar': 'Gestionar plantillas y emitir certificados',
+  'especializadas.gestionar': 'Crear, editar y eliminar ponencias especializadas',
 
   'resumen.ver': 'Ver el resumen del evento',
   'inscripciones.ver': 'Ver inscritos (nombre, documento, correo y celular)',
@@ -38,6 +39,9 @@ export const ETIQUETAS_PERMISO: Readonly<Record<Permiso, string>> = {
   'mensajes.eliminar': 'Eliminar mensajes de contacto',
   'certificados.ver': 'Ver certificados',
   'certificados.operar': 'Generar, descargar para firmar y subir certificados firmados',
+  'especializadas.ver': 'Ver las ponencias especializadas y sus inscritos',
+  'especializadas.inscribir': 'Inscribir manualmente a ponencias especializadas y corregir inscripciones',
+  'especializadas.asistencia': 'Tomar asistencia en ponencias especializadas (inscribe al instante con el DNI)',
 }
 
 /** Catálogo completo, en el orden del backend. */
@@ -59,6 +63,8 @@ export const DEPENDENCIAS: Readonly<Partial<Record<Permiso, readonly Permiso[]>>
   'asistencia.fuera_horario': ['asistencia.marcar'],
   'mensajes.eliminar': ['mensajes.ver'],
   'certificados.operar': ['certificados.ver'],
+  'especializadas.inscribir': ['especializadas.ver'],
+  'especializadas.asistencia': ['especializadas.ver'],
 }
 
 type Dependencias = Readonly<Partial<Record<Permiso, readonly Permiso[]>>>
@@ -190,6 +196,9 @@ export interface SeccionMenu {
 /** Escáner de asistencia a pantalla completa (cámara, lector USB o DNI). */
 export const RUTA_ESCANER = '/escanear'
 
+/** Asistencia en puerta a las ponencias especializadas (solo el DNI). */
+export const RUTA_PUERTA = '/ponencias-especializadas/asistencia'
+
 /** Menú completo; cada página exige el mismo permiso en su `definePageMeta({ permiso })`. */
 export const MENU: readonly SeccionMenu[] = [
   {
@@ -201,6 +210,14 @@ export const MENU: readonly SeccionMenu[] = [
       { to: RUTA_ESCANER, label: 'Escanear asistencia', icon: 'heroicons:camera', permiso: 'asistencia.marcar' },
       { to: '/ponencias', label: 'Ponencias', icon: 'heroicons:document-text', permiso: 'ponencias.ver' },
       { to: '/mensajes', label: 'Mensajes', icon: 'heroicons:envelope', permiso: 'mensajes.ver' },
+    ],
+  },
+  {
+    titulo: 'Ponencias especializadas',
+    items: [
+      { to: '/ponencias-especializadas', label: 'Programa', icon: 'heroicons:presentation-chart-bar', permiso: 'especializadas.ver' },
+      { to: '/ponencias-especializadas/inscripciones', label: 'Inscripciones', icon: 'heroicons:clipboard-document-list', permiso: 'especializadas.ver' },
+      { to: RUTA_PUERTA, label: 'Asistencia en puerta', icon: 'heroicons:identification', permiso: 'especializadas.asistencia' },
     ],
   },
   {
@@ -216,6 +233,15 @@ export const MENU: readonly SeccionMenu[] = [
     ],
   },
 ]
+
+/**
+ * Ítem del menú que corresponde a la ruta: el de la ruta más larga que la contiene (igual o como
+ * carpeta). `/` solo coincide exacto. Así `/ponencias-especializadas` no activa también a `/ponencias`.
+ */
+export function itemActivo(ruta: string, destinos: readonly string[]): string | null {
+  const coincide = (to: string) => (to === '/' ? ruta === '/' : ruta === to || ruta.startsWith(`${to}/`))
+  return destinos.filter(coincide).sort((a, b) => b.length - a.length)[0] ?? null
+}
 
 /** Página para una cuenta sin ninguna sección del panel. */
 export const RUTA_SIN_ACCESO = '/sin-acceso'
@@ -243,6 +269,15 @@ export function soloMarcaAsistencia(acceso: AccesoPanel | null | undefined): boo
   return acceso.permisos.every((permiso) => permiso === 'asistencia.marcar' || ACOMPANAN_MARCAR.includes(permiso))
 }
 
+/** Permisos que solo acompañan a `especializadas.asistencia`: el que implica (`especializadas.ver`). */
+const ACOMPANAN_PUERTA: readonly Permiso[] = ['especializadas.ver']
+
+/** La cuenta solo toma asistencia en puerta a las ponencias especializadas (y no hace nada más). */
+export function soloTomaAsistenciaEnPuerta(acceso: AccesoPanel | null | undefined): boolean {
+  if (!acceso || !tienePermiso(acceso, 'especializadas.asistencia')) return false
+  return acceso.permisos.every((permiso) => permiso === 'especializadas.asistencia' || ACOMPANAN_PUERTA.includes(permiso))
+}
+
 /**
  * Primera página permitida en el orden del menú. Una cuenta cuyo único permiso operativo es
  * `asistencia.marcar` empieza en el escáner; una cuenta por evento que además hace otras cosas y marca
@@ -253,6 +288,8 @@ export function inicioPara(acceso: AccesoPanel | null | undefined): string {
   const items = menuPara(acceso).flatMap((seccion) => seccion.items)
   const escaner = items.find((item) => item.to === RUTA_ESCANER)
   if (escaner && soloMarcaAsistencia(acceso)) return escaner.to
+  const puerta = items.find((item) => item.to === RUTA_PUERTA)
+  if (puerta && soloTomaAsistenciaEnPuerta(acceso)) return puerta.to
   const asistencia = items.find((item) => item.permiso === 'asistencia.ver')
   if (asistencia && acceso?.alcance === 'EVENTO' && tienePermiso(acceso, 'asistencia.marcar')) return asistencia.to
   return items[0]?.to ?? RUTA_SIN_ACCESO

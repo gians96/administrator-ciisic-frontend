@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inicioPara, menuPara } from '~/utils/permisos'
+import { inicioPara, itemActivo, menuPara } from '~/utils/permisos'
 
 /** Menú lateral. `contraido`: riel de solo íconos (escritorio); el nombre sale en un globo al pasar. */
 const props = withDefaults(defineProps<{ contraido?: boolean }>(), { contraido: false })
@@ -11,7 +11,9 @@ const secciones = computed(() => menuPara(auth.acceso))
 const inicio = computed(() => inicioPara(auth.acceso))
 
 const route = useRoute()
-const activo = (to: string) => (to === '/' ? route.path === '/' : route.path.startsWith(to))
+// Un solo ítem activo: el de la ruta más específica (`/ponencias-especializadas/inscripciones` no marca `/ponencias`)
+const rutaActiva = computed(() => itemActivo(route.path, secciones.value.flatMap((seccion) => seccion.items.map((item) => item.to))))
+const activo = (to: string) => to === rutaActiva.value
 
 // Globo `fixed` (uno `absolute` quedaría recortado por el desplazamiento de la lista)
 const globo = ref<{ texto: string, top: number, left: number } | null>(null)

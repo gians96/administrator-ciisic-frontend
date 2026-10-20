@@ -86,6 +86,15 @@ export const MENSAJES_POR_CODIGO: Readonly<Record<string, string>> = {
   NAMES_REQUIRED: 'No se pudieron obtener los nombres del documento. Ingresa los nombres y apellidos.',
   PARTICIPANT_EXISTS: 'Ya existe un participante con ese documento.',
 
+  // Ponencias especializadas (spec 018 del backend)
+  TALK_NOT_FOUND: 'La ponencia no existe o ya fue eliminada. Actualiza la lista.',
+  REGISTRATION_NOT_FOUND: 'La inscripción no existe. Actualiza la lista.',
+  ALREADY_ATTENDED: 'La persona ya asistió: anula primero la asistencia para cancelar la inscripción.',
+  CAPACITY_BELOW_REGISTERED: 'Ya hay más inscritos que ese cupo. Cancela inscripciones o sube el cupo.',
+  TALK_HAS_REGISTRATIONS: 'La ponencia tiene inscritos vigentes. Despublícala o cancela sus inscripciones antes de eliminarla.',
+  INVALID_HOURS: 'La hora de fin debe ser posterior a la de inicio.',
+  INVALID_FILTER: 'Alguno de los filtros no es válido. Límpialos e inténtalo otra vez.',
+
   // Configuración del sistema
   UNDC_API_NOT_CONFIGURED: 'Falta la URL o la API key de API_UNDC. Guárdalas y vuelve a probar la conexión.',
   INVALID_URL: 'La URL no es válida: usa https (http solo para localhost) y no incluyas usuario ni contraseña.',
@@ -109,6 +118,11 @@ const RESPALDO_POR_CODIGO: Readonly<Record<string, string>> = {
   OUTSIDE_WINDOW: 'La actividad no está en su horario de registro de asistencia.',
   ATTENDANCE_ALREADY_REGISTERED: 'La asistencia de esta persona ya estaba registrada en esta actividad.',
   LEGACY_QR_NOT_ALLOWED: 'Este QR anterior ya no es válido. Pide el fotocheck del portal o registra con el documento.',
+
+  // Ponencias especializadas: el servidor nombra la ponencia o el ambiente
+  TALK_FULL: 'La ponencia ya no tiene cupos disponibles.',
+  ROOM_CONFLICT: 'Ese ambiente ya está ocupado a esa hora por otra ponencia presencial.',
+  SCHEDULE_CONFLICT: 'Las ponencias se cruzan en horario.',
 
   // Archivos (foto del portal, QR de pagos)
   FILE_REQUIRED: 'Adjunta el archivo.',

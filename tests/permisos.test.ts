@@ -8,14 +8,17 @@ import {
   etiquetaRol,
   ETIQUETAS_ROL,
   inicioPara,
+  itemActivo,
   menuPara,
   MENU,
   PERMISOS,
   requeridoPor,
   RUTA_ESCANER,
+  RUTA_PUERTA,
   RUTA_SIN_ACCESO,
   sinEventosAsignados,
   soloMarcaAsistencia,
+  soloTomaAsistenciaEnPuerta,
   tienePermiso,
   tonoRol,
 } from '~/utils/permisos'
@@ -36,8 +39,8 @@ const COMISION = acceso(['asistencia.marcar', 'asistencia.ver'])
 const rutas = (a: AccesoPanel | null) => menuPara(a).flatMap((seccion) => seccion.items.map((item) => item.to))
 
 describe('permisos: catálogo', () => {
-  it('tiene los 29 permisos del backend, sin repetir', () => {
-    expect(PERMISOS).toHaveLength(29)
+  it('tiene los 33 permisos del backend, sin repetir', () => {
+    expect(PERMISOS).toHaveLength(33)
     expect(new Set(PERMISOS).size).toBe(PERMISOS.length)
     expect(esPermiso('pagos.ver')).toBe(true)
     expect(esPermiso('pagos.editar')).toBe(false)
@@ -109,7 +112,7 @@ describe('permisos: accesoDeSesion', () => {
 
 describe('permisos: menú', () => {
   it('Owner ve todo; Administrador, todo menos Sistema', () => {
-    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/asistencia', '/escanear', '/ponencias', '/mensajes', '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
+    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/asistencia', '/escanear', '/ponencias', '/mensajes', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', RUTA_PUERTA, '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
     expect(rutas(ADMINISTRADOR)).not.toContain('/sistema')
     expect(rutas(ADMINISTRADOR)).toContain('/administradores')
   })
@@ -119,11 +122,39 @@ describe('permisos: menú', () => {
     expect(rutas(TESORERO)).toEqual(['/', '/inscripciones', '/asistencia', '/ponencias', '/mensajes'])
   })
 
+  it('Ponencias especializadas: programa e inscripciones con «ver»; la puerta, con «asistencia»', () => {
+    expect(menuPara(acceso(['especializadas.ver'])).map((s) => s.titulo)).toEqual(['Ponencias especializadas'])
+    expect(rutas(acceso(['especializadas.ver']))).toEqual(['/ponencias-especializadas', '/ponencias-especializadas/inscripciones'])
+    expect(rutas(acceso(['especializadas.ver', 'especializadas.asistencia']))).toEqual(['/ponencias-especializadas', '/ponencias-especializadas/inscripciones', RUTA_PUERTA])
+    // El Tesorero no tiene permisos de ponencias especializadas
+    expect(rutas(TESORERO)).not.toContain('/ponencias-especializadas')
+  })
+
   it('Comisión: solo lo que se le asignó', () => {
     expect(rutas(COMISION)).toEqual(['/asistencia', '/escanear'])
     expect(rutas(acceso(['asistencia.ver']))).toEqual(['/asistencia'])
     expect(menuPara(acceso([]))).toEqual([])
     expect(menuPara(null)).toEqual([])
+  })
+})
+
+describe('permisos: ítem activo del menú', () => {
+  const destinos = ['/', '/inscripciones', '/ponencias', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', RUTA_PUERTA, '/eventos']
+
+  it('marca solo el ítem de la ruta más específica', () => {
+    expect(itemActivo('/', destinos)).toBe('/')
+    expect(itemActivo('/ponencias', destinos)).toBe('/ponencias')
+    expect(itemActivo('/ponencias-especializadas', destinos)).toBe('/ponencias-especializadas')
+    expect(itemActivo('/ponencias-especializadas/inscripciones', destinos)).toBe('/ponencias-especializadas/inscripciones')
+    expect(itemActivo(RUTA_PUERTA, destinos)).toBe(RUTA_PUERTA)
+    expect(itemActivo('/ponencias-especializadas/otra', destinos)).toBe('/ponencias-especializadas')
+  })
+
+  it('una subpágina activa a su ítem y nada coincide fuera del menú', () => {
+    expect(itemActivo('/eventos/3', destinos)).toBe('/eventos')
+    expect(itemActivo('/inscripciones/12', destinos)).toBe('/inscripciones')
+    expect(itemActivo('/ponenciasx', destinos)).toBeNull()
+    expect(itemActivo('/sistema', destinos)).toBeNull()
   })
 })
 
@@ -147,6 +178,20 @@ describe('permisos: página de inicio', () => {
     expect(soloMarcaAsistencia(acceso(['asistencia.ver']))).toBe(false)
     expect(soloMarcaAsistencia(acceso(['asistencia.ver', 'asistencia.fuera_horario']))).toBe(false)
     expect(soloMarcaAsistencia(null)).toBe(false)
+  })
+
+  it('la cuenta que solo toma asistencia en puerta a las ponencias especializadas empieza en la puerta', () => {
+    const soloPuerta = acceso(['especializadas.asistencia', 'especializadas.ver'])
+    expect(inicioPara(soloPuerta)).toBe(RUTA_PUERTA)
+    expect(soloTomaAsistenciaEnPuerta(soloPuerta)).toBe(true)
+    // Con inscribir hace algo más: empieza en el primer ítem del menú
+    const conInscribir = acceso(['especializadas.asistencia', 'especializadas.ver', 'especializadas.inscribir'])
+    expect(inicioPara(conInscribir)).toBe('/ponencias-especializadas')
+    expect(soloTomaAsistenciaEnPuerta(conInscribir)).toBe(false)
+    expect(soloTomaAsistenciaEnPuerta(acceso(['especializadas.ver']))).toBe(false)
+    expect(soloTomaAsistenciaEnPuerta(null)).toBe(false)
+    // Una cuenta por evento sin eventos no entra a ninguna parte
+    expect(inicioPara({ ...soloPuerta, eventoIds: [] })).toBe('/sin-acceso')
   })
 
   it('la cuenta por evento que marca y hace algo más empieza en Asistencia', () => {

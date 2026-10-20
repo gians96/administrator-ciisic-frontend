@@ -46,6 +46,7 @@ export type Permiso =
   | 'inscripciones.cortesia'
   | 'legacy.usar'
   | 'certificados.gestionar'
+  | 'especializadas.gestionar'
   // Por evento: las cuentas con alcance `EVENTO` los ejercen solo en sus eventos
   | 'resumen.ver'
   | 'inscripciones.ver'
@@ -63,6 +64,9 @@ export type Permiso =
   | 'mensajes.eliminar'
   | 'certificados.ver'
   | 'certificados.operar'
+  | 'especializadas.ver'
+  | 'especializadas.inscribir'
+  | 'especializadas.asistencia'
 
 /** Acceso efectivo de la cuenta (`usuario.acceso` de la sesión, el login y Google). */
 export interface AccesoPanel {
