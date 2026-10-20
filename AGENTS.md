@@ -134,6 +134,7 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   fotocheck y el QR igual. Los textos son neutros (sin enlaces, horas ni certificado) hasta que la organización
   responda cómo se entrega el acceso, qué certificados y asistencia corresponden a los virtuales y si se exige
   constancia.
+- **Tipos sin estudiantes UNDC** (spec 013): el interruptor `tipo.excluyeEstudiantesUndc` («No admitir estudiantes UNDC» en el editor de tipos, insignia «Sin estudiantes UNDC» en la lista) se enciende en los tipos virtuales. Bloquea solo a estudiantes UNDC (verificados con SIVIRENO o con correo de código `@undc.edu.pe`), no a docentes, administrativos ni externos, y solo frena inscripciones nuevas (las ya hechas se rechazan o cancelan a mano; las cortesías no aplican la regla). Es independiente de «Disponible para» y de «Modalidad». Ausente = `false`. **Backend 020 primero**: el anterior descarta la clave sin error y el editor lo advierte (`backendSinExcluyeEstudiantes`, `excluyeEstudiantesNoGuardado`).
 - Ponencias especializadas (spec 012; **no** son los papers de `/ponencias`): sus tres pantallas están en
   `app/pages/ponencias-especializadas/` y su lógica pura en `app/utils/ponenciasEspecializadas.ts`. El programa se
   edita solo con `especializadas.gestionar`; inscribir y corregir, con `especializadas.inscribir`; la puerta
@@ -198,15 +199,16 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–012
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–013
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
 escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de
-asistencia). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
+asistencia, tipos que no admiten estudiantes UNDC). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
 `backend-ciisic/specs/013-roles-permisos/contracts/`; código por correo, portal, fotocheck,
 asistencia por QR, alta de participantes y cortesías en
 `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`; modalidad virtual en
-`backend-ciisic/specs/018-modalidad-virtual/contracts/`.
+`backend-ciisic/specs/018-modalidad-virtual/contracts/`; tipos que no admiten estudiantes UNDC en
+`backend-ciisic/specs/020-virtual-sin-estudiantes-undc/contracts/`.
 
 ## Antes de dar por terminado
 

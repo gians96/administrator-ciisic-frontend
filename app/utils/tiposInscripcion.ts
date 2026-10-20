@@ -32,6 +32,33 @@ export function ayudaModalidad(modalidad: ModalidadAsistencia): string {
     : 'La persona asiste al evento (lo habitual). Los tipos virtuales se marcan como «Virtual» en el panel, la credencial y el correo de aprobación.'
 }
 
+/** Descripción del interruptor «No admitir estudiantes UNDC» (spec 020 del backend). */
+export const AYUDA_EXCLUYE_ESTUDIANTES = 'Un estudiante UNDC (verificado o con correo de código @undc.edu.pe) no puede inscribirse en este tipo ni lo ve en la landing. Docentes, administrativos y externos sí. Solo frena inscripciones nuevas: las ya hechas no cambian, y las cortesías no aplican la regla.'
+
+/**
+ * El backend ya envía `excluyeEstudiantesUndc` (spec 020): al menos un tipo de las categorías lo trae.
+ * Un backend anterior no lo envía y descarta en silencio la clave que manda el panel, así que el
+ * interruptor no tendría efecto. Sin tipos no se puede saber: se asume que sí.
+ */
+export function backendSinExcluyeEstudiantes(categorias: readonly { tipos: readonly { excluyeEstudiantesUndc?: unknown }[] }[]): boolean {
+  const tipos = categorias.flatMap((categoria) => categoria.tipos)
+  return tipos.length > 0 && tipos.every((tipo) => tipo.excluyeEstudiantesUndc === undefined)
+}
+
+/**
+ * Se pidió encender el interruptor y el tipo guardado que devolvió el backend no lo tiene: un backend
+ * anterior a la spec 020 lo descartó sin avisar. Sin respuesta no se puede saber: `false`.
+ */
+export function excluyeEstudiantesNoGuardado(enviado: unknown, guardado: { excluyeEstudiantesUndc?: unknown } | null | undefined): boolean {
+  return Boolean(guardado) && enviado === true && guardado?.excluyeEstudiantesUndc !== true
+}
+
+/** Advertencia bajo el interruptor cuando se enciende contra un backend sin la spec 020. */
+export const AVISO_SERVIDOR_SIN_EXCLUYE = 'El servidor aún no admite esta opción (spec 020 del backend): no tendría efecto. Despliega primero el backend.'
+
+/** Aviso tras guardar un tipo con el interruptor encendido que el backend dejó apagado. */
+export const AVISO_EXCLUYE_NO_GUARDADO = 'El tipo se guardó sin «No admitir estudiantes UNDC»: el servidor aún no admite esta opción (spec 020 del backend). Despliega primero el backend y vuelve a encenderla en este tipo.'
+
 /** Ayuda del campo «Precio UNDC / institucional» según a quién se ofrece el tipo y su modalidad. */
 export function ayudaPrecioUndc(disponiblePara: DisponiblePara, modalidad: ModalidadAsistencia): string {
   if (disponiblePara === 'EXTERNOS') return 'No aplica: este tipo no se ofrece a la comunidad UNDC.'
@@ -50,6 +77,8 @@ export interface FormularioTipo {
   disponiblePara: DisponiblePara
   /** Un tipo que el backend aún no devuelve con modalidad (anterior a la spec 018) parte de `PRESENCIAL`. */
   modalidad: ModalidadAsistencia
+  /** Spec 020: no admite estudiantes UNDC. Un tipo que el backend aún no devuelve con el campo parte de `false`. */
+  excluyeEstudiantesUndc: boolean
   activo: boolean
   orden: number | ''
 }
@@ -69,6 +98,7 @@ export function formularioDeTipo(tipo: TipoInscripcion | null | undefined, categ
     precioInstitucional: tipo?.precioInstitucional ?? 0,
     disponiblePara: tipo?.disponiblePara ?? 'TODOS',
     modalidad: modalidadDe(tipo?.modalidad),
+    excluyeEstudiantesUndc: tipo?.excluyeEstudiantesUndc === true,
     activo: tipo?.activo ?? true,
     orden: tipo?.orden ?? categoria.tipos.length + 1,
   }
@@ -169,8 +199,8 @@ export function avisoCambioModalidad(
  * - Un precio vacío es un error (antes viajaba como 0, y 0 es «gratis»).
  * - «Solo externos» no usa el precio UNDC: se envía igual al regular para cumplir `precioInstitucional <= precio`.
  * - Sin `pagos.ver` (`preciosOcultos`) no se envían precios: el backend conserva los actuales.
- * - `modalidad` viaja siempre (también sin `pagos.ver`: no es un precio); un backend anterior a la
- *   spec 018 la ignora.
+ * - `modalidad` y `excluyeEstudiantesUndc` viajan siempre (también sin `pagos.ver`: no son precios); un
+ *   backend anterior a la spec 018 / 020 los ignora.
  */
 export function cuerpoTipo(form: FormularioTipo, caracteristicas: readonly Caracteristica[], opciones: { preciosOcultos: boolean }): ResultadoCuerpoTipo {
   const errores: Record<string, string> = {}
@@ -194,6 +224,7 @@ export function cuerpoTipo(form: FormularioTipo, caracteristicas: readonly Carac
       ...(opciones.preciosOcultos ? {} : { precio, precioInstitucional: soloExternos ? precio : Number(form.precioInstitucional) }),
       disponiblePara: form.disponiblePara,
       modalidad: modalidadDe(form.modalidad),
+      excluyeEstudiantesUndc: form.excluyeEstudiantesUndc === true,
       activo: form.activo,
       orden: Number(form.orden) || 0,
       caracteristicas: caracteristicas.filter((c) => c.text.trim()).map((c) => ({ icon: c.icon.trim() || 'heroicons:check', text: c.text.trim() })),

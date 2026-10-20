@@ -13,6 +13,9 @@ import {
   modalidadVirtualNoGuardada,
 } from '~/utils/modalidad'
 import {
+  AVISO_EXCLUYE_NO_GUARDADO,
+  AVISO_SERVIDOR_SIN_EXCLUYE,
+  AYUDA_EXCLUYE_ESTUDIANTES,
   OPCIONES_DISPONIBILIDAD,
   OPCIONES_MODALIDAD,
   avisoCambioModalidad,
@@ -20,7 +23,9 @@ import {
   ayudaDisponibilidad,
   ayudaModalidad,
   ayudaPrecioUndc,
+  backendSinExcluyeEstudiantes,
   cuerpoTipo,
+  excluyeEstudiantesNoGuardado,
   formularioDeTipo,
   precioUndcAlCambiarModalidad,
   sePuedeIgualarPrecioUndc,
@@ -103,8 +108,10 @@ async function eliminarCategoria(categoria: Categoria) {
 const tipoModal = ref(false)
 const tipoCategoria = ref<Categoria | null>(null)
 const tipoEditando = ref<TipoInscripcion | null>(null)
-const tipoForm = reactive<FormularioTipo>({ codigo: '', nombre: '', etiqueta: '', descripcion: '', precio: 0, precioInstitucional: 0, disponiblePara: 'TODOS', modalidad: 'PRESENCIAL', activo: true, orden: 0 })
+const tipoForm = reactive<FormularioTipo>({ codigo: '', nombre: '', etiqueta: '', descripcion: '', precio: 0, precioInstitucional: 0, disponiblePara: 'TODOS', modalidad: 'PRESENCIAL', excluyeEstudiantesUndc: false, activo: true, orden: 0 })
 const soloExternos = computed(() => tipoForm.disponiblePara === 'EXTERNOS')
+/** El backend es anterior a la spec 020: descartaría «No admitir estudiantes UNDC» al guardar y no aplicaría la regla. */
+const servidorSinExcluye = computed(() => backendSinExcluyeEstudiantes(categorias.value))
 /**
  * El backend es anterior a la spec 018 (ningún tipo trae `modalidad`): descartaría la clave al guardar y un
  * tipo «Virtual» quedaría presencial sin avisar. Se advierte bajo el selector al elegir «Virtual».
@@ -173,6 +180,7 @@ async function guardarTipo() {
       : await api<Respuesta<TipoInscripcion>>(`registration-categories/${tipoCategoria.value.id}/types`, { method: 'POST', body })
     // Un backend sin la spec 018 descarta `modalidad` y responde bien: se avisa en lugar de dar por bueno
     if (modalidadVirtualNoGuardada(body.modalidad, guardado?.data)) toast.error(AVISO_MODALIDAD_NO_GUARDADA)
+    else if (excluyeEstudiantesNoGuardado(body.excluyeEstudiantesUndc, guardado?.data)) toast.error(AVISO_EXCLUYE_NO_GUARDADO)
     else toast.exito('Tipo de inscripción guardado.')
     tipoModal.value = false
     await cargar()
@@ -248,6 +256,7 @@ async function eliminarTipo(tipo: TipoInscripcion) {
                   <AppBadgeVirtual v-if="esVirtual(tipo)" class="ml-1" />
                   <AppBadge v-if="tipo.disponiblePara === 'EXTERNOS'" tono="warn" class="ml-1">Solo externos</AppBadge>
                   <AppBadge v-else-if="tipo.disponiblePara === 'INSTITUCIONAL'" tono="info" class="ml-1">Solo UNDC</AppBadge>
+                  <AppBadge v-if="tipo.excluyeEstudiantesUndc" tono="warn" class="ml-1">Sin estudiantes UNDC</AppBadge>
                 </p>
                 <p class="font-mono text-xs text-slate-500">{{ tipo.codigo }}</p>
               </td>
@@ -344,6 +353,10 @@ async function eliminarTipo(tipo: TipoInscripcion) {
           </select>
           <p v-if="servidorSinModalidad && tipoForm.modalidad === 'VIRTUAL'" class="mt-1.5 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-200" role="status">{{ AVISO_SERVIDOR_SIN_MODALIDAD }}</p>
         </AppField>
+        <div class="md:col-span-2">
+          <AppSwitch v-model="tipoForm.excluyeEstudiantesUndc" label="No admitir estudiantes UNDC" :descripcion="AYUDA_EXCLUYE_ESTUDIANTES" />
+          <p v-if="servidorSinExcluye && tipoForm.excluyeEstudiantesUndc" class="mt-1.5 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-200" role="status">{{ AVISO_SERVIDOR_SIN_EXCLUYE }}</p>
+        </div>
         <AppField label="Descripción" for="tipo-desc" class="md:col-span-2">
           <textarea id="tipo-desc" v-model="tipoForm.descripcion" rows="2" class="field-control" maxlength="1000" />
         </AppField>

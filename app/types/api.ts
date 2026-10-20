@@ -213,6 +213,8 @@ export interface TipoInscripcion {
   disponiblePara?: DisponiblePara
   /** Ausente con un backend anterior a la spec 018: equivale a `PRESENCIAL`. */
   modalidad?: ModalidadAsistencia
+  /** Spec 020 del backend: el tipo no admite estudiantes UNDC. Ausente con un backend anterior: equivale a `false`. */
+  excluyeEstudiantesUndc?: boolean
   activo: boolean
   orden: number
   totalInscripciones?: number

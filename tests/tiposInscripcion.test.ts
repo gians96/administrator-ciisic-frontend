@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Categoria, TipoInscripcion } from '~/types/api'
 import {
+  AVISO_EXCLUYE_NO_GUARDADO,
   OPCIONES_DISPONIBILIDAD,
   OPCIONES_MODALIDAD,
   avisoCambioModalidad,
@@ -8,7 +9,9 @@ import {
   ayudaDisponibilidad,
   ayudaModalidad,
   ayudaPrecioUndc,
+  backendSinExcluyeEstudiantes,
   cuerpoTipo,
+  excluyeEstudiantesNoGuardado,
   formularioDeTipo,
   precioUndcAlCambiarModalidad,
   precioUndcAlElegirVirtual,
@@ -26,6 +29,7 @@ const formulario = (cambios: Partial<FormularioTipo> = {}): FormularioTipo => ({
   precioInstitucional: 60,
   disponiblePara: 'TODOS',
   modalidad: 'PRESENCIAL',
+  excluyeEstudiantesUndc: false,
   activo: true,
   orden: 2,
   ...cambios,
@@ -48,6 +52,7 @@ describe('cuerpo del tipo de inscripción', () => {
       precioInstitucional: 60,
       disponiblePara: 'TODOS',
       modalidad: 'PRESENCIAL',
+      excluyeEstudiantesUndc: false,
       activo: true,
       orden: 2,
       caracteristicas: [{ icon: 'heroicons:check', text: 'Acceso a todas las ponencias' }],
@@ -293,5 +298,44 @@ describe('opciones y ayuda de «Disponible para»', () => {
   it('explica quién es la comunidad UNDC según la categoría', () => {
     expect(ayudaDisponibilidad(true)).toContain('estudiante verificado')
     expect(ayudaDisponibilidad(false)).toContain('@undc.edu.pe')
+  })
+})
+
+describe('«No admitir estudiantes UNDC» (spec 020 del backend)', () => {
+  it('un tipo nuevo parte apagado y un tipo con el interruptor encendido lo conserva al editar', () => {
+    expect(formularioDeTipo(null, categoria).excluyeEstudiantesUndc).toBe(false)
+    expect(formularioDeTipo(tipo({ excluyeEstudiantesUndc: true }), categoria).excluyeEstudiantesUndc).toBe(true)
+  })
+
+  it('un tipo que el backend aún no devuelve con el campo (o con un valor raro) parte apagado', () => {
+    expect(formularioDeTipo(tipo(), categoria).excluyeEstudiantesUndc).toBe(false)
+    expect(formularioDeTipo(tipo({ excluyeEstudiantesUndc: null as unknown as boolean }), categoria).excluyeEstudiantesUndc).toBe(false)
+    expect(formularioDeTipo(tipo({ excluyeEstudiantesUndc: 'true' as unknown as boolean }), categoria).excluyeEstudiantesUndc).toBe(false)
+  })
+
+  it('viaja siempre en el cuerpo, también sin permiso de pagos (no es un precio)', () => {
+    expect(cuerpo(formulario({ excluyeEstudiantesUndc: true }))).toMatchObject({ excluyeEstudiantesUndc: true })
+    expect(cuerpo(formulario())).toMatchObject({ excluyeEstudiantesUndc: false })
+    const sinPagos = cuerpo(formulario({ precio: '', precioInstitucional: '', excluyeEstudiantesUndc: true }), true)
+    expect(sinPagos).not.toHaveProperty('precio')
+    expect(sinPagos).toMatchObject({ excluyeEstudiantesUndc: true })
+  })
+
+  it('un backend anterior (ningún tipo trae el campo) se detecta; sin tipos no se sabe', () => {
+    expect(backendSinExcluyeEstudiantes([{ tipos: [tipo(), tipo({ id: 8 })] }])).toBe(true)
+    expect(backendSinExcluyeEstudiantes([{ tipos: [tipo(), tipo({ id: 8, excluyeEstudiantesUndc: false })] }])).toBe(false)
+    expect(backendSinExcluyeEstudiantes([{ tipos: [tipo({ excluyeEstudiantesUndc: true })] }])).toBe(false)
+    expect(backendSinExcluyeEstudiantes([{ tipos: [] }])).toBe(false)
+    expect(backendSinExcluyeEstudiantes([])).toBe(false)
+  })
+
+  it('avisa si se pidió encenderlo y el tipo guardado no lo tiene', () => {
+    expect(excluyeEstudiantesNoGuardado(true, tipo())).toBe(true)
+    expect(excluyeEstudiantesNoGuardado(true, tipo({ excluyeEstudiantesUndc: false }))).toBe(true)
+    expect(excluyeEstudiantesNoGuardado(true, tipo({ excluyeEstudiantesUndc: true }))).toBe(false)
+    // Apagarlo o no pedirlo nunca avisa, y sin respuesta no se puede saber
+    expect(excluyeEstudiantesNoGuardado(false, tipo())).toBe(false)
+    expect(excluyeEstudiantesNoGuardado(true, undefined)).toBe(false)
+    expect(AVISO_EXCLUYE_NO_GUARDADO).toContain('spec 020')
   })
 })
