@@ -145,6 +145,8 @@ async function reenviar() {
 }
 
 const voucherUrl = computed(() => (conPagos.value && detalle.value?.pago.tieneVoucher ? urlArchivo(`inscriptions/${detalle.value.id}/voucher`) : null))
+/** Voucher del pago conjunto del grupo (el backend lo sirve a quien tiene `eventos.configurar` o `pagos.ver`). */
+const voucherDelegacionUrl = computed(() => (conPagos.value && detalle.value?.delegacion?.pago?.tieneVoucher ? urlArchivo(`delegations/${detalle.value.delegacion.id}/voucher`) : null))
 const credencialUrl = computed(() => (detalle.value ? urlArchivo(`inscriptions/${detalle.value.id}/credential`) : null))
 const esImagen = computed(() => detalle.value?.pago.voucherMime?.startsWith('image/') ?? false)
 const verificacion = computed(() => detalle.value?.verificacion.detalle ?? null)
@@ -224,6 +226,37 @@ const correoVerificado = computed(() => textoCorreoVerificado(detalle.value?.ver
           </div>
           <p v-else class="rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-amber-200 ring-1 ring-amber-400/25">Esta inscripción no tiene voucher adjunto.</p>
         </div>
+      </section>
+
+      <section v-if="detalle.delegacion" class="rounded-xl bg-white/5 p-4">
+        <p class="kicker">Delegación</p>
+        <dl class="mt-3 grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
+          <div class="flex justify-between gap-3"><dt class="text-slate-400">Grupo</dt><dd class="text-right text-white">{{ detalle.delegacion.nombre }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-slate-400">Integrantes del grupo</dt><dd class="text-white">{{ detalle.delegacion.totalIntegrantes }}</dd></div>
+          <div class="flex justify-between gap-3 sm:col-span-2"><dt class="text-slate-400">Link de inscripción</dt><dd class="font-mono text-xs text-white">{{ detalle.delegacion.codigoLink }}</dd></div>
+        </dl>
+        <template v-if="conPagos && detalle.delegacion.pago">
+          <p class="kicker mt-4">Pago conjunto del grupo</p>
+          <dl class="mt-3 grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
+            <div class="flex justify-between gap-3"><dt class="text-slate-400">Modalidad</dt><dd class="text-white">{{ modalidadPago(detalle.delegacion.pago.modalidad, detalle.delegacion.pago.banco, detalle.delegacion.pago.billeteraDigital) }}</dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-slate-400">Operación</dt><dd class="font-mono text-white">{{ detalle.delegacion.pago.numeroOperacion ?? '—' }}</dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-slate-400">Tipo</dt><dd class="text-white">{{ detalle.delegacion.pago.tipoOperacion ?? '—' }}</dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-slate-400">Fecha de pago</dt><dd class="text-white">{{ fechaDia(detalle.delegacion.pago.fechaPago) }}</dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-slate-400">Monto total del grupo</dt><dd class="font-semibold text-white">{{ soles(detalle.delegacion.pago.montoTotalPagado) }}</dd></div>
+          </dl>
+          <div class="mt-3">
+            <a
+              v-if="voucherDelegacionUrl"
+              :href="voucherDelegacionUrl"
+              target="_blank"
+              rel="noopener"
+              class="inline-flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm text-white ring-1 ring-white/15 ring-inset transition hover:bg-white/10"
+            >
+              <Icon name="heroicons:document-arrow-down" class="size-4" aria-hidden="true" /> Ver voucher del grupo
+            </a>
+            <p v-else class="rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-amber-200 ring-1 ring-amber-400/25">El grupo no tiene voucher adjunto.</p>
+          </div>
+        </template>
       </section>
 
       <section v-if="detalle.tipoInscripcion?.categoria.esEstudiantil" class="rounded-xl bg-white/5 p-4">

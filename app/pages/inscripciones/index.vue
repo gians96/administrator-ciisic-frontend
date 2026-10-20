@@ -224,6 +224,7 @@ function limpiar() {
                   <div class="mt-0.5 flex flex-wrap gap-1">
                     <AppBadge v-if="fila.tipoInscripcion?.etiqueta" tono="neutral">{{ fila.tipoInscripcion.etiqueta }}</AppBadge>
                     <AppBadge v-if="fila.esEstudianteUndc" tono="brand">UNDC</AppBadge>
+                    <AppBadge v-if="fila.delegacion" tono="info">Delegación · {{ fila.delegacion.nombre }}</AppBadge>
                   </div>
                 </td>
                 <template v-if="conPagos">

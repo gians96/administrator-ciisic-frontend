@@ -273,6 +273,28 @@ export interface DelegacionDetalle extends Delegacion {
   omitidos?: number
 }
 
+/** Delegación de una inscripción (spec 019): en el listado solo van los datos del grupo. */
+export interface DelegacionEnInscripcion {
+  id: number
+  nombre: string
+  codigoLink: string
+  totalIntegrantes: number
+}
+
+/** En el detalle se agrega el pago conjunto del grupo (solo con `pagos.ver`, spec 013/019). */
+export interface DelegacionEnDetalle extends DelegacionEnInscripcion {
+  pago?: {
+    modalidad: string | null
+    banco: string | null
+    billeteraDigital: string | null
+    tipoOperacion: string | null
+    numeroOperacion: string | null
+    fechaPago: string | null
+    montoTotalPagado: number | null
+    tieneVoucher: boolean
+  } | null
+}
+
 export interface EstadoRef { id?: number, codigo: CodigoEstado, nombre: string }
 
 export interface ParticipanteRef {
@@ -313,6 +335,8 @@ export interface InscripcionFila {
   esEstudianteUndc: boolean
   esCorreoVerificado?: boolean
   revisadoEn: string | null
+  /** Grupo de la delegación (spec 019); `null` en las inscripciones individuales. */
+  delegacion: DelegacionEnInscripcion | null
 }
 
 export interface VerificacionDetalle {
@@ -349,6 +373,8 @@ export interface InscripcionDetalle {
     esEstudianteUndc: boolean, esCorreoInstitucional: boolean, codigoEstudiante: string | null, detalle: VerificacionDetalle | null
     correo?: VerificacionCorreo
   }
+  /** Grupo de la delegación (spec 019); `null` en las inscripciones individuales. */
+  delegacion: DelegacionEnDetalle | null
   revision: {
     motivoRechazo: string | null
     revisadoPor: { id: number, nombres: string, apellidos: string } | null
