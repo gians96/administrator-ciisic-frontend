@@ -115,19 +115,24 @@ export function parsearParticipantesDelegacion(texto: string): ResultadoCargaDel
   return { filas, errores }
 }
 
-/** Si el panel y la landing viven en dominios distintos, escribe aquí el de la landing. */
-export const ORIGEN_LANDING_CONFIGURADO: string = ''
+/**
+ * Origen de la landing en producción. El panel (`admin-ciisic.episundc.pe`) y la landing viven en dominios
+ * distintos, así que el link del delegado no puede salir del origen del panel. Cámbialo si la landing cambia de
+ * dominio (p. ej. con otro evento).
+ */
+export const ORIGEN_LANDING_CONFIGURADO: string = 'https://ciisic-viii.episundc.pe'
 
 /**
- * Origen público para el link de la delegación. En desarrollo el panel corre en 3001 y la landing
- * en 3000; en producción se usa el mismo origen salvo que se configure `ORIGEN_LANDING_CONFIGURADO`.
+ * Origen público para el link de la delegación. En desarrollo el panel corre en 3001 y la landing en 3000;
+ * en cualquier otro caso se usa `ORIGEN_LANDING_CONFIGURADO` (y, si se vacía, el del propio panel).
  */
 export function origenLanding(): string {
+  if (typeof window !== 'undefined' && window.location.port === '3001') {
+    const { protocol, hostname } = window.location
+    return `${protocol}//${hostname}:3000`
+  }
   if (ORIGEN_LANDING_CONFIGURADO) return ORIGEN_LANDING_CONFIGURADO.replace(/\/+$/, '')
-  if (typeof window === 'undefined') return ''
-  const { protocol, hostname, port } = window.location
-  if (port === '3001') return `${protocol}//${hostname}:3000`
-  return window.location.origin
+  return typeof window === 'undefined' ? '' : window.location.origin
 }
 
 /**

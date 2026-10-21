@@ -142,7 +142,7 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   la categoría `DELEGACIONES`) y nunca envía precios. Presencial: S/ 60 con menos de 10 integrantes y S/ 50 desde 10;
   virtual: S/ 30 sin escalas, y solo se ofrece si existe el tipo `delegacion_virtual`. Los vouchers son varios
   (multipart `pagos` + `vouchers`); el staff los verifica o rechaza y el saldo solo informa. El delegado, con su link
-  (`/delegaciones?delegacion=<código>` de la landing), solo agrega; quitar integrantes, eliminar vouchers y aprobar al
+  (`/delegaciones?delegacion=<código>` de la landing; su origen es `ORIGEN_LANDING_CONFIGURADO`, porque panel y landing viven en dominios distintos), solo agrega; quitar integrantes, eliminar vouchers y aprobar al
   grupo son del panel. Un DNI de 7 dígitos (Excel pierde el cero) se completa a 8 (`normalizarDni`). **Backend 023
   primero.**
 - Ponencias especializadas (spec 012; **no** son los papers de `/ponencias`): sus tres pantallas están en

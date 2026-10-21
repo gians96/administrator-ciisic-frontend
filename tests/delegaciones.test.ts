@@ -9,6 +9,7 @@ import {
   hoyLima,
   montoDelegacion,
   normalizarDni,
+  origenLanding,
   pagoVacio,
   parsearParticipantesDelegacion,
   precioUnitarioDelegacion,
@@ -191,5 +192,22 @@ describe('vouchers del panel', () => {
     // 03:00 UTC del 21 todavía es 22:00 del 20 en Lima
     expect(hoyLima(new Date('2026-10-21T03:00:00Z'))).toBe('2026-10-20')
     expect(hoyLima(new Date('2026-10-21T12:00:00Z'))).toBe('2026-10-21')
+  })
+})
+
+describe('origen de la landing', () => {
+  it('en producción el link apunta a la landing, no al panel', () => {
+    expect(origenLanding()).toBe('https://ciisic-viii.episundc.pe')
+    expect(enlaceInscripcionDelegacion('abc123')).toBe('https://ciisic-viii.episundc.pe/delegaciones?delegacion=abc123')
+  })
+
+  it('en desarrollo (panel en el puerto 3001) apunta a la landing local', () => {
+    const original = globalThis.window
+    globalThis.window = { location: { protocol: 'http:', hostname: 'localhost', port: '3001', origin: 'http://localhost:3001' } } as unknown as Window & typeof globalThis
+    try {
+      expect(origenLanding()).toBe('http://localhost:3000')
+    } finally {
+      globalThis.window = original
+    }
   })
 })
