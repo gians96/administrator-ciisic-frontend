@@ -94,6 +94,22 @@ export const MENSAJES_POR_CODIGO: Readonly<Record<string, string>> = {
   TALK_HAS_REGISTRATIONS: 'La ponencia tiene inscritos vigentes. Despublícala o cancela sus inscripciones antes de eliminarla.',
   INVALID_HOURS: 'La hora de fin debe ser posterior a la de inicio.',
   INVALID_FILTER: 'Alguno de los filtros no es válido. Límpialos e inténtalo otra vez.',
+  // Delegaciones
+  DELEGATION_NOT_FOUND: 'La delegación no existe o ya fue eliminada. Actualiza la lista.',
+  DELEGATION_INACTIVE: 'La delegación está inactiva: no admite nuevas inscripciones.',
+  DUPLICATE_PARTICIPANT: 'Hay documentos o correos repetidos en la carga. Revisa las filas marcadas.',
+  PARTICIPANT_ALREADY_REGISTERED: 'La persona ya tiene una inscripción en este evento (fuera de esta delegación).',
+  DELEGATION_MODALITY_NOT_AVAILABLE: 'La modalidad virtual no está disponible: crea primero el tipo «delegacion_virtual» en Tipos de inscripción.',
+  DELEGATION_MODALITY_LOCKED: 'La modalidad no se puede cambiar cuando el grupo ya tiene integrantes.',
+  NO_PARTICIPANTS: 'Registra al menos un integrante.',
+  INSCRIPTION_NOT_REMOVABLE: 'El integrante ya está aprobado: cancélalo desde Inscripciones.',
+  NOTHING_TO_APPROVE: 'No hay integrantes por aprobar.',
+  PAYMENT_NOT_FOUND: 'El voucher no existe o ya fue eliminado. Actualiza la lista.',
+  PAYMENT_VERIFIED: 'El voucher ya está verificado: devuélvelo a pendiente antes de eliminarlo.',
+  OPERATION_ALREADY_REGISTERED: 'Ese número de operación ya está registrado en el evento.',
+  VOUCHER_REQUIRED: 'Adjunta un archivo por cada voucher.',
+  VOUCHER_NOT_FOUND: 'El archivo del voucher ya no está en el servidor.',
+  REGISTRATION_CLOSED: 'Las inscripciones de este evento están cerradas.',
 
   // Configuración del sistema
   UNDC_API_NOT_CONFIGURED: 'Falta la URL o la API key de API_UNDC. Guárdalas y vuelve a probar la conexión.',

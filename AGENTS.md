@@ -135,6 +135,16 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   responda cómo se entrega el acceso, qué certificados y asistencia corresponden a los virtuales y si se exige
   constancia.
 - **Tipos sin estudiantes UNDC** (spec 013): el interruptor `tipo.excluyeEstudiantesUndc` («No admitir estudiantes UNDC» en el editor de tipos, insignia «Sin estudiantes UNDC» en la lista) se enciende en los tipos virtuales. Bloquea solo a estudiantes UNDC (verificados con SIVIRENO o con correo de código `@undc.edu.pe`), no a docentes, administrativos ni externos, y solo frena inscripciones nuevas (las ya hechas se rechazan o cancelan a mano; las cortesías no aplican la regla). Es independiente de «Disponible para» y de «Modalidad». Ausente = `false`. **Backend 020 primero**: el anterior descarta la clave sin error y el editor lo advierte (`backendSinExcluyeEstudiantes`, `excluyeEstudiantesNoGuardado`).
+- **Delegaciones con convenio** (spec 014; backend 023): pestaña Delegaciones de Eventos (`DelegacionesPanel` con
+  `DelegacionAlta`, `DelegacionDetalle` y `FilasIntegrantes` en `app/components/delegaciones/`; lógica pura en
+  `app/utils/delegaciones.ts`). **El servidor decide el tipo y el precio**: el panel solo muestra un estimado
+  (`estimarGrupo`, con los precios de los tipos `delegacion_general`, `delegacion_grupal` y `delegacion_virtual` de
+  la categoría `DELEGACIONES`) y nunca envía precios. Presencial: S/ 60 con menos de 10 integrantes y S/ 50 desde 10;
+  virtual: S/ 30 sin escalas, y solo se ofrece si existe el tipo `delegacion_virtual`. Los vouchers son varios
+  (multipart `pagos` + `vouchers`); el staff los verifica o rechaza y el saldo solo informa. El delegado, con su link
+  (`/delegaciones?delegacion=<código>` de la landing), solo agrega; quitar integrantes, eliminar vouchers y aprobar al
+  grupo son del panel. Un DNI de 7 dígitos (Excel pierde el cero) se completa a 8 (`normalizarDni`). **Backend 023
+  primero.**
 - Ponencias especializadas (spec 012; **no** son los papers de `/ponencias`): sus tres pantallas están en
   `app/pages/ponencias-especializadas/` y su lógica pura en `app/utils/ponenciasEspecializadas.ts`. El programa se
   edita solo con `especializadas.gestionar`; inscribir y corregir, con `especializadas.inscribir`; la puerta
@@ -199,16 +209,17 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–013
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–014
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
 escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de
-asistencia, tipos que no admiten estudiantes UNDC). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
+asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
 `backend-ciisic/specs/013-roles-permisos/contracts/`; código por correo, portal, fotocheck,
 asistencia por QR, alta de participantes y cortesías en
 `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`; modalidad virtual en
 `backend-ciisic/specs/018-modalidad-virtual/contracts/`; tipos que no admiten estudiantes UNDC en
-`backend-ciisic/specs/020-virtual-sin-estudiantes-undc/contracts/`.
+`backend-ciisic/specs/020-virtual-sin-estudiantes-undc/contracts/`; delegaciones con convenio en
+`backend-ciisic/specs/023-delegaciones-convenio/contracts/`.
 
 ## Antes de dar por terminado
 

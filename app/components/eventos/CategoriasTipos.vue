@@ -34,6 +34,7 @@ import {
 } from '~/utils/tiposInscripcion'
 
 const props = defineProps<{ eventoId: number }>()
+const emit = defineEmits<{ delegaciones: [] }>()
 
 const { api } = useApi()
 const toast = useToast()
@@ -220,8 +221,12 @@ async function eliminarTipo(tipo: TipoInscripcion) {
     <div class="flex flex-wrap items-center justify-between gap-3">
       <p class="max-w-2xl text-sm text-slate-400">
         Las categorías agrupan los planes (p. ej. Estudiantes y Público general). Una categoría <strong class="text-slate-200">estudiantil</strong> activa la verificación UNDC: solo los estudiantes verificados pagan el precio institucional. Con <strong class="text-slate-200">Disponible para</strong> un tipo se ofrece a todos, solo a la comunidad UNDC o solo a los externos; con <strong class="text-slate-200">Modalidad</strong> es presencial o virtual (un tipo virtual vive en la misma categoría y hereda su verificación).
+        Las <strong class="text-slate-200">delegaciones</strong> tienen su propia tarifa por grupo y se gestionan en su pestaña.
       </p>
-      <AppButton icon="heroicons:plus" @click="abrirCategoria()">Nueva categoría</AppButton>
+      <div class="flex flex-wrap gap-2">
+        <AppButton variant="secondary" icon="heroicons:user-group" @click="emit('delegaciones')">Delegaciones</AppButton>
+        <AppButton icon="heroicons:plus" @click="abrirCategoria()">Nueva categoría</AppButton>
+      </div>
     </div>
 
     <div v-if="cargando && !categorias.length" class="py-10 text-center text-sm text-slate-400">Cargando…</div>

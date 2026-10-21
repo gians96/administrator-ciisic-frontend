@@ -21,6 +21,7 @@ const TABS = computed(() => [
   { id: 'general', label: 'General', icon: 'heroicons:cog-6-tooth' },
   { id: 'pago', label: 'Datos de pago', icon: 'heroicons:banknotes' },
   { id: 'tipos', label: 'Categorías y tipos', icon: 'heroicons:tag' },
+  { id: 'delegaciones', label: 'Delegaciones', icon: 'heroicons:user-group' },
   { id: 'actividades', label: 'Actividades', icon: 'heroicons:calendar' },
   { id: 'integraciones', label: 'Integraciones', icon: 'heroicons:link' },
   // Tokens para que la landing del evento consuma el backend (`/access-tokens` exige eventos.configurar)
@@ -109,7 +110,8 @@ async function eliminar() {
       <section v-else-if="tab === 'pago'" class="card p-6">
         <DatosPagoForm :key="evento.actualizadoEn" :datos="evento.datosPago" :enviando="enviando" @guardar="guardarPago" />
       </section>
-      <CategoriasTipos v-else-if="tab === 'tipos'" :evento-id="evento.id" />
+      <CategoriasTipos v-else-if="tab === 'tipos'" :evento-id="evento.id" @delegaciones="tab = 'delegaciones'" />
+      <DelegacionesPanel v-else-if="tab === 'delegaciones'" :evento-id="evento.id" />
       <ActividadesPanel v-else-if="tab === 'actividades'" :evento-id="evento.id" />
       <IntegracionesPanel v-else-if="tab === 'integraciones'" :evento-id="evento.id" />
       <TokensAccesoPanel v-else-if="tab === 'acceso' && auth.puede('eventos.configurar')" :evento-id="evento.id" />

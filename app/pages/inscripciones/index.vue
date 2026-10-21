@@ -242,6 +242,7 @@ function limpiar() {
                     <AppBadge v-if="etiquetaDeInsignia(fila.tipoInscripcion)" tono="neutral">{{ etiquetaDeInsignia(fila.tipoInscripcion) }}</AppBadge>
                     <AppBadgeVirtual v-if="esVirtual(fila.tipoInscripcion)" />
                     <AppBadge v-if="fila.esEstudianteUndc" tono="brand">UNDC</AppBadge>
+                    <AppBadge v-if="fila.delegacion" tono="info">Delegación · {{ fila.delegacion.nombre }}</AppBadge>
                   </div>
                 </td>
                 <template v-if="conPagos">

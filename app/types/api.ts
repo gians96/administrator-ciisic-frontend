@@ -234,6 +234,111 @@ export interface Categoria {
   tipos: TipoInscripcion[]
 }
 
+// ─── Delegaciones (backend specs 021–023) ───
+
+export interface DelegacionRepresentante {
+  nombre: string | null
+  email: string | null
+  telefono: string | null
+  tipoDocumento: 'dni' | 'ce' | null
+  documento: string | null
+}
+
+export type EstadoPagoDelegacion = 'PENDIENTE' | 'VERIFICADO' | 'RECHAZADO'
+
+/** Lo que debe el grupo, lo que declararon sus vouchers (sin los rechazados) y el saldo. */
+export interface ResumenPagoDelegacion {
+  totalAPagar: number
+  declarado: number
+  verificado: number
+  /** Positivo: falta pagar; negativo: se declaró de más. */
+  saldo: number
+  cantidad: number
+}
+
+/** Un voucher de la delegación; el archivo se abre aparte (`delegations/:id/payments/:id/voucher`). */
+export interface PagoDelegacion {
+  id: number
+  modalidadPago: 'banco' | 'billetera'
+  banco: string | null
+  billeteraDigital: string | null
+  tipoOperacion: string | null
+  numeroOperacion: string
+  fechaPago: string | null
+  monto: number
+  estado: EstadoPagoDelegacion
+  motivoRechazo: string | null
+  revisadoEn: string | null
+  creadoEn: string
+}
+
+export interface TipoDelegacion {
+  id: number
+  codigo: string
+  nombre: string
+  etiqueta: string | null
+  modalidad?: ModalidadAsistencia
+}
+
+export interface Delegacion {
+  id: number
+  eventoId: number
+  nombre: string
+  codigoLink: string
+  institucion: string | null
+  modalidad: ModalidadAsistencia
+  representante: DelegacionRepresentante
+  minIntegrantes: number
+  precioEstandar: number
+  precioPromocional: number
+  /** Tarifa vigente por persona según el total actual. */
+  precioUnitario: number
+  /** Integrantes activos: los rechazados y cancelados no cuentan. */
+  totalIntegrantes: number
+  montoTotal: number
+  /** Cuántos faltan para la tarifa promocional; `null` si ya aplica o la modalidad no tiene escala. */
+  faltanParaPromocional: number | null
+  /** Tipo vigente del grupo (lo decide el servidor): General, Promocional o Virtual. */
+  tipoInscripcion: TipoDelegacion | null
+  pago: ResumenPagoDelegacion
+  activo: boolean
+  creadoEn: string
+  actualizadoEn: string
+}
+
+export interface InscripcionDelegacion {
+  id: number
+  participante: ParticipanteRef
+  estado: EstadoRef
+  monto: number
+  creadoEn: string
+}
+
+/** Detalle de una delegación, sus vouchers y todos sus integrantes. `registrados`/`omitidos` llegan al cargar una lista. */
+export interface DelegacionDetalle extends Delegacion {
+  pagos: PagoDelegacion[]
+  inscripciones: InscripcionDelegacion[]
+  registrados?: number
+  omitidos?: number
+  /** Solo al aprobar al grupo: las credenciales salen en segundo plano. */
+  aprobadas?: number
+  credencialesEnSegundoPlano?: number
+}
+
+/** Delegación de una inscripción (spec 022): en el listado solo van los datos del grupo. */
+export interface DelegacionEnInscripcion {
+  id: number
+  nombre: string
+  codigoLink: string
+  totalIntegrantes: number
+}
+
+/** En el detalle se agregan la modalidad y el resumen de pagos (este solo con `pagos.ver`, spec 013). */
+export interface DelegacionEnDetalle extends DelegacionEnInscripcion {
+  modalidad?: ModalidadAsistencia
+  pago?: ResumenPagoDelegacion | null
+}
+
 export interface EstadoRef { id?: number, codigo: CodigoEstado, nombre: string }
 
 export interface ParticipanteRef {
@@ -275,6 +380,8 @@ export interface InscripcionFila {
   esEstudianteUndc: boolean
   esCorreoVerificado?: boolean
   revisadoEn: string | null
+  /** Grupo de la delegación (spec 019); `null` en las inscripciones individuales. */
+  delegacion: DelegacionEnInscripcion | null
 }
 
 export interface VerificacionDetalle {
@@ -312,6 +419,8 @@ export interface InscripcionDetalle {
     esEstudianteUndc: boolean, esCorreoInstitucional: boolean, codigoEstudiante: string | null, detalle: VerificacionDetalle | null
     correo?: VerificacionCorreo
   }
+  /** Grupo de la delegación (spec 019); `null` en las inscripciones individuales. */
+  delegacion: DelegacionEnDetalle | null
   revision: {
     motivoRechazo: string | null
     revisadoPor: { id: number, nombres: string, apellidos: string } | null
