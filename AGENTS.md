@@ -144,7 +144,14 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   (multipart `pagos` + `vouchers`); el staff los verifica o rechaza y el saldo solo informa. El delegado, con su link
   (`/delegaciones?delegacion=<código>` de la landing; su origen es `ORIGEN_LANDING_CONFIGURADO`, porque panel y landing viven en dominios distintos), solo agrega; quitar integrantes, eliminar vouchers y aprobar al
   grupo son del panel. Un DNI de 7 dígitos (Excel pierde el cero) se completa a 8 (`normalizarDni`). **Backend 023
-  primero.**
+  primero.** **Tarifa administrable** (spec 015; backend 024, sin migración): la tarjeta de la pestaña lee
+  `GET events/:id/delegations/tarifa` y «Editar tarifa» (`TarifaDelegacionesForm`) la guarda con `PUT` enviando solo lo
+  que cambió (`cuerpoTarifa`): precios y mínimo presenciales, precio virtual y si la modalidad virtual se ofrece. Rige
+  para delegaciones nuevas; «aplicar a las existentes» solo alcanza a las que no tienen integrantes ni vouchers. En
+  `DelegacionDetalle`, «Tarifa de esta delegación» edita modalidad (solo sin integrantes), mínimo y precios de esa
+  delegación con `PUT delegations/:id` (en virtual el precio es único) y marca el convenio (`esTarifaDeConvenio`). El
+  panel sigue sin enviar montos por inscripción. Con un backend sin la ruta (`esNoDisponible`) la tarjeta se arma con los
+  tipos y no hay «Editar tarifa». **Backend 024 primero.**
 - Ponencias especializadas (spec 012; **no** son los papers de `/ponencias`): sus tres pantallas están en
   `app/pages/ponencias-especializadas/` y su lógica pura en `app/utils/ponenciasEspecializadas.ts`. El programa se
   edita solo con `especializadas.gestionar`; inscribir y corregir, con `especializadas.inscribir`; la puerta
@@ -209,17 +216,17 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–014
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–015
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
 escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de
-asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
+asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
 `backend-ciisic/specs/013-roles-permisos/contracts/`; código por correo, portal, fotocheck,
 asistencia por QR, alta de participantes y cortesías en
 `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`; modalidad virtual en
 `backend-ciisic/specs/018-modalidad-virtual/contracts/`; tipos que no admiten estudiantes UNDC en
 `backend-ciisic/specs/020-virtual-sin-estudiantes-undc/contracts/`; delegaciones con convenio en
-`backend-ciisic/specs/023-delegaciones-convenio/contracts/`.
+`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y su tarifa en `backend-ciisic/specs/024-tarifa-delegaciones/contracts/`.
 
 ## Antes de dar por terminado
 

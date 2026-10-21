@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
+  cuerpoTarifa,
+  cuerpoTarifaDelegacion,
   enlaceInscripcionDelegacion,
+  esTarifaDeConvenio,
   estimarGrupo,
   filaEnBlanco,
   filaVacia,
   filasParaEnviar,
+  formularioDeTarifa,
+  formularioDeTarifaDelegacion,
   formularioPagos,
   hoyLima,
   montoDelegacion,
@@ -13,12 +18,18 @@ import {
   pagoVacio,
   parsearParticipantesDelegacion,
   precioUnitarioDelegacion,
+  tarifaDeAdmin,
   tarifaDeTipos,
+  tarifaParaModalidad,
   textoSaldo,
+  textoTarifaGuardada,
   validarPago,
+  validarTarifa,
+  validarTarifaDelegacion,
   type PagoFormulario,
   type TarifaDelegaciones,
 } from '~/utils/delegaciones'
+import type { TarifaDelegacionesAdmin } from '~/types/api'
 
 describe('tarifa de la delegación', () => {
   it.each([
@@ -192,6 +203,131 @@ describe('vouchers del panel', () => {
     // 03:00 UTC del 21 todavía es 22:00 del 20 en Lima
     expect(hoyLima(new Date('2026-10-21T03:00:00Z'))).toBe('2026-10-20')
     expect(hoyLima(new Date('2026-10-21T12:00:00Z'))).toBe('2026-10-21')
+  })
+})
+
+const ADMIN: TarifaDelegacionesAdmin = {
+  minIntegrantes: 10,
+  presencial: { precioEstandar: 60, precioPromocional: 50 },
+  virtual: { precio: 30, activo: true },
+  delegaciones: { total: 2, sinIntegrantes: 1 },
+}
+
+describe('tarifa del evento (spec 015)', () => {
+  it('la tarifa del alta sale de la del evento y la virtual solo se ofrece si su tipo está activo', () => {
+    expect(tarifaDeAdmin(ADMIN)).toEqual({ minIntegrantes: 10, precioEstandar: 60, precioPromocional: 50, virtual: { precio: 30 } })
+    expect(tarifaDeAdmin({ ...ADMIN, virtual: { precio: 30, activo: false } }).virtual).toBeNull()
+    expect(tarifaDeAdmin({ ...ADMIN, virtual: null }).virtual).toBeNull()
+    expect(tarifaDeAdmin({ ...ADMIN, minIntegrantes: 8 }).minIntegrantes).toBe(8)
+  })
+
+  it('el formulario parte de la tarifa vigente y, sin tipo virtual, propone S/ 30 apagado', () => {
+    expect(formularioDeTarifa(ADMIN)).toEqual({ minIntegrantes: 10, precioEstandar: 60, precioPromocional: 50, precioVirtual: 30, virtualActivo: true, aplicarAExistentes: false })
+    expect(formularioDeTarifa({ ...ADMIN, virtual: null })).toMatchObject({ precioVirtual: 30, virtualActivo: false })
+  })
+
+  it('una tarifa vigente no tiene errores', () => {
+    expect(validarTarifa(formularioDeTarifa(ADMIN))).toEqual({})
+  })
+
+  it.each([
+    ['mínimo en cero', { minIntegrantes: 0 }, 'minIntegrantes'],
+    ['mínimo decimal', { minIntegrantes: 2.5 }, 'minIntegrantes'],
+    ['mínimo vacío', { minIntegrantes: '' as const }, 'minIntegrantes'],
+    ['mínimo sobre el máximo', { minIntegrantes: 1001 }, 'minIntegrantes'],
+    ['estándar negativo', { precioEstandar: -1 }, 'precioEstandar'],
+    ['estándar vacío', { precioEstandar: '' as const }, 'precioEstandar'],
+    ['tres decimales', { precioEstandar: 60.123 }, 'precioEstandar'],
+    ['promocional mayor que el estándar', { precioPromocional: 61 }, 'precioPromocional'],
+    ['virtual vacío con la modalidad encendida', { precioVirtual: '' as const }, 'precioVirtual'],
+  ])('rechaza %s', (_nombre, cambio, campo) => {
+    expect(Object.keys(validarTarifa({ ...formularioDeTarifa(ADMIN), ...cambio }))).toContain(campo)
+  })
+
+  it('con la virtual apagada su precio no se valida', () => {
+    expect(validarTarifa({ ...formularioDeTarifa(ADMIN), virtualActivo: false, precioVirtual: '' })).toEqual({})
+  })
+
+  it('acepta un promocional igual al estándar y precio en cero', () => {
+    expect(validarTarifa({ ...formularioDeTarifa(ADMIN), precioPromocional: 60 })).toEqual({})
+    expect(validarTarifa({ ...formularioDeTarifa(ADMIN), precioEstandar: 0, precioPromocional: 0 })).toEqual({})
+  })
+
+  it('el cuerpo lleva solo lo que cambió y es null si no cambió nada', () => {
+    expect(cuerpoTarifa(formularioDeTarifa(ADMIN), ADMIN)).toBeNull()
+    expect(cuerpoTarifa({ ...formularioDeTarifa(ADMIN), precioEstandar: 70, minIntegrantes: 8 }, ADMIN)).toEqual({ precioEstandar: 70, minIntegrantes: 8 })
+    expect(cuerpoTarifa({ ...formularioDeTarifa(ADMIN), precioVirtual: 35, virtualActivo: false }, ADMIN)).toEqual({ precioVirtual: 35, virtualActivo: false })
+  })
+
+  it('aplicar a las existentes se envía aunque no cambie ningún precio', () => {
+    expect(cuerpoTarifa({ ...formularioDeTarifa(ADMIN), aplicarAExistentes: true }, ADMIN)).toEqual({ aplicarAExistentes: true })
+  })
+
+  it('sin tipo virtual, el precio virtual no se envía (crearía el tipo) salvo que se encienda la modalidad', () => {
+    const sinVirtual = { ...ADMIN, virtual: null }
+    expect(cuerpoTarifa({ ...formularioDeTarifa(sinVirtual), precioEstandar: 70 }, sinVirtual)).toEqual({ precioEstandar: 70 })
+    expect(cuerpoTarifa({ ...formularioDeTarifa(sinVirtual), virtualActivo: true, precioVirtual: 35 }, sinVirtual)).toEqual({ virtualActivo: true, precioVirtual: 35 })
+  })
+
+  it('un campo vacío no se envía como cero', () => {
+    expect(cuerpoTarifa({ ...formularioDeTarifa(ADMIN), precioVirtual: '', virtualActivo: false }, ADMIN)).toEqual({ virtualActivo: false })
+  })
+
+  it('el aviso de guardado distingue si se aplicó a las existentes', () => {
+    expect(textoTarifaGuardada(0, false)).toContain('delegaciones nuevas')
+    expect(textoTarifaGuardada(0, true)).toContain('Ninguna')
+    expect(textoTarifaGuardada(2, true)).toContain('2 delegación(es)')
+  })
+})
+
+describe('tarifa de una delegación (spec 015)', () => {
+  const EVENTO: TarifaDelegaciones = { minIntegrantes: 10, precioEstandar: 60, precioPromocional: 50, virtual: { precio: 30 } }
+  const PRESENCIAL = { modalidad: 'PRESENCIAL' as const, minIntegrantes: 10, precioEstandar: 60, precioPromocional: 50 }
+  const VIRTUAL = { modalidad: 'VIRTUAL' as const, minIntegrantes: 10, precioEstandar: 30, precioPromocional: 30 }
+
+  it('la tarifa del evento por modalidad: la virtual es plana y, sin tipo, usa S/ 30', () => {
+    expect(tarifaParaModalidad('PRESENCIAL', EVENTO)).toEqual({ minIntegrantes: 10, precioEstandar: 60, precioPromocional: 50 })
+    expect(tarifaParaModalidad('VIRTUAL', EVENTO)).toEqual({ minIntegrantes: 10, precioEstandar: 30, precioPromocional: 30 })
+    expect(tarifaParaModalidad('VIRTUAL', { ...EVENTO, virtual: null }).precioEstandar).toBe(30)
+  })
+
+  it('sin cambios no hay cuerpo', () => {
+    expect(cuerpoTarifaDelegacion(formularioDeTarifaDelegacion(PRESENCIAL), PRESENCIAL)).toBeNull()
+    expect(cuerpoTarifaDelegacion(formularioDeTarifaDelegacion(VIRTUAL), VIRTUAL)).toBeNull()
+  })
+
+  it('un convenio presencial envía solo las cifras que cambió', () => {
+    const form = { ...formularioDeTarifaDelegacion(PRESENCIAL), precioEstandar: 55, precioPromocional: 45 }
+    expect(cuerpoTarifaDelegacion(form, PRESENCIAL)).toEqual({ precioEstandar: 55, precioPromocional: 45 })
+    expect(cuerpoTarifaDelegacion({ ...formularioDeTarifaDelegacion(PRESENCIAL), minIntegrantes: 5 }, PRESENCIAL)).toEqual({ minIntegrantes: 5 })
+  })
+
+  it('en virtual el promocional siempre acompaña al estándar (sin escalas)', () => {
+    const form = { ...formularioDeTarifaDelegacion(VIRTUAL), precioEstandar: 25 }
+    expect(cuerpoTarifaDelegacion(form, VIRTUAL)).toEqual({ precioEstandar: 25, precioPromocional: 25 })
+  })
+
+  it('cambiar la modalidad envía la modalidad y las tres cifras', () => {
+    const form = { modalidad: 'VIRTUAL' as const, ...tarifaParaModalidad('VIRTUAL', EVENTO) }
+    expect(cuerpoTarifaDelegacion(form, PRESENCIAL)).toEqual({ modalidad: 'VIRTUAL', minIntegrantes: 10, precioEstandar: 30, precioPromocional: 30 })
+  })
+
+  it('valida el mínimo y los precios; en virtual ignora el promocional', () => {
+    expect(validarTarifaDelegacion(formularioDeTarifaDelegacion(PRESENCIAL))).toEqual({})
+    expect(Object.keys(validarTarifaDelegacion({ ...formularioDeTarifaDelegacion(PRESENCIAL), precioPromocional: 70 }))).toEqual(['precioPromocional'])
+    expect(Object.keys(validarTarifaDelegacion({ ...formularioDeTarifaDelegacion(PRESENCIAL), minIntegrantes: 0, precioEstandar: -5 })).sort()).toEqual(['minIntegrantes', 'precioEstandar'])
+    expect(validarTarifaDelegacion({ ...formularioDeTarifaDelegacion(VIRTUAL), precioPromocional: '' })).toEqual({})
+    expect(Object.keys(validarTarifaDelegacion({ ...formularioDeTarifaDelegacion(VIRTUAL), precioEstandar: '' }))).toEqual(['precioEstandar'])
+  })
+
+  it('marca como convenio la delegación que cobra distinto del evento', () => {
+    expect(esTarifaDeConvenio(PRESENCIAL, EVENTO)).toBe(false)
+    expect(esTarifaDeConvenio({ ...PRESENCIAL, precioPromocional: 45 }, EVENTO)).toBe(true)
+    expect(esTarifaDeConvenio({ ...PRESENCIAL, minIntegrantes: 8 }, EVENTO)).toBe(true)
+    expect(esTarifaDeConvenio(VIRTUAL, EVENTO)).toBe(false)
+    // En virtual el mínimo no se usa: no cuenta como convenio
+    expect(esTarifaDeConvenio({ ...VIRTUAL, minIntegrantes: 3 }, EVENTO)).toBe(false)
+    expect(esTarifaDeConvenio({ ...VIRTUAL, precioEstandar: 25, precioPromocional: 25 }, EVENTO)).toBe(true)
   })
 })
 

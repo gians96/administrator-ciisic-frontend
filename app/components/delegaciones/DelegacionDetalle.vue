@@ -3,12 +3,14 @@ import type { DelegacionDetalle, PagoDelegacion, Respuesta } from '~/types/api'
 import { aErrorApi, mensajeError } from '~/utils/errores'
 import { fechaDia, nombreCompleto, numero, soles } from '~/utils/formato'
 import {
-  BANCOS, BILLETERAS, ETIQUETA_ESTADO_PAGO, ETIQUETA_MODALIDAD, MAX_VOUCHERS_POR_ENVIO, TONO_ESTADO_PAGO, VOUCHER_ACCEPT,
-  enlaceInscripcionDelegacion, filaVacia, filasParaEnviar, formularioPagos, hoyLima, normalizarDni, pagoVacio, textoSaldo, validarPago,
-  type FilaEditable, type PagoFormulario,
+  BANCOS, BILLETERAS, ETIQUETA_ESTADO_PAGO, ETIQUETA_MODALIDAD, MAX_VOUCHERS_POR_ENVIO, MIN_INTEGRANTES_MAXIMO, TONO_ESTADO_PAGO, VOUCHER_ACCEPT,
+  cuerpoTarifaDelegacion, enlaceInscripcionDelegacion, esTarifaDeConvenio, filaVacia, filasParaEnviar, formularioDeTarifaDelegacion, formularioPagos,
+  hoyLima, normalizarDni, pagoVacio, tarifaParaModalidad, textoSaldo, validarPago, validarTarifaDelegacion,
+  type FilaEditable, type FormularioTarifaDelegacion, type PagoFormulario, type TarifaDelegaciones,
 } from '~/utils/delegaciones'
 
-const props = defineProps<{ abierto: boolean, delegacionId: number | null }>()
+/** `tarifa` es la del evento: precarga la de cada modalidad y permite marcar la que es un convenio. */
+const props = defineProps<{ abierto: boolean, delegacionId: number | null, tarifa: TarifaDelegaciones }>()
 const emit = defineEmits<{ cerrar: [], cambio: [] }>()
 
 const { api, urlArchivo } = useApi()
@@ -246,6 +248,63 @@ async function guardarDatos() {
   }
 }
 
+// ─── Tarifa de esta delegación ───
+const edicionTarifa = reactive<FormularioTarifaDelegacion>({ modalidad: 'PRESENCIAL', minIntegrantes: '', precioEstandar: '', precioPromocional: '' })
+const erroresTarifa = ref<Record<string, string>>({})
+const guardandoTarifa = ref(false)
+const convenio = computed(() => (detalle.value ? esTarifaDeConvenio(detalle.value, props.tarifa) : false))
+const tarifaVigente = computed(() => {
+  const d = detalle.value
+  if (!d) return ''
+  return d.modalidad === 'VIRTUAL'
+    ? `${soles(d.precioEstandar)} por persona, sin escalas`
+    : `${soles(d.precioEstandar)} por persona y ${soles(d.precioPromocional)} desde ${numero(d.minIntegrantes)} integrantes`
+})
+
+watch(detalle, (valor) => {
+  if (!valor) return
+  Object.assign(edicionTarifa, formularioDeTarifaDelegacion(valor))
+  erroresTarifa.value = {}
+})
+
+/** Al elegir otra modalidad se precargan los precios del evento para ella (el staff aún puede ajustarlos). */
+function alCambiarModalidad() {
+  Object.assign(edicionTarifa, tarifaParaModalidad(edicionTarifa.modalidad, props.tarifa))
+}
+
+async function guardarTarifa() {
+  if (!detalle.value) return
+  erroresTarifa.value = validarTarifaDelegacion(edicionTarifa)
+  if (Object.keys(erroresTarifa.value).length) {
+    toast.error('Revisa la tarifa de la delegación.')
+    return
+  }
+  const cuerpo = cuerpoTarifaDelegacion(edicionTarifa, detalle.value)
+  if (!cuerpo) {
+    toast.info('No hay cambios en la tarifa.')
+    return
+  }
+  const integrantes = detalle.value.totalIntegrantes
+  if (integrantes > 0) {
+    const ok = await confirmar({
+      titulo: 'Cambiar la tarifa de la delegación',
+      mensaje: `Se recalcula el monto de los ${numero(integrantes)} integrante(s) del grupo y el saldo de la delegación cambia.`,
+      textoConfirmar: 'Cambiar tarifa',
+    })
+    if (!ok) return
+  }
+  guardandoTarifa.value = true
+  try {
+    recibir((await api<Respuesta<DelegacionDetalle>>(`delegations/${detalle.value.id}`, { method: 'PUT', body: cuerpo })).data)
+    toast.exito('Tarifa de la delegación guardada.')
+  } catch (error) {
+    erroresTarifa.value = aErrorApi(error).fields ?? {}
+    toast.error(mensajeError(error))
+  } finally {
+    guardandoTarifa.value = false
+  }
+}
+
 // Al abrir (o cambiar de delegación) se reinician los formularios y se carga el detalle. Va al final: usa todo lo anterior
 watch(() => [props.abierto, props.delegacionId] as const, ([abierto, id]) => {
   if (!abierto || !id) return
@@ -267,6 +326,7 @@ watch(() => [props.abierto, props.delegacionId] as const, ([abierto, id]) => {
         <div class="flex flex-wrap items-center gap-2">
           <AppBadge :tono="detalle.modalidad === 'VIRTUAL' ? 'info' : 'brand'">{{ ETIQUETA_MODALIDAD[detalle.modalidad] }}</AppBadge>
           <AppBadge v-if="detalle.tipoInscripcion" tono="neutral">{{ detalle.tipoInscripcion.nombre }}</AppBadge>
+          <AppBadge v-if="convenio" tono="warn">Tarifa de convenio</AppBadge>
           <AppBadge v-if="!detalle.activo" tono="error">Inactiva</AppBadge>
           <span v-if="detalle.institucion" class="text-sm text-slate-400">{{ detalle.institucion }}</span>
         </div>
@@ -440,6 +500,41 @@ watch(() => [props.abierto, props.delegacionId] as const, ([abierto, id]) => {
           </form>
         </details>
       </section>
+
+      <!-- Tarifa de esta delegación -->
+      <details class="rounded-xl bg-white/5 p-4">
+        <summary class="cursor-pointer text-sm font-semibold text-slate-200">Tarifa de esta delegación</summary>
+        <form class="mt-4 space-y-4" @submit.prevent="guardarTarifa">
+          <p class="text-sm text-slate-400">
+            Cobra <span class="text-slate-200">{{ tarifaVigente }}</span>.
+            {{ convenio ? 'Es distinta de la tarifa del evento (convenio).' : 'Coincide con la tarifa del evento.' }}
+            Cambiarla recalcula el monto de todos sus integrantes.
+          </p>
+          <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <AppField label="Cómo asiste" for="tf-modalidad" :hint="detalle.totalIntegrantes > 0 ? 'Solo cambia mientras el grupo no tenga integrantes.' : undefined">
+              <select id="tf-modalidad" v-model="edicionTarifa.modalidad" class="field-control" :disabled="detalle.totalIntegrantes > 0" @change="alCambiarModalidad">
+                <option value="PRESENCIAL">{{ ETIQUETA_MODALIDAD.PRESENCIAL }}</option>
+                <option value="VIRTUAL" :disabled="!tarifa.virtual && detalle.modalidad !== 'VIRTUAL'">{{ ETIQUETA_MODALIDAD.VIRTUAL }}</option>
+              </select>
+            </AppField>
+            <template v-if="edicionTarifa.modalidad === 'PRESENCIAL'">
+              <AppField label="Precio por persona (S/)" for="tf-estandar" required :error="erroresTarifa.precioEstandar">
+                <input id="tf-estandar" v-model.number="edicionTarifa.precioEstandar" type="number" min="0" step="0.01" inputmode="decimal" class="field-control">
+              </AppField>
+              <AppField label="Precio promocional (S/)" for="tf-promocional" required :error="erroresTarifa.precioPromocional">
+                <input id="tf-promocional" v-model.number="edicionTarifa.precioPromocional" type="number" min="0" step="0.01" inputmode="decimal" class="field-control">
+              </AppField>
+              <AppField label="Mínimo de integrantes" for="tf-minimo" required :error="erroresTarifa.minIntegrantes" :hint="`Entre 1 y ${MIN_INTEGRANTES_MAXIMO}.`">
+                <input id="tf-minimo" v-model.number="edicionTarifa.minIntegrantes" type="number" min="1" :max="MIN_INTEGRANTES_MAXIMO" step="1" inputmode="numeric" class="field-control">
+              </AppField>
+            </template>
+            <AppField v-else label="Precio por persona (S/)" for="tf-virtual" required :error="erroresTarifa.precioEstandar" hint="Tarifa única, sin escalas.">
+              <input id="tf-virtual" v-model.number="edicionTarifa.precioEstandar" type="number" min="0" step="0.01" inputmode="decimal" class="field-control">
+            </AppField>
+          </div>
+          <AppButton type="submit" :loading="guardandoTarifa">Guardar tarifa</AppButton>
+        </form>
+      </details>
 
       <!-- Datos -->
       <details class="rounded-xl bg-white/5 p-4">

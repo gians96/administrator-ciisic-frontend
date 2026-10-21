@@ -2,7 +2,7 @@
 // DELEGACIONES: tarifa por persona, carga masiva y enlace público (funciones puras)
 // ============================================================================
 
-import type { EstadoPagoDelegacion, ModalidadAsistencia } from '~/types/api'
+import type { Delegacion, EstadoPagoDelegacion, ModalidadAsistencia, TarifaDelegacionesAdmin } from '~/types/api'
 
 export const MIN_INTEGRANTES_POR_DEFECTO = 10
 export const PRECIO_ESTANDAR_POR_DEFECTO = 60
@@ -303,4 +303,174 @@ export function tarifaDeTipos(tipos: ReadonlyArray<{ codigo: string, precio: num
     precioPromocional: precio('delegacion_grupal') ?? PRECIO_PROMOCIONAL_POR_DEFECTO,
     virtual: virtual === null ? null : { precio: virtual },
   }
+}
+
+// ─── Tarifa del evento y de cada delegación (backend spec 024) ───
+
+/** Valor de un campo numérico del formulario: `''` mientras está vacío (`v-model.number`). */
+export type Cifra = number | ''
+
+export const MIN_INTEGRANTES_MAXIMO = 1000
+
+const esCifra = (valor: Cifra): valor is number => typeof valor === 'number' && Number.isFinite(valor)
+/** Los precios se guardan con hasta dos decimales. */
+const tieneCentavos = (valor: number) => Math.abs(valor * 100 - Math.round(valor * 100)) < 1e-6
+
+/** Tarifa que usa el alta y el estimado: la virtual solo se ofrece si su tipo existe y está activo. */
+export function tarifaDeAdmin(tarifa: TarifaDelegacionesAdmin): TarifaDelegaciones {
+  return {
+    minIntegrantes: tarifa.minIntegrantes,
+    precioEstandar: tarifa.presencial.precioEstandar,
+    precioPromocional: tarifa.presencial.precioPromocional,
+    virtual: tarifa.virtual?.activo ? { precio: tarifa.virtual.precio } : null,
+  }
+}
+
+/** Lo que edita el staff en «Editar tarifa». `precioVirtual` y `virtualActivo` solo cuentan si la virtual se ofrece. */
+export interface FormularioTarifa {
+  minIntegrantes: Cifra
+  precioEstandar: Cifra
+  precioPromocional: Cifra
+  precioVirtual: Cifra
+  virtualActivo: boolean
+  aplicarAExistentes: boolean
+}
+
+export function formularioDeTarifa(tarifa: TarifaDelegacionesAdmin): FormularioTarifa {
+  return {
+    minIntegrantes: tarifa.minIntegrantes,
+    precioEstandar: tarifa.presencial.precioEstandar,
+    precioPromocional: tarifa.presencial.precioPromocional,
+    precioVirtual: tarifa.virtual?.precio ?? PRECIO_VIRTUAL_POR_DEFECTO,
+    virtualActivo: tarifa.virtual?.activo ?? false,
+    aplicarAExistentes: false,
+  }
+}
+
+function errorDePrecio(valor: Cifra): string | null {
+  if (!esCifra(valor) || valor < 0) return 'Escribe un precio válido (0 o más).'
+  return tieneCentavos(valor) ? null : 'Usa hasta dos decimales.'
+}
+
+function errorDeMinimo(valor: Cifra): string | null {
+  return esCifra(valor) && Number.isInteger(valor) && valor >= 1 && valor <= MIN_INTEGRANTES_MAXIMO
+    ? null
+    : `Escribe un número entero de 1 a ${MIN_INTEGRANTES_MAXIMO}.`
+}
+
+/** Errores por campo del formulario de la tarifa (vacío si es válido). Los mismos límites que el backend. */
+export function validarTarifa(form: FormularioTarifa): Record<string, string> {
+  const errores: Record<string, string> = {}
+  const minimo = errorDeMinimo(form.minIntegrantes)
+  if (minimo) errores.minIntegrantes = minimo
+  const estandar = errorDePrecio(form.precioEstandar)
+  if (estandar) errores.precioEstandar = estandar
+  const promocional = errorDePrecio(form.precioPromocional)
+  if (promocional) errores.precioPromocional = promocional
+  else if (!estandar && esCifra(form.precioEstandar) && esCifra(form.precioPromocional) && form.precioPromocional > form.precioEstandar) {
+    errores.precioPromocional = 'El precio promocional no puede ser mayor que el estándar.'
+  }
+  if (form.virtualActivo) {
+    const virtual = errorDePrecio(form.precioVirtual)
+    if (virtual) errores.precioVirtual = virtual
+  }
+  return errores
+}
+
+/**
+ * Cuerpo del `PUT events/:id/delegations/tarifa` con **solo lo que cambió**; `null` si no hay nada que guardar.
+ * Sin tipo virtual (`actual.virtual === null`) el precio virtual solo se envía al encender la modalidad, porque
+ * enviarlo crea el tipo. Se asume el formulario ya validado (`validarTarifa`).
+ */
+export function cuerpoTarifa(form: FormularioTarifa, actual: TarifaDelegacionesAdmin): Record<string, number | boolean> | null {
+  const cuerpo: Record<string, number | boolean> = {}
+  if (esCifra(form.minIntegrantes) && form.minIntegrantes !== actual.minIntegrantes) cuerpo.minIntegrantes = form.minIntegrantes
+  if (esCifra(form.precioEstandar) && form.precioEstandar !== actual.presencial.precioEstandar) cuerpo.precioEstandar = form.precioEstandar
+  if (esCifra(form.precioPromocional) && form.precioPromocional !== actual.presencial.precioPromocional) cuerpo.precioPromocional = form.precioPromocional
+  if (actual.virtual) {
+    if (esCifra(form.precioVirtual) && form.precioVirtual !== actual.virtual.precio) cuerpo.precioVirtual = form.precioVirtual
+    if (form.virtualActivo !== actual.virtual.activo) cuerpo.virtualActivo = form.virtualActivo
+  } else if (form.virtualActivo && esCifra(form.precioVirtual)) {
+    cuerpo.virtualActivo = true
+    cuerpo.precioVirtual = form.precioVirtual
+  }
+  if (form.aplicarAExistentes) cuerpo.aplicarAExistentes = true
+  return Object.keys(cuerpo).length ? cuerpo : null
+}
+
+/** Mensaje tras guardar la tarifa: cuántas delegaciones recibieron la copia, si se pidió. */
+export function textoTarifaGuardada(delegacionesActualizadas: number, aplicoAExistentes: boolean): string {
+  if (!aplicoAExistentes) return 'Tarifa guardada. Rige para las delegaciones nuevas; las ya creadas conservan la suya.'
+  if (!delegacionesActualizadas) return 'Tarifa guardada. Ninguna delegación existente estaba sin integrantes ni vouchers.'
+  return `Tarifa guardada y aplicada a ${delegacionesActualizadas} delegación(es) sin integrantes ni vouchers.`
+}
+
+/** Valores de la tarifa del evento para una modalidad (lo que copia una delegación al crearse o al cambiar de modalidad). */
+export function tarifaParaModalidad(modalidad: ModalidadAsistencia, tarifa: TarifaDelegaciones): Pick<FormularioTarifaDelegacion, 'minIntegrantes' | 'precioEstandar' | 'precioPromocional'> {
+  if (modalidad === 'VIRTUAL') {
+    const precio = tarifa.virtual?.precio ?? PRECIO_VIRTUAL_POR_DEFECTO
+    return { minIntegrantes: tarifa.minIntegrantes, precioEstandar: precio, precioPromocional: precio }
+  }
+  return { minIntegrantes: tarifa.minIntegrantes, precioEstandar: tarifa.precioEstandar, precioPromocional: tarifa.precioPromocional }
+}
+
+/** Tarifa de una delegación en «Tarifa de esta delegación». En virtual `precioEstandar` es el precio único por persona. */
+export interface FormularioTarifaDelegacion {
+  modalidad: ModalidadAsistencia
+  minIntegrantes: Cifra
+  precioEstandar: Cifra
+  precioPromocional: Cifra
+}
+
+type TarifaDeDelegacion = Pick<Delegacion, 'modalidad' | 'minIntegrantes' | 'precioEstandar' | 'precioPromocional'>
+
+export function formularioDeTarifaDelegacion(delegacion: TarifaDeDelegacion): FormularioTarifaDelegacion {
+  return {
+    modalidad: delegacion.modalidad,
+    minIntegrantes: delegacion.minIntegrantes,
+    precioEstandar: delegacion.precioEstandar,
+    precioPromocional: delegacion.precioPromocional,
+  }
+}
+
+/** Errores por campo de la tarifa de una delegación; la virtual solo valida su precio único (y el mínimo, que no se usa). */
+export function validarTarifaDelegacion(form: FormularioTarifaDelegacion): Record<string, string> {
+  const errores: Record<string, string> = {}
+  const minimo = errorDeMinimo(form.minIntegrantes)
+  if (minimo) errores.minIntegrantes = minimo
+  const estandar = errorDePrecio(form.precioEstandar)
+  if (estandar) errores.precioEstandar = estandar
+  if (form.modalidad === 'PRESENCIAL') {
+    const promocional = errorDePrecio(form.precioPromocional)
+    if (promocional) errores.precioPromocional = promocional
+    else if (!estandar && esCifra(form.precioEstandar) && esCifra(form.precioPromocional) && form.precioPromocional > form.precioEstandar) {
+      errores.precioPromocional = 'El precio promocional no puede ser mayor que el estándar.'
+    }
+  }
+  return errores
+}
+
+/**
+ * Cuerpo del `PUT delegations/:id` con la tarifa que cambió (`null` si no cambió nada). Al cambiar la modalidad se
+ * envían también las tres cifras del formulario (ya precargadas con la tarifa de esa modalidad). En virtual el
+ * promocional es siempre igual al estándar: no hay escalas.
+ */
+export function cuerpoTarifaDelegacion(form: FormularioTarifaDelegacion, actual: TarifaDeDelegacion): Record<string, string | number> | null {
+  const cambiaModalidad = form.modalidad !== actual.modalidad
+  const promocional = form.modalidad === 'VIRTUAL' ? form.precioEstandar : form.precioPromocional
+  const cuerpo: Record<string, string | number> = {}
+  if (cambiaModalidad) cuerpo.modalidad = form.modalidad
+  if (esCifra(form.minIntegrantes) && (cambiaModalidad || form.minIntegrantes !== actual.minIntegrantes)) cuerpo.minIntegrantes = form.minIntegrantes
+  if (esCifra(form.precioEstandar) && (cambiaModalidad || form.precioEstandar !== actual.precioEstandar)) cuerpo.precioEstandar = form.precioEstandar
+  if (esCifra(promocional) && (cambiaModalidad || promocional !== actual.precioPromocional)) cuerpo.precioPromocional = promocional
+  return Object.keys(cuerpo).length ? cuerpo : null
+}
+
+/** La delegación cobra distinto de la tarifa del evento (un convenio): se marca en el detalle. */
+export function esTarifaDeConvenio(delegacion: TarifaDeDelegacion, tarifa: TarifaDelegaciones): boolean {
+  const evento = tarifaParaModalidad(delegacion.modalidad, tarifa)
+  if (delegacion.modalidad === 'VIRTUAL') return delegacion.precioEstandar !== evento.precioEstandar
+  return delegacion.minIntegrantes !== evento.minIntegrantes
+    || delegacion.precioEstandar !== evento.precioEstandar
+    || delegacion.precioPromocional !== evento.precioPromocional
 }

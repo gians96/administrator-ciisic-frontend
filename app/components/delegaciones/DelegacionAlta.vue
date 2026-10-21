@@ -157,7 +157,7 @@ async function guardar() {
               </span>
             </label>
           </div>
-          <p v-if="!virtualDisponible" class="field-hint">Para ofrecer la modalidad virtual crea en Tipos de inscripción → Delegaciones el tipo con código <span class="font-mono">delegacion_virtual</span> (modalidad Virtual, S/ 30).</p>
+          <p v-if="!virtualDisponible" class="field-hint">La modalidad virtual no se ofrece: actívala con «Editar tarifa» en esta pestaña (o crea el tipo <span class="font-mono">delegacion_virtual</span> en Tipos de inscripción).</p>
         </fieldset>
       </section>
 

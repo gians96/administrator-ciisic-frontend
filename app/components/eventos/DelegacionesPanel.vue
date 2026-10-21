@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import type { Categoria, Delegacion, DelegacionDetalle, Respuesta } from '~/types/api'
+import type { Categoria, Delegacion, DelegacionDetalle, Respuesta, TarifaDelegacionesAdmin } from '~/types/api'
 import { mensajeError } from '~/utils/errores'
 import { numero, soles } from '~/utils/formato'
+import { esNoDisponible } from '~/utils/portal'
 import {
-  ETIQUETA_MODALIDAD, enlaceInscripcionDelegacion, tarifaDeTipos, textoSaldo, type TarifaDelegaciones,
+  ETIQUETA_MODALIDAD, enlaceInscripcionDelegacion, tarifaDeAdmin, tarifaDeTipos, textoSaldo, type TarifaDelegaciones,
 } from '~/utils/delegaciones'
 
 const props = defineProps<{ eventoId: number }>()
@@ -14,17 +15,32 @@ const { copiar } = useCopiar()
 
 const delegaciones = ref<Delegacion[]>([])
 const tarifa = ref<TarifaDelegaciones>(tarifaDeTipos([]))
+/** La tarifa tal como la guarda el backend (spec 024); `null` con un backend anterior: la tarjeta es solo de lectura. */
+const tarifaAdmin = ref<TarifaDelegacionesAdmin | null>(null)
 const cargando = ref(false)
+
+/** Con un backend sin la ruta (404 de ruta) la tarifa se arma con los tipos de la categoría, como antes. */
+async function cargarTarifa() {
+  try {
+    const { data } = await api<Respuesta<TarifaDelegacionesAdmin>>(`events/${props.eventoId}/delegations/tarifa`)
+    tarifaAdmin.value = data
+    tarifa.value = tarifaDeAdmin(data)
+  } catch (error) {
+    if (!esNoDisponible(error)) throw error
+    const categorias = await api<Respuesta<Categoria[]>>(`events/${props.eventoId}/registration-categories`)
+    tarifaAdmin.value = null
+    tarifa.value = tarifaDeTipos(categorias.data.find((categoria) => categoria.codigo === 'DELEGACIONES')?.tipos ?? [])
+  }
+}
 
 async function cargar() {
   cargando.value = true
   try {
-    const [lista, categorias] = await Promise.all([
+    const [lista] = await Promise.all([
       api<Respuesta<Delegacion[]>>(`events/${props.eventoId}/delegations`),
-      api<Respuesta<Categoria[]>>(`events/${props.eventoId}/registration-categories`),
+      cargarTarifa(),
     ])
     delegaciones.value = lista.data
-    tarifa.value = tarifaDeTipos(categorias.data.find((categoria) => categoria.codigo === 'DELEGACIONES')?.tipos ?? [])
   } catch (error) {
     toast.error(mensajeError(error))
   } finally {
@@ -32,6 +48,14 @@ async function cargar() {
   }
 }
 watch(() => props.eventoId, cargar, { immediate: true })
+
+// ─── Tarifa del evento ───
+const tarifaAbierta = ref(false)
+
+async function alGuardarTarifa() {
+  tarifaAbierta.value = false
+  await cargar()
+}
 
 // ─── Alta ───
 const altaAbierta = ref(false)
@@ -78,16 +102,35 @@ const totales = computed(() => ({
 
 <template>
   <div class="space-y-6">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <p class="max-w-3xl text-sm text-slate-400">
-        Un delegado inscribe a su grupo con su link (oculto en la landing) o tú lo registras aquí. Presencial:
-        <strong class="text-slate-200">{{ soles(tarifa.precioEstandar) }}</strong> por persona y
-        <strong class="text-slate-200">{{ soles(tarifa.precioPromocional) }}</strong> desde {{ tarifa.minIntegrantes }} integrantes (sin kit).
-        Virtual: <strong class="text-slate-200">{{ tarifa.virtual ? soles(tarifa.virtual.precio) : 'sin tipo creado' }}</strong> para todos.
-        Al cruzar el mínimo se recalcula para todo el grupo.
-      </p>
-      <AppButton icon="heroicons:plus" @click="altaAbierta = true">Nueva delegación</AppButton>
-    </div>
+    <section class="card space-y-4 p-5">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <p class="max-w-3xl text-sm text-slate-400">
+          Un delegado inscribe a su grupo con su link (oculto en la landing) o tú lo registras aquí. La tarifa es por persona y sin kit; al cruzar el
+          mínimo se recalcula para todo el grupo. Cada delegación conserva la tarifa con la que se creó.
+        </p>
+        <div class="flex shrink-0 flex-wrap gap-2">
+          <AppButton v-if="tarifaAdmin" variant="secondary" icon="heroicons:pencil-square" @click="tarifaAbierta = true">Editar tarifa</AppButton>
+          <AppButton icon="heroicons:plus" @click="altaAbierta = true">Nueva delegación</AppButton>
+        </div>
+      </div>
+      <dl class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div class="rounded-xl bg-white/5 px-4 py-3">
+          <dt class="text-xs uppercase tracking-wide text-slate-400">Presencial · menos de {{ numero(tarifa.minIntegrantes) }}</dt>
+          <dd class="mt-0.5 text-xl font-bold tabular-nums">{{ soles(tarifa.precioEstandar) }}</dd>
+        </div>
+        <div class="rounded-xl bg-white/5 px-4 py-3">
+          <dt class="text-xs uppercase tracking-wide text-slate-400">Presencial · {{ numero(tarifa.minIntegrantes) }} o más</dt>
+          <dd class="mt-0.5 text-xl font-bold tabular-nums">{{ soles(tarifa.precioPromocional) }}</dd>
+        </div>
+        <div class="col-span-2 rounded-xl bg-white/5 px-4 py-3 sm:col-span-1">
+          <dt class="text-xs uppercase tracking-wide text-slate-400">Virtual · todos</dt>
+          <dd class="mt-0.5 text-xl font-bold tabular-nums">
+            <template v-if="tarifa.virtual">{{ soles(tarifa.virtual.precio) }}</template>
+            <span v-else class="text-base font-semibold text-slate-400">{{ tarifaAdmin?.virtual ? 'No se ofrece' : 'Sin tipo creado' }}</span>
+          </dd>
+        </div>
+      </dl>
+    </section>
 
     <dl v-if="delegaciones.length" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <div class="rounded-xl bg-white/5 px-4 py-3"><dt class="text-xs uppercase tracking-wide text-slate-400">Delegaciones</dt><dd class="mt-0.5 text-xl font-bold tabular-nums">{{ numero(totales.grupos) }}</dd></div>
@@ -152,6 +195,7 @@ const totales = computed(() => ({
     </div>
 
     <DelegacionAlta :abierto="altaAbierta" :evento-id="eventoId" :tarifa="tarifa" @cerrar="altaAbierta = false" @creada="alCrear" />
-    <DelegacionDetalle :abierto="detalleAbierto" :delegacion-id="detalleId" @cerrar="detalleAbierto = false" @cambio="cargar" />
+    <DelegacionDetalle :abierto="detalleAbierto" :delegacion-id="detalleId" :tarifa="tarifa" @cerrar="detalleAbierto = false" @cambio="cargar" />
+    <TarifaDelegacionesForm v-if="tarifaAdmin" :abierto="tarifaAbierta" :evento-id="eventoId" :tarifa="tarifaAdmin" @cerrar="tarifaAbierta = false" @guardada="alGuardarTarifa" />
   </div>
 </template>

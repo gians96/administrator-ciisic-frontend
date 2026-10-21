@@ -272,6 +272,24 @@ export interface PagoDelegacion {
   creadoEn: string
 }
 
+/**
+ * Tarifa de las delegaciones del evento (backend spec 024: `GET|PUT events/:id/delegations/tarifa`). `virtual` es
+ * `null` mientras el evento no tenga el tipo `delegacion_virtual`; con `activo: false` la landing no ofrece la
+ * modalidad. `sinIntegrantes` cuenta las delegaciones sin integrantes activos ni vouchers (las únicas que alcanza
+ * «aplicar a las existentes»).
+ */
+export interface TarifaDelegacionesAdmin {
+  minIntegrantes: number
+  presencial: { precioEstandar: number, precioPromocional: number }
+  virtual: { precio: number, activo: boolean } | null
+  delegaciones: { total: number, sinIntegrantes: number }
+}
+
+/** Respuesta del `PUT`: la tarifa ya guardada y cuántas delegaciones recibieron la copia. */
+export interface TarifaDelegacionesGuardada extends TarifaDelegacionesAdmin {
+  delegacionesActualizadas: number
+}
+
 export interface TipoDelegacion {
   id: number
   codigo: string
