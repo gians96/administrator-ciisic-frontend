@@ -794,6 +794,8 @@ export interface ResultadoImportacionPadron {
   advertencias: string[]
   /** `false` en la simulación: no se guardó nada. */
   aplicado: boolean
+  /** `true`: se conservaron los docentes, sus DNI y sus secciones; del Excel solo se usan los estudiantes. */
+  asesoresConservados: boolean
 }
 
 // ─── Enlaces públicos por docente (spec 026 del backend, spec 017 del panel) ───
@@ -868,8 +870,25 @@ export interface VistaCiclo {
   alumnos: AlumnoCiclo[]
 }
 
-/** Quién abre un enlace público: el docente (`/seguimiento`) o un ciclo (`/seguimiento/ciclo`). */
-export type TipoSeguimiento = 'asesor' | 'ciclo'
+/** Quién abre la vista pública: el docente con su enlace (`/seguimiento`), un ciclo (`/seguimiento/ciclo`) o el docente con su DNI (`/docentes`). */
+export type TipoSeguimiento = 'asesor' | 'ciclo' | 'documento'
+
+// ─── Docentes y su DNI (spec 028 del backend, spec 019 del panel) ───
+
+/** Un docente para administrarlo: su DNI y las secciones que atiende. El DNI solo lo recibe quien tiene `reportes.gestionar`. */
+export interface DocenteAdmin {
+  id: number
+  nombre: string
+  /** DNI de 8 dígitos; `null` si no se registró (sin él no puede usar la página común). */
+  documento: string | null
+  secciones: SeccionRef[]
+}
+
+export interface ListaDocentes {
+  asesores: DocenteAdmin[]
+  /** Ciclos y secciones del padrón cargado: lo que se puede asignar. */
+  secciones: SeccionRef[]
+}
 
 /** Cuántos estudiantes hay en cada situación (contadores del filtro de situación). */
 export type ConteosSituacion = Record<'todos' | 'NO_PAGADO' | SituacionSeguimiento, number>

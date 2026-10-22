@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AlumnoSeguimiento, AsesorRef, ConteosSituacion, EnlaceAsesor, EnlaceCiclo, Meta, Respuesta, ResumenSeguimiento } from '~/types/api'
+import type { AlumnoSeguimiento, AsesorRef, ConteosSituacion, DocenteAdmin, EnlaceAsesor, EnlaceCiclo, ListaDocentes, Meta, Respuesta, ResumenSeguimiento, SeccionRef } from '~/types/api'
 import { estadoDelEnlace, haceCuanto, urlEnlaceCiclo, urlEnlaceDocente, urlWhatsapp } from '~/utils/enlacesDocentes'
 import { fechaDia, fechaHoraLima, numero, soles } from '~/utils/formato'
 import { mensajeError } from '~/utils/errores'
@@ -45,6 +45,11 @@ const alumnos = ref<AlumnoSeguimiento[]>([])
 const meta = ref<Meta | null>(null)
 const enlaces = ref<EnlaceAsesor[]>([])
 const enlacesCiclo = ref<EnlaceCiclo[]>([])
+/** Docentes con su DNI y las secciones del padrón (spec 019): solo los lee quien gestiona el padrón. */
+const docentes = ref<DocenteAdmin[]>([])
+const seccionesDelPadron = ref<SeccionRef[]>([])
+const editorAbierto = ref(false)
+const docenteEnEdicion = ref<DocenteAdmin | null>(null)
 const cargandoResumen = ref(false)
 const cargandoAlumnos = ref(false)
 /** Mensaje si no se pudo leer el resumen y no hay datos previos que mostrar. */
@@ -69,6 +74,7 @@ const secciones = computed(() => seccionesDelCiclo(opciones.value, filtros.ciclo
 const hayFiltros = computed(() => filtrosActivos(filtros) > 0)
 const asesorElegido = computed(() => opciones.value?.asesores.find((asesor) => String(asesor.id) === filtros.asesorId) ?? null)
 const enlacePorAsesor = computed(() => new Map(enlaces.value.map((enlace) => [enlace.asesorId, enlace])))
+const docentePorId = computed(() => new Map(docentes.value.map((docente) => [docente.id, docente])))
 const enlacePorCiclo = computed(() => new Map(enlacesCiclo.value.map((enlace) => [enlace.ciclo.toUpperCase(), enlace])))
 /** Secciones de cada ciclo, para mostrarlas en la fila del ciclo. */
 const seccionesPorCiclo = computed(() => {
@@ -170,16 +176,21 @@ async function cargarEnlaces() {
   if (!eventoId || !puedeGestionar.value || !hayPadron.value) {
     enlaces.value = []
     enlacesCiclo.value = []
+    docentes.value = []
+    seccionesDelPadron.value = []
     return
   }
-  const [docentes, ciclos] = await Promise.all([
+  const [enlacesDocentes, ciclos, lista] = await Promise.all([
     api<Respuesta<EnlaceAsesor[]>>(`events/${eventoId}/advisory/links`).then((r) => r.data, () => [] as EnlaceAsesor[]),
     api<Respuesta<EnlaceCiclo[]>>(`events/${eventoId}/advisory/cycle-links`).then((r) => r.data, () => [] as EnlaceCiclo[]),
+    api<Respuesta<ListaDocentes>>(`events/${eventoId}/advisory/advisors`).then((r) => r.data, () => ({ asesores: [], secciones: [] }) as ListaDocentes),
   ])
   // Si el evento cambió mientras se leía, estas listas ya no son las de la pantalla
   if (eventoId !== eventos.seleccionadoId) return
-  enlaces.value = docentes
+  enlaces.value = enlacesDocentes
   enlacesCiclo.value = ciclos
+  docentes.value = lista.asesores
+  seccionesDelPadron.value = lista.secciones
 }
 
 function sincronizarUrl() {
@@ -232,6 +243,8 @@ watch(() => eventos.seleccionadoId, (id, anterior) => {
   meta.value = null
   enlaces.value = []
   enlacesCiclo.value = []
+  docentes.value = []
+  seccionesDelPadron.value = []
   alumnosVencidos = true
   if (id && anterior) {
     Object.assign(filtros, FILTROS_REPORTE_VACIOS)
@@ -300,6 +313,18 @@ async function copiarEnlaceDe(asesor: { id: number, nombre: string }) {
   } finally {
     trabajandoEnlace.value = null
   }
+}
+
+/** Abre el formulario del docente (`null` = uno nuevo). */
+function abrirEditor(docente: DocenteAdmin | null) {
+  docenteEnEdicion.value = docente
+  editorAbierto.value = true
+}
+
+/** Un docente cambió (DNI, secciones, alta o baja): los indicadores y las listas de enlaces se vuelven a leer. */
+function alCambiarDocente() {
+  alumnosVencidos = true
+  actualizar()
 }
 
 /** Copia el enlace del ciclo; si aún no tiene, lo crea primero (un solo clic). */
@@ -575,6 +600,13 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
 
         <!-- Por asesor -->
         <section v-else-if="vista === 'asesores'" id="panel-asesores" role="tabpanel" aria-labelledby="tab-asesores" class="card overflow-hidden">
+          <div v-if="puedeGestionar" class="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+            <p class="text-xs text-slate-400">
+              Registra el <strong class="font-semibold text-slate-200">DNI</strong> de cada docente (con él entra a la página única) y ajusta los ciclos y secciones que atiende.
+              <span v-if="docentes.length" class="whitespace-nowrap">{{ numero(docentes.filter((d) => !d.documento).length) }} sin DNI.</span>
+            </p>
+            <AppButton size="sm" icon="heroicons:user-plus" :disabled="!hayPadron" @click="abrirEditor(null)">Agregar docente</AppButton>
+          </div>
           <div class="relative overflow-x-auto">
             <table class="table-base">
               <thead>
@@ -589,6 +621,10 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
                 <tr v-for="fila in resumen.porAsesor" :key="fila.id">
                   <td class="min-w-56">
                     <p class="font-semibold text-white">{{ fila.nombre }}</p>
+                    <p v-if="puedeGestionar && docentePorId.has(fila.id)" class="mt-0.5 text-xs">
+                      <span v-if="docentePorId.get(fila.id)?.documento" class="text-slate-400 tabular-nums">DNI {{ docentePorId.get(fila.id)?.documento }}</span>
+                      <span v-else class="text-amber-300">Sin DNI</span>
+                    </p>
                     <p v-if="puedeGestionar && enlacePorAsesor.has(fila.id)" class="mt-0.5 text-xs text-slate-400">
                       <template v-if="estadoDelEnlace(enlacePorAsesor.get(fila.id)) === 'SIN_ENLACE'">Sin enlace para el docente</template>
                       <template v-else-if="estadoDelEnlace(enlacePorAsesor.get(fila.id)) === 'SIN_ABRIR'">Enlace creado · aún no lo abre</template>
@@ -600,6 +636,7 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
                   <td class="text-right whitespace-nowrap">
                     <div class="flex justify-end gap-2">
                       <AppButton size="sm" variant="secondary" icon="heroicons:eye" @click="verAlumnos({ asesorId: String(fila.id), situacion: '' })">Alumnos</AppButton>
+                      <AppButton v-if="puedeGestionar && docentePorId.has(fila.id)" size="sm" variant="secondary" icon="heroicons:pencil-square" :aria-label="`Editar a ${fila.nombre}`" @click="abrirEditor(docentePorId.get(fila.id) ?? null)">Editar</AppButton>
                       <AppButton
                         v-if="puedeGestionar"
                         size="sm"
@@ -724,12 +761,22 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
       </template>
     </template>
 
-    <PadronImportar :abierto="importando" :evento-id="eventos.seleccionadoId" :hay-padron="hayPadron" @cerrar="importando = false" @importado="alImportar" />
+    <PadronImportar :abierto="importando" :evento-id="eventos.seleccionadoId" :hay-padron="hayPadron" :hay-docentes="docentes.length > 0" @cerrar="importando = false" @importado="alImportar" />
+    <AsesorEditar
+      :abierto="editorAbierto"
+      :evento-id="eventos.seleccionadoId"
+      :docente="docenteEnEdicion"
+      :catalogo="seccionesDelPadron"
+      @cerrar="editorAbierto = false"
+      @guardado="alCambiarDocente"
+      @eliminado="alCambiarDocente"
+    />
     <EnlacesPublicos
       :abierto="verEnlaces !== null"
       :inicial="verEnlaces ?? 'docentes'"
       :evento-id="eventos.seleccionadoId"
       :docentes="enlaces"
+      :docentes-admin="docentes"
       :ciclos="enlacesCiclo"
       :evento-nombre="eventos.seleccionado?.nombreCorto"
       @cerrar="verEnlaces = null"

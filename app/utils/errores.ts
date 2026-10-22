@@ -114,7 +114,11 @@ export const MENSAJES_POR_CODIGO: Readonly<Record<string, string>> = {
 
   // Reportes de seguimiento por asesor (spec 025 del backend)
   PADRON_NOT_LOADED: 'Aún no se cargó el padrón de estudiantes de este evento. Cárgalo con el Excel de la facultad.',
-  ADVISOR_NOT_FOUND: 'El asesor ya no existe en este evento (se volvió a cargar el padrón). Actualiza la página.',
+  ADVISOR_NOT_FOUND: 'El docente (asesor) ya no existe en este evento: se eliminó o se reemplazó al recargar el padrón. Actualiza la página.',
+  // Docentes y su DNI (spec 028 del backend)
+  ADVISOR_NAME_TAKEN: 'Ya hay un docente con ese nombre en este evento.',
+  ADVISOR_DOCUMENT_TAKEN: 'Ese DNI ya está registrado para otro docente de este evento.',
+  ADVISOR_DOCUMENT_NOT_FOUND: 'No encontramos un docente con ese DNI. Revisa el número o pide que lo registren.',
   PADRON_FILE_INVALID: 'No se pudo leer el archivo. Sube el Excel (.xlsx) de la facultad.',
   PADRON_SHEET_NOT_FOUND: 'El Excel no tiene una hoja «ESTUDIANTES …». Revisa que sea el archivo de la facultad.',
   PADRON_COLUMNS_MISSING: 'La hoja de estudiantes no tiene las columnas esperadas (DNI, CODIGO, ALUMNO, CICLO y SECCIÓN).',
@@ -134,6 +138,8 @@ export const MENSAJES_POR_CODIGO: Readonly<Record<string, string>> = {
  */
 const RESPALDO_POR_CODIGO: Readonly<Record<string, string>> = {
   VALIDATION_ERROR: 'Revisa los datos marcados en el formulario.',
+  // El servidor nombra la sección que no está en el padrón
+  SECTION_NOT_FOUND: 'Alguna sección elegida no está en el padrón de este evento.',
 
   // Código por correo (spec 014): el servidor dice cuánto esperar o cuántos intentos quedan
   CODE_COOLDOWN: 'Espera un momento antes de pedir otro código.',

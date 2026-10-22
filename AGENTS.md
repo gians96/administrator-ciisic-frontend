@@ -174,6 +174,11 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   docente no abre un ciclo ni al revés. La vista del ciclo muestra tarjetas de sección con su docente y **no trae celular, DNI, correo ni montos**: no agregues una columna de celular (la lista llega a más gente
   que el docente). `seguimientoDocente.ts` filtra ambas vistas. Se gestiona en el diálogo `EnlacesPublicos` (pestañas Docentes y Ciclos, `EnlacesDocentes` y `EnlacesCiclos`) y en la pestaña «Por ciclo» de Reportes
   (`reportes.gestionar`). Las pestañas de ese diálogo son propias: `AppTabs` pone ids `tab-<id>` que chocarían con los de Reportes. **Backend 027 primero.**
+- **Docentes, DNI y página común** (spec 019; backend 028): `/docentes` es un *alias* de `/seguimiento` con un tercer modo (`tipoDeSeguimiento` → `'documento'`): el docente escribe su DNI y ve la misma vista que con su enlace.
+  **El DNI vive solo en memoria** (nunca en la URL, `localStorage`, un `console` ni un `useHead`) y viaja por `POST` en el **cuerpo** hasta el backend (`credencialDeCuerpo` / `peticionAlBackend` en `server/utils/enlace-publico.ts`: el token va en `X-Link-Token`, el DNI en el cuerpo).
+  Un DNI inválido o desconocido es el mismo aviso; el tope de intentos fallidos es del backend. El filtro de **ciclo y sección** (`seguimientoDocente.ts`) sirve a `/seguimiento` y `/docentes`. En Reportes → Por asesor, `AsesorEditar.vue` agrega, edita (nombre, DNI,
+  ciclos y secciones) y elimina docentes (`reportes.gestionar`: el DNI es dato personal y el resumen de `reportes.ver` no lo trae; sale de `GET …/advisory/advisors`). `PadronImportar` pregunta si se **conservan** (por defecto) o se reemplazan los docentes al recargar el padrón.
+  Los nombres de `app/utils/docentes.ts` llevan «Docente» (`dniDelDocente`) porque `utils/delegaciones.ts` ya tiene `normalizarDni`. Al enviar un formulario con `api()`, **usa `.value` de los `computed`** en el cuerpo (un ref no se serializa: llega como «No se pudo conectar»). **Backend 028 primero.**
 - Ponencias especializadas (spec 012; **no** son los papers de `/ponencias`): sus tres pantallas están en
   `app/pages/ponencias-especializadas/` y su lógica pura en `app/utils/ponenciasEspecializadas.ts`. El programa se
   edita solo con `especializadas.gestionar`; inscribir y corregir, con `especializadas.inscribir`; la puerta
@@ -238,17 +243,17 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–018
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–019
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
 escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de
-asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable, reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
+asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable, reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo, docentes con DNI y página común). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
 `backend-ciisic/specs/013-roles-permisos/contracts/`; código por correo, portal, fotocheck,
 asistencia por QR, alta de participantes y cortesías en
 `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`; modalidad virtual en
 `backend-ciisic/specs/018-modalidad-virtual/contracts/`; tipos que no admiten estudiantes UNDC en
 `backend-ciisic/specs/020-virtual-sin-estudiantes-undc/contracts/`; delegaciones con convenio en
-`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y su tarifa en `backend-ciisic/specs/024-tarifa-delegaciones/contracts/`; reportes por asesor en `backend-ciisic/specs/025-reportes-asesores/contracts/`, los enlaces de los docentes en `backend-ciisic/specs/026-enlaces-docentes/contracts/` y los de los ciclos en `backend-ciisic/specs/027-enlaces-ciclo/contracts/`.
+`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y su tarifa en `backend-ciisic/specs/024-tarifa-delegaciones/contracts/`; reportes por asesor en `backend-ciisic/specs/025-reportes-asesores/contracts/`, los enlaces de los docentes en `backend-ciisic/specs/026-enlaces-docentes/contracts/` y los de los ciclos en `backend-ciisic/specs/027-enlaces-ciclo/contracts/` y los docentes con DNI en `backend-ciisic/specs/028-docentes-dni/contracts/`.
 
 ## Antes de dar por terminado
 

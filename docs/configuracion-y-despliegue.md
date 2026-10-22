@@ -55,8 +55,8 @@ No hace falta URI de redirección ni secreto. Pantalla de consentimiento en esta
    con Google, cookie httpOnly (el JWT no aparece en el almacenamiento del navegador), que cada
    rol (Owner, Administrador del sistema, Tesorero, Comisión) solo ve las pantallas de sus permisos
    (un Administrador no abre Sistema), descarga de voucher y portal de un inscrito.
-4. **Enlaces públicos de los docentes y de los ciclos** (specs 017 y 018): `/seguimiento` y `/seguimiento/ciclo` no exigen sesión y se abren con el enlace que crea el equipo
-   (Reportes → «Padrón y enlaces → Enlaces públicos»; el backend 027 debe estar desplegado antes para los de ciclo); los límites por IP del backend dependen de la IP real que reenvía el BFF (ver «IP real del visitante»). El enlace se
+4. **Enlaces públicos de los docentes y de los ciclos y página común con DNI** (specs 017, 018 y 019): `/seguimiento`, `/seguimiento/ciclo` y `/docentes` no exigen sesión y se abren con el enlace que crea el equipo
+   (Reportes → «Padrón y enlaces → Enlaces públicos»; el backend 027 debe estar desplegado antes para los de ciclo y el 028 para el DNI y la página `/docentes`; tras desplegar, registrar el DNI de los docentes y probar `/docentes` con uno real); los límites por IP del backend dependen de la IP real que reenvía el BFF (ver «IP real del visitante»). El enlace se
    construye con el dominio desde el que el equipo abre el panel: en producción, el público y HTTPS. Verificar tras desplegar: crear un enlace, abrirlo en
    una ventana de incógnito (sin sesión) y comprobar que muestra solo a los estudiantes de ese docente.
 5. Agregar el dominio del panel a los orígenes autorizados del client ID de Google y guardar la

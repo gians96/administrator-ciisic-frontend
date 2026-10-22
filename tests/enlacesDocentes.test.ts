@@ -4,10 +4,12 @@ import {
   haceCuanto,
   mensajeParaCiclo,
   mensajeParaDocente,
+  mensajeParaDocentesDni,
   tipoDeSeguimiento,
   tokenDelHash,
   urlEnlaceCiclo,
   urlEnlaceDocente,
+  urlPaginaDocentes,
   urlWhatsapp,
 } from '~/utils/enlacesDocentes'
 
@@ -48,6 +50,9 @@ describe('enlaces de ciclos: URL, ruta y mensaje', () => {
     expect(tipoDeSeguimiento('/seguimiento/ciclo')).toBe('ciclo')
     expect(tipoDeSeguimiento('/seguimiento/ciclo/')).toBe('ciclo')
     expect(tipoDeSeguimiento('/seguimiento/ciclos')).toBe('asesor')
+    expect(tipoDeSeguimiento('/docentes')).toBe('documento')
+    expect(tipoDeSeguimiento('/docentes/')).toBe('documento')
+    expect(tipoDeSeguimiento('/docentes/x')).toBe('asesor')
   })
 
   it('el estado del enlace sirve igual para un ciclo', () => {
@@ -61,6 +66,23 @@ describe('enlaces de ciclos: URL, ruta y mensaje', () => {
     expect(mensaje).toContain(`https://panel.ejemplo.pe/seguimiento/ciclo#${TOKEN}`)
     expect(mensaje).toMatch(/no lo comparta/)
     expect(mensajeParaCiclo('II', 'https://a.pe/seguimiento/ciclo#t')).not.toMatch(/ del CIISIC| del undefined/)
+  })
+})
+
+describe('página única de los docentes: dirección y mensaje', () => {
+  it('es una sola dirección para todos, sin token ni DNI', () => {
+    expect(urlPaginaDocentes('https://panel.ejemplo.pe')).toBe('https://panel.ejemplo.pe/docentes')
+    expect(urlPaginaDocentes('https://panel.ejemplo.pe///')).toBe('https://panel.ejemplo.pe/docentes')
+    expect(new URL(urlPaginaDocentes('https://panel.ejemplo.pe')).hash).toBe('')
+  })
+
+  it('el mensaje pide el DNI, trae la dirección y el evento, y pide no compartir la pantalla', () => {
+    const mensaje = mensajeParaDocentesDni('https://panel.ejemplo.pe/docentes', 'VIII CIISIC 2026')
+    expect(mensaje).toContain('escriba su DNI')
+    expect(mensaje).toContain('del VIII CIISIC 2026')
+    expect(mensaje).toContain('https://panel.ejemplo.pe/docentes')
+    expect(mensaje).toMatch(/no comparta/)
+    expect(mensajeParaDocentesDni('https://a.pe/docentes')).not.toMatch(/ del undefined| del CIISIC/)
   })
 })
 

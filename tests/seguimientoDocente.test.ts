@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AlumnoCiclo, AlumnoDocente } from '~/types/api'
-import { FILTROS_DOCENTE_VACIOS, claveDeSeccion, conteosDocente, filtrarAlumnosDocente, textoParaBuscar } from '~/utils/seguimientoDocente'
+import { FILTROS_DOCENTE_VACIOS, ciclosDe, claveDeSeccion, conteosDocente, filtrarAlumnosDocente, textoParaBuscar } from '~/utils/seguimientoDocente'
 
 const alumno = (codigo: string, nombre: string, situacion: AlumnoDocente['situacion'], ciclo = 'I', seccion = 'A'): AlumnoDocente =>
   ({ nombre, codigo, ciclo, seccion, turno: 'M', celular: null, situacion })
@@ -23,6 +23,18 @@ describe('vista del docente: filtros', () => {
     expect(filtrarAlumnosDocente(ALUMNOS, { ...FILTROS_DOCENTE_VACIOS, seccion: claveDeSeccion('III', 'A') })).toEqual([])
   })
 
+  it('filtra por ciclo y lo combina con la sección', () => {
+    expect(ids(filtrarAlumnosDocente(ALUMNOS, { ...FILTROS_DOCENTE_VACIOS, ciclo: 'I' }))).toEqual(['1', '2'])
+    expect(ids(filtrarAlumnosDocente(ALUMNOS, { ...FILTROS_DOCENTE_VACIOS, ciclo: 'II' }))).toEqual(['3', '4'])
+    expect(filtrarAlumnosDocente(ALUMNOS, { ...FILTROS_DOCENTE_VACIOS, ciclo: 'II', seccion: claveDeSeccion('I', 'A') })).toEqual([])
+    expect(filtrarAlumnosDocente(ALUMNOS, { ...FILTROS_DOCENTE_VACIOS, ciclo: 'X' })).toEqual([])
+  })
+
+  it('lista los ciclos del docente con su cantidad de estudiantes', () => {
+    expect(ciclosDe(ALUMNOS)).toEqual([{ ciclo: 'I', alumnos: 2 }, { ciclo: 'II', alumnos: 2 }])
+    expect(ciclosDe([])).toEqual([])
+  })
+
   it('«No pagaron» incluye todo lo que no es «Pagó»', () => {
     expect(ids(filtrarAlumnosDocente(ALUMNOS, { ...FILTROS_DOCENTE_VACIOS, situacion: 'NO_PAGADO' }))).toEqual(['2', '3', '4'])
     expect(ids(filtrarAlumnosDocente(ALUMNOS, { ...FILTROS_DOCENTE_VACIOS, situacion: 'PAGADO' }))).toEqual(['1'])
@@ -37,7 +49,7 @@ describe('vista del docente: filtros', () => {
   })
 
   it('combina los filtros', () => {
-    expect(ids(filtrarAlumnosDocente(ALUMNOS, { seccion: claveDeSeccion('II', 'B'), situacion: 'NO_PAGADO', q: 'diaz' }))).toEqual(['4'])
+    expect(ids(filtrarAlumnosDocente(ALUMNOS, { ciclo: 'II', seccion: claveDeSeccion('II', 'B'), situacion: 'NO_PAGADO', q: 'diaz' }))).toEqual(['4'])
   })
 
   it('normaliza el texto para buscar', () => {

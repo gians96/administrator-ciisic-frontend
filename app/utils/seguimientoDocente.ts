@@ -7,13 +7,15 @@ import type { AlumnoCiclo, FiltroSituacionSeguimiento, SituacionSeguimiento } fr
  */
 
 export interface FiltrosDocente {
+  /** `''` = todos los ciclos; si no, el ciclo («VI»). */
+  ciclo: string
   /** `''` = todas; si no, `<ciclo>|<sección>` (ver `claveDeSeccion`). */
   seccion: string
   situacion: '' | FiltroSituacionSeguimiento
   q: string
 }
 
-export const FILTROS_DOCENTE_VACIOS: Readonly<FiltrosDocente> = Object.freeze({ seccion: '', situacion: '', q: '' })
+export const FILTROS_DOCENTE_VACIOS: Readonly<FiltrosDocente> = Object.freeze({ ciclo: '', seccion: '', situacion: '', q: '' })
 
 export const claveDeSeccion = (ciclo: string, seccion: string): string => `${ciclo}|${seccion}`
 
@@ -26,6 +28,7 @@ export function textoParaBuscar(valor: unknown): string {
 export function filtrarAlumnosDocente<T extends AlumnoCiclo>(alumnos: readonly T[], filtros: FiltrosDocente): T[] {
   const palabras = textoParaBuscar(filtros.q).split(' ').filter(Boolean)
   return alumnos.filter((alumno) => {
+    if (filtros.ciclo && alumno.ciclo !== filtros.ciclo) return false
     if (filtros.seccion && claveDeSeccion(alumno.ciclo, alumno.seccion) !== filtros.seccion) return false
     if (filtros.situacion === 'NO_PAGADO' && alumno.situacion === 'PAGADO') return false
     if (filtros.situacion && filtros.situacion !== 'NO_PAGADO' && alumno.situacion !== filtros.situacion) return false
@@ -33,6 +36,13 @@ export function filtrarAlumnosDocente<T extends AlumnoCiclo>(alumnos: readonly T
     const texto = textoParaBuscar(`${alumno.nombre} ${alumno.codigo}`)
     return palabras.every((palabra) => texto.includes(palabra))
   })
+}
+
+/** Los ciclos de la lista, con su cantidad de estudiantes, en el orden en que llegan (el servidor ya los ordena). */
+export function ciclosDe(alumnos: readonly AlumnoCiclo[]): Array<{ ciclo: string, alumnos: number }> {
+  const cuenta = new Map<string, number>()
+  for (const alumno of alumnos) cuenta.set(alumno.ciclo, (cuenta.get(alumno.ciclo) ?? 0) + 1)
+  return [...cuenta].map(([ciclo, cantidad]) => ({ ciclo, alumnos: cantidad }))
 }
 
 export interface ConteosDocente {

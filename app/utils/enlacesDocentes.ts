@@ -9,6 +9,8 @@ import type { EnlaceAsesor, EnlaceCiclo, TipoSeguimiento } from '~/types/api'
 
 export const RUTA_SEGUIMIENTO = '/seguimiento'
 export const RUTA_SEGUIMIENTO_CICLO = '/seguimiento/ciclo'
+/** Página común donde cada docente entra con su DNI (spec 019). */
+export const RUTA_DOCENTES = '/docentes'
 
 /** Token de un enlace: 43 caracteres base64url (256 bits), como los emite el backend. */
 export const REGEX_TOKEN_ENLACE = /^[A-Za-z0-9_-]{43}$/
@@ -21,9 +23,16 @@ export function urlEnlaceCiclo(origen: string, token: string): string {
   return `${origen.replace(/\/+$/, '')}${RUTA_SEGUIMIENTO_CICLO}#${token}`
 }
 
-/** Qué vista abre una ruta: `/seguimiento/ciclo` (con o sin barra final) es la del ciclo; cualquier otra, la del docente. */
+/** Dirección única que se reparte a todos los docentes: ahí escriben su DNI. */
+export function urlPaginaDocentes(origen: string): string {
+  return `${origen.replace(/\/+$/, '')}${RUTA_DOCENTES}`
+}
+
+/** Qué vista abre una ruta (con o sin barra final): `/seguimiento/ciclo` es la del ciclo, `/docentes` la del docente con su DNI y cualquier otra, la del docente con su enlace. */
 export function tipoDeSeguimiento(ruta: string): TipoSeguimiento {
-  return ruta.replace(/\/+$/, '') === RUTA_SEGUIMIENTO_CICLO ? 'ciclo' : 'asesor'
+  const limpia = ruta.replace(/\/+$/, '')
+  if (limpia === RUTA_SEGUIMIENTO_CICLO) return 'ciclo'
+  return limpia === RUTA_DOCENTES ? 'documento' : 'asesor'
 }
 
 /** Token del `#` de la URL (con o sin la almohadilla), o `null` si falta o no tiene el formato. */
@@ -68,6 +77,17 @@ export function mensajeParaDocente(nombre: string, url: string, evento?: string 
     `Este es su enlace personal para ver cómo van las inscripciones y pagos de sus estudiantes${paraEvento}. Se actualiza en tiempo real y puede descargar su lista en Excel o PDF.`,
     url,
     'Es de uso personal: por favor no lo comparta. Si lo necesita nuevamente o cree que otra persona lo tiene, solicítelo a la organización.',
+  ].join('\n\n')
+}
+
+/** Texto listo para enviar a todos los docentes con la dirección única donde entran con su DNI (WhatsApp o correo). */
+export function mensajeParaDocentesDni(url: string, evento?: string | null): string {
+  const paraEvento = evento ? ` del ${evento}` : ''
+  return [
+    'Estimado(a) docente:',
+    `Ingrese a esta dirección y escriba su DNI para ver cómo van las inscripciones y pagos de sus estudiantes${paraEvento}. Se actualiza en tiempo real y puede descargar su lista en Excel o PDF.`,
+    url,
+    'Solo usted debe ingresar con su DNI: por favor no comparta esta pantalla con los estudiantes. Si su DNI no funciona, solicite que lo registren a la organización.',
   ].join('\n\n')
 }
 

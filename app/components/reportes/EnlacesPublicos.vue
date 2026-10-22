@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { EnlaceAsesor, EnlaceCiclo } from '~/types/api'
+import type { DocenteAdmin, EnlaceAsesor, EnlaceCiclo } from '~/types/api'
 
 /**
  * Enlaces públicos para dar seguimiento sin iniciar sesión (spec 017 y 018; backend 026 y 027): uno por docente (ve a
@@ -9,6 +9,8 @@ const props = defineProps<{
   abierto: boolean
   eventoId: number | null
   docentes: EnlaceAsesor[]
+  /** Los docentes con su DNI (para la página única y para avisar de los que no lo tienen). */
+  docentesAdmin: DocenteAdmin[]
   ciclos: EnlaceCiclo[]
   eventoNombre?: string | null
   /** Pestaña que se muestra al abrir. */
@@ -29,7 +31,7 @@ const PESTANAS = computed(() => [
   <AppModal
     :abierto="abierto"
     titulo="Enlaces públicos"
-    descripcion="Con su enlace, cada docente o ciclo ve cómo van los pagos de sus estudiantes sin iniciar sesión."
+    descripcion="Cada docente (con su DNI o con su enlace) o cada ciclo ve cómo van los pagos de sus estudiantes sin iniciar sesión."
     ancho="xl"
     @cerrar="emit('cerrar')"
   >
@@ -51,7 +53,7 @@ const PESTANAS = computed(() => [
         </button>
       </div>
 
-      <EnlacesDocentes v-if="pestana === 'docentes'" :evento-id="eventoId" :enlaces="docentes" :evento-nombre="eventoNombre" @actualizado="emit('docentesActualizados', $event)" />
+      <EnlacesDocentes v-if="pestana === 'docentes'" :evento-id="eventoId" :enlaces="docentes" :docentes-admin="docentesAdmin" :evento-nombre="eventoNombre" @actualizado="emit('docentesActualizados', $event)" />
       <EnlacesCiclos v-else :evento-id="eventoId" :enlaces="ciclos" :evento-nombre="eventoNombre" @actualizado="emit('ciclosActualizados', $event)" />
     </div>
 

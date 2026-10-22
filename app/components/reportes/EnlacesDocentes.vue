@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import type { EnlaceAsesor, Respuesta } from '~/types/api'
-import { estadoDelEnlace, haceCuanto, mensajeParaDocente, urlEnlaceDocente } from '~/utils/enlacesDocentes'
+import type { DocenteAdmin, EnlaceAsesor, Respuesta } from '~/types/api'
+import { conteoDeDni } from '~/utils/docentes'
+import { estadoDelEnlace, haceCuanto, mensajeParaDocente, mensajeParaDocentesDni, urlEnlaceDocente, urlPaginaDocentes } from '~/utils/enlacesDocentes'
 import { mensajeError } from '~/utils/errores'
 import { numero } from '~/utils/formato'
 
@@ -10,7 +11,7 @@ import { numero } from '~/utils/formato'
  * quien lo tiene entra, así que aquí se crea, se copia (también como mensaje listo para enviar), se renueva (el
  * anterior deja de valer) y se desactiva. Solo lo ve quien tiene `reportes.gestionar`.
  */
-const props = defineProps<{ eventoId: number | null, enlaces: EnlaceAsesor[], eventoNombre?: string | null }>()
+const props = defineProps<{ eventoId: number | null, enlaces: EnlaceAsesor[], docentesAdmin: DocenteAdmin[], eventoNombre?: string | null }>()
 const emit = defineEmits<{ actualizado: [lista: EnlaceAsesor[]] }>()
 
 const { api } = useApi()
@@ -21,6 +22,11 @@ const { copiar } = useCopiar()
 const trabajando = ref<string | null>(null)
 const origen = ref('')
 onMounted(() => { origen.value = window.location.origin })
+
+/** Dirección única para todos los docentes (spec 019): ahí escriben su DNI. */
+const urlComun = computed(() => (origen.value ? urlPaginaDocentes(origen.value) : ''))
+const dni = computed(() => conteoDeDni(props.docentesAdmin))
+const sinDni = computed(() => new Set(props.docentesAdmin.filter((docente) => !docente.documento).map((docente) => docente.id)))
 
 const faltantes = computed(() => props.enlaces.filter((enlace) => !enlace.token))
 const activos = computed(() => props.enlaces.length - faltantes.value.length)
@@ -80,12 +86,34 @@ async function copiarTexto(texto: string, exito: string) {
   else toast.error('Tu navegador no permitió copiar. Selecciona el enlace y cópialo a mano.')
 }
 
+const copiarPaginaComun = () => copiarTexto(urlComun.value, 'Dirección copiada.')
+const copiarMensajeComun = () => copiarTexto(mensajeParaDocentesDni(urlComun.value, props.eventoNombre), 'Mensaje copiado: pégalo en WhatsApp o en el correo.')
 const copiarEnlace = (enlace: EnlaceAsesor) => copiarTexto(urlDe(enlace), 'Enlace copiado.')
 const copiarMensaje = (enlace: EnlaceAsesor) => copiarTexto(mensajeParaDocente(enlace.nombre, urlDe(enlace), props.eventoNombre), 'Mensaje copiado: pégalo en WhatsApp o en el correo.')
 </script>
 
 <template>
   <div class="space-y-4">
+    <!-- Página única: una sola dirección para todos los docentes, que entran con su DNI -->
+    <section class="space-y-3 rounded-xl bg-brand-500/10 p-4 ring-1 ring-brand-400/30 ring-inset" aria-labelledby="pagina-docentes">
+      <div>
+        <h3 id="pagina-docentes" class="text-sm font-semibold text-white">Página única para los docentes</h3>
+        <p class="mt-0.5 text-sm text-slate-300">Una sola dirección para todos: cada docente escribe su DNI y ve el avance de sus estudiantes, con el filtro de sus ciclos y secciones.</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <input :value="urlComun" readonly aria-label="Dirección de la página única de los docentes" class="field-control min-w-0 flex-1 text-xs" @focus="($event.target as HTMLInputElement).select()">
+        <AppButton size="sm" variant="secondary" icon="heroicons:clipboard-document" :disabled="!urlComun" @click="copiarPaginaComun">Copiar</AppButton>
+        <AppButton size="sm" variant="secondary" icon="heroicons:chat-bubble-left-ellipsis" :disabled="!urlComun" @click="copiarMensajeComun">Copiar mensaje</AppButton>
+        <a v-if="urlComun" :href="urlComun" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5 hover:text-white">
+          <Icon name="heroicons:arrow-top-right-on-square" class="size-4" aria-hidden="true" /> Abrir
+        </a>
+      </div>
+      <p class="text-xs" :class="dni.sin ? 'text-amber-200' : 'text-emerald-300'">
+        <strong class="tabular-nums">{{ numero(dni.con) }}</strong> de <span class="tabular-nums">{{ numero(dni.con + dni.sin) }}</span> docentes tienen DNI registrado.
+        <template v-if="dni.sin">Los {{ numero(dni.sin) }} que no lo tienen no podrán entrar por esta página hasta que se lo registres (Por asesor → Editar).</template>
+      </p>
+    </section>
+
     <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white/5 px-4 py-3 ring-1 ring-white/10 ring-inset">
       <p class="text-sm text-slate-200">
         <strong class="text-white tabular-nums">{{ numero(activos) }}</strong> de <span class="tabular-nums">{{ numero(enlaces.length) }}</span> docentes tienen enlace.
@@ -109,6 +137,7 @@ const copiarMensaje = (enlace: EnlaceAsesor) => copiarTexto(mensajeParaDocente(e
             <AppBadge v-else-if="estadoDelEnlace(enlace) === 'SIN_ABRIR'" tono="warn">Aún no lo abre</AppBadge>
             <AppBadge v-else tono="ok">Activo</AppBadge>
             <span v-if="estadoDelEnlace(enlace) === 'ABIERTO'">Lo abrió {{ haceCuanto(enlace.ultimoAcceso) }}</span>
+            <AppBadge v-if="sinDni.has(enlace.asesorId)" tono="warn">Sin DNI</AppBadge>
           </p>
         </div>
 
