@@ -1,6 +1,11 @@
 # ===== Dependencias (bun) =====
-FROM oven/bun:1 AS deps
+# Mismo método que la landing (ciisic-undc-web): el binario de Bun de una versión FIJA copiado a node:22-slim.
+# Con la etiqueta móvil `oven/bun:1` la instalación falló en Dokploy ("this CPU is missing SSE4.2 support", código
+# 134); la landing, con este binario fijado, se construye sin problema en el mismo servidor. Misma versión que la
+# landing: no la cambies sin probar el despliegue en Dokploy.
+FROM node:22-slim AS deps
 WORKDIR /app
+COPY --from=oven/bun:1.4.2 /usr/local/bin/bun /usr/local/bin/bun
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --ignore-scripts
 
