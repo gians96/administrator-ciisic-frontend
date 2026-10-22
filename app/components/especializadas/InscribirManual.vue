@@ -17,6 +17,7 @@ import {
   errorDePuerta,
   formularioPersona,
   PROCEDENCIAS,
+  presenciales,
   rangoHorario,
   textoCupo,
   validarPersona,
@@ -36,6 +37,7 @@ const emit = defineEmits<{ cerrar: [], inscrito: [inscripcion: InscripcionPonenc
 const { api } = useApi()
 const auth = useAuthStore()
 const id = useId()
+const { accesoLibre } = useAccesoPonencias()
 
 const form = reactive(formularioPersona())
 const ponenciaElegida = ref<number | null>(null)
@@ -142,7 +144,7 @@ async function guardar() {
   <AppModal
     :abierto="abierto"
     titulo="Inscribir manualmente"
-    descripcion="Basta con el documento: con DNI, los nombres se obtienen de la consulta oficial."
+    :descripcion="accesoLibre ? 'Acceso libre activo: basta con el documento; con DNI, los nombres se obtienen de la consulta oficial.' : 'Basta con el documento, pero debe ser congresista con el pago aprobado; sus datos y su modo (presencial o virtual) salen de su inscripción al congreso.'"
     ancho="lg"
     @cerrar="emit('cerrar')"
   >
@@ -157,7 +159,7 @@ async function guardar() {
           </optgroup>
         </select>
         <p v-if="elegida" class="mt-1 text-xs text-slate-400">
-          Inscritos: {{ textoCupo(elegida) }}<template v-if="elegida.cuposDisponibles !== null"> · quedan {{ elegida.cuposDisponibles }}</template>
+          Inscritos: {{ textoCupo(elegida) }}<template v-if="elegida.cupo !== null"> · quedan {{ Math.max(0, elegida.cupo - presenciales(elegida)) }} cupos presenciales</template>
         </p>
       </AppField>
 
@@ -201,6 +203,9 @@ async function guardar() {
         <template v-else>Si los dejas vacíos, se completan con la consulta DNI al guardar.</template>
       </p>
 
+      <p v-if="accesoLibre === false" class="-mt-1 rounded-xl bg-white/5 px-4 py-3 text-xs text-slate-300 ring-1 ring-white/10 ring-inset sm:col-span-2">
+        Con el acceso libre apagado no hace falta completar nombres, correo ni celular: se toman de la inscripción al congreso de la persona.
+      </p>
       <AppField label="Correo (opcional)" :for="idCampo('correo')" :error="errores.correo">
         <input :id="idCampo('correo')" v-model="form.correo" type="email" class="field-control" maxlength="191" autocomplete="off" :aria-invalid="errores.correo ? true : undefined">
       </AppField>

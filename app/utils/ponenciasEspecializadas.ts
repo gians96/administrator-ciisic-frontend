@@ -42,7 +42,11 @@ export interface PonenciaEspecializada {
   esGratuita: boolean
   /** `null`: sin límite. */
   cupo: number | null
+  /** Total vigente (presenciales y virtuales). */
   inscritos: number
+  /** Solo los presenciales ocupan el cupo (backend spec 030); un backend anterior no los envía. */
+  inscritosPresenciales?: number
+  inscritosVirtuales?: number
   asistentes: number
   cuposDisponibles: number | null
   ponente: PonenteEspecializado
@@ -70,10 +74,27 @@ export interface InscripcionPonencia {
   motivoCancelacion: MotivoCancelacion | null
   asistioEn: string | null
   esFueraDeHorario: boolean
+  /** Validada con una inscripción aprobada al congreso (backend spec 030); ausente en un backend anterior. */
+  validada?: boolean
+  modoAsistencia?: Modalidad
+  congreso?: CongresoDeInscripcion | null
   asistente: AsistentePonencia
   ponencia: Pick<PonenciaEspecializada, 'id' | 'tema' | 'fecha' | 'horaInicio' | 'horaFin' | 'ambiente' | 'modalidad'>
   registradoPor: { id: number, nombres: string, apellidos: string } | null
   asistenciaPor: { id: number, nombres: string, apellidos: string } | null
+}
+
+/** Estado **actual** de la inscripción al congreso con la que se validó una inscripción a ponencia. */
+export interface CongresoDeInscripcion {
+  estado: string
+  tipo: string | null
+  categoria: string | null
+}
+
+/** Respuesta de `GET|PUT events/:id/specialized-talks/access`. */
+export interface AccesoPonencias {
+  /** Encendido, se inscribe cualquiera solo con su documento; apagado, solo congresistas con el pago aprobado. */
+  accesoLibre: boolean
 }
 
 /** Respuesta de `POST /specialized-talks/:id/check-in`. */
@@ -82,8 +103,10 @@ export interface ResultadoPuerta {
   inscripcionNueva: boolean
   asistioEn: string
   esFueraDeHorario: boolean
+  validada?: boolean
+  modoAsistencia?: Modalidad
   asistente: AsistentePonencia
-  ponencia: { id: number, tema: string, ambiente: string, cupo: number | null, inscritos: number, asistentes: number }
+  ponencia: { id: number, tema: string, ambiente: string, cupo: number | null, inscritos: number, presenciales?: number, virtuales?: number, asistentes: number }
   liberadas: Array<{ inscripcionId: number, ponenciaId: number, tema: string, ambiente: string }>
 }
 
@@ -101,6 +124,11 @@ export const PROCEDENCIAS: ReadonlyArray<{ valor: Procedencia, etiqueta: string 
 
 export function etiquetaModalidad(modalidad: string): string {
   return MODALIDADES.find((m) => m.valor === modalidad)?.etiqueta ?? modalidad
+}
+
+/** Modo de asistencia al congreso (presencial u en línea). */
+export function etiquetaModo(modo: string | null | undefined): string {
+  return modo === 'VIRTUAL' ? 'Virtual' : 'Presencial'
 }
 
 export function etiquetaProcedencia(procedencia: string | null | undefined): string {
@@ -155,18 +183,28 @@ export function minutosEntre(horaInicio: string, horaFin: string): number {
   return inicio === null || fin === null || fin <= inicio ? 0 : fin - inicio
 }
 
-/** «14 / 20» o «14 · sin límite». */
-export function textoCupo(ponencia: Pick<PonenciaEspecializada, 'cupo' | 'inscritos'>): string {
-  return ponencia.cupo === null ? `${ponencia.inscritos} · sin límite` : `${ponencia.inscritos} / ${ponencia.cupo}`
+type ConConteo = Pick<PonenciaEspecializada, 'cupo' | 'inscritos' | 'inscritosPresenciales' | 'inscritosVirtuales'>
+
+/** Inscritos que ocupan aforo: solo los presenciales (un backend anterior no los separa y cuenta todos). */
+export function presenciales(ponencia: Pick<PonenciaEspecializada, 'inscritos' | 'inscritosPresenciales'>): number {
+  return ponencia.inscritosPresenciales ?? ponencia.inscritos
+}
+
+/** «14 / 20» (presenciales sobre el cupo) o «14 · sin límite»; los virtuales no ocupan aforo y se suman aparte: «14 / 20 · +3 virtuales». */
+export function textoCupo(ponencia: ConConteo): string {
+  const base = ponencia.cupo === null ? `${presenciales(ponencia)} · sin límite` : `${presenciales(ponencia)} / ${ponencia.cupo}`
+  const virtuales = ponencia.inscritosVirtuales ?? 0
+  return virtuales > 0 ? `${base} · +${virtuales} virtual${virtuales === 1 ? '' : 'es'}` : base
 }
 
 export type TonoCupo = 'ok' | 'warn' | 'error' | 'neutral'
 
-/** Lleno = error; desde el 80 % = aviso. Sin límite = neutro. */
-export function tonoCupo(ponencia: Pick<PonenciaEspecializada, 'cupo' | 'inscritos'>): TonoCupo {
+/** Aforo presencial lleno = error; desde el 80 % = aviso. Sin límite = neutro. */
+export function tonoCupo(ponencia: ConConteo): TonoCupo {
   if (ponencia.cupo === null) return 'neutral'
-  if (ponencia.inscritos >= ponencia.cupo) return 'error'
-  return ponencia.inscritos / ponencia.cupo >= 0.8 ? 'warn' : 'ok'
+  const ocupados = presenciales(ponencia)
+  if (ocupados >= ponencia.cupo) return 'error'
+  return ocupados / ponencia.cupo >= 0.8 ? 'warn' : 'ok'
 }
 
 export interface DiaDePonencias {
@@ -308,15 +346,19 @@ export interface FiltrosInscripcionesPonencia {
   asistencia: string
   procedencia: string
   origen: string
+  /** `si`: validadas con el congreso; `no`: sin validar. */
+  validacion: string
+  /** Modo de asistencia (presencial o virtual); no es la `modalidad` de la ponencia. */
+  modo: string
   q: string
   page: number
 }
 
 export const FILTROS_PONENCIA_VACIOS: Readonly<FiltrosInscripcionesPonencia> = Object.freeze({
-  ponenciaId: '', fecha: '', modalidad: '', estado: '', asistencia: '', procedencia: '', origen: '', q: '', page: 1,
+  ponenciaId: '', fecha: '', modalidad: '', estado: '', asistencia: '', procedencia: '', origen: '', validacion: '', modo: '', q: '', page: 1,
 })
 
-const CLAVES_FILTRO = ['ponenciaId', 'fecha', 'modalidad', 'estado', 'asistencia', 'procedencia', 'origen', 'q'] as const
+const CLAVES_FILTRO = ['ponenciaId', 'fecha', 'modalidad', 'estado', 'asistencia', 'procedencia', 'origen', 'validacion', 'modo', 'q'] as const
 
 /** Lee los filtros desde la query de la ruta (valores inválidos se ignoran). */
 export function filtrosPonenciaDesdeQuery(query: Record<string, unknown>): FiltrosInscripcionesPonencia {
@@ -331,6 +373,8 @@ export function filtrosPonenciaDesdeQuery(query: Record<string, unknown>): Filtr
     asistencia: opcion(query.asistencia, ['si', 'no']),
     procedencia: opcion(query.procedencia, ['INTERNO', 'EXTERNO', 'SIN_DATO']),
     origen: opcion(query.origen, ['LANDING', 'STAFF', 'PUERTA']),
+    validacion: opcion(query.validacion, ['si', 'no']),
+    modo: opcion(query.modo, ['PRESENCIAL', 'VIRTUAL']),
     q: texto(query.q).slice(0, 100),
     page: Number.isSafeInteger(page) && page > 0 ? page : 1,
   }
@@ -349,6 +393,46 @@ export function parametrosPonencia(filtros: FiltrosInscripcionesPonencia, inclui
 
 export function hayFiltros(filtros: FiltrosInscripcionesPonencia): boolean {
   return CLAVES_FILTRO.some((clave) => filtros[clave].trim() !== '')
+}
+
+// ─── Validación con el congreso ───
+
+/** Textos de la confirmación al encender o apagar el acceso libre del evento. */
+export function textoCambioAcceso(encender: boolean): { titulo: string, mensaje: string, confirmar: string } {
+  return encender
+    ? {
+        titulo: 'Encender el acceso libre',
+        mensaje: 'Cualquier persona podrá inscribirse a las ponencias solo con su documento, sin comprobar su inscripción al congreso ni el pago. Toma efecto de inmediato en la landing, el alta manual y la puerta.',
+        confirmar: 'Encender acceso libre',
+      }
+    : {
+        titulo: 'Exigir la inscripción al congreso',
+        mensaje: 'Solo podrán inscribirse a las ponencias quienes tengan su inscripción al congreso con el pago aprobado (DNI y correo en la landing; DNI en el panel y la puerta). Quienes ya se inscribieron libremente quedan «Sin validar». Toma efecto de inmediato.',
+        confirmar: 'Exigir congreso',
+      }
+}
+
+export interface EtiquetaValidacion {
+  texto: string
+  tono: 'brand' | 'info' | 'warn' | 'error'
+  detalle: string
+}
+
+/**
+ * Cómo se ve una inscripción respecto al congreso (backend spec 030): validada con su modo, sin validar
+ * (acceso libre o anterior a la validación) o validada pero con un pago que ya no está aprobado. Un backend
+ * anterior no envía `validada`: no se marca nada.
+ */
+export function etiquetaValidacion(inscripcion: Pick<InscripcionPonencia, 'validada' | 'modoAsistencia' | 'congreso'>): EtiquetaValidacion | null {
+  if (inscripcion.validada === undefined) return null
+  if (!inscripcion.validada) return { texto: 'Sin validar', tono: 'warn', detalle: 'No se comprobó una inscripción aprobada al congreso.' }
+  const modo = etiquetaModo(inscripcion.modoAsistencia)
+  const congreso = inscripcion.congreso
+  if (congreso && congreso.estado !== 'APROBADO') {
+    return { texto: `${modo} · pago no vigente`, tono: 'error', detalle: `La inscripción al congreso está ${congreso.estado.toLowerCase().replace('_', ' ')}: revisa si debe seguir inscrito.` }
+  }
+  const tipo = congreso?.tipo ? ` · ${congreso.tipo}` : ''
+  return { texto: modo, tono: inscripcion.modoAsistencia === 'VIRTUAL' ? 'info' : 'brand', detalle: `Congresista aprobado${tipo}` }
 }
 
 // ─── Persona (alta manual y puerta) ───
@@ -437,7 +521,9 @@ export function mensajeDePuerta(resultado: ResultadoPuerta): MensajePuerta {
     partes.push(`Se liberó su cupo en ${resultado.liberadas.map((l) => `«${l.tema}» (${l.ambiente})`).join(' y ')}.`)
   }
   if (resultado.esFueraDeHorario) partes.push('Fuera del horario de la ponencia.')
-  const conAviso = resultado.inscripcionNueva || resultado.liberadas.length > 0 || resultado.esFueraDeHorario
+  const virtual = resultado.modoAsistencia === 'VIRTUAL'
+  if (virtual) partes.push('Congresista virtual: asiste en línea y no ocupa aforo.')
+  const conAviso = resultado.inscripcionNueva || resultado.liberadas.length > 0 || resultado.esFueraDeHorario || virtual
   return {
     tono: conAviso ? 'aviso' : 'ok',
     titulo: `Asistencia registrada · ${nombre}`,
@@ -462,6 +548,12 @@ export function errorDePuerta(error: unknown): ErrorPuerta {
       return { ...base, tono: 'aviso', titulo: 'No se encontraron los nombres del DNI', detalle: 'Escribe los nombres y apellidos y vuelve a registrar.', pideNombres: true }
     case 'TALK_FULL':
       return { ...base, tono: 'error', titulo: 'Sin cupos', detalle: e.message }
+    case 'CONGRESS_REGISTRATION_NOT_FOUND':
+      return { ...base, tono: 'error', titulo: 'No está inscrito al congreso', detalle: e.message }
+    case 'CONGRESS_PAYMENT_PENDING':
+      return { ...base, tono: 'error', titulo: 'Pago del congreso pendiente', detalle: e.message }
+    case 'CONGRESS_REGISTRATION_REJECTED':
+      return { ...base, tono: 'error', titulo: 'Inscripción al congreso rechazada', detalle: e.message }
     case 'ATTENDANCE_ALREADY_REGISTERED':
       return { ...base, tono: 'aviso', titulo: 'Ya registrada', detalle: e.message }
     case 'VALIDATION_ERROR':

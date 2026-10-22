@@ -7,9 +7,11 @@ import {
   duracionTexto,
   enlaceInscripciones,
   errorDePuerta,
+  etiquetaModo,
   etiquetaMotivoCancelacion,
   etiquetaOrigen,
   etiquetaProcedencia,
+  etiquetaValidacion,
   filtrosPonenciaDesdeQuery,
   formularioPersona,
   formularioPonencia,
@@ -19,6 +21,8 @@ import {
   minutosEntre,
   parametrosPonencia,
   ponenciaDePuertaInicial,
+  presenciales,
+  textoCambioAcceso,
   textoCupo,
   tonoCupo,
   validarPersona,
@@ -73,6 +77,52 @@ describe('cupos', () => {
     expect(tonoCupo(ponencia({ inscritos: 16 }))).toBe('warn')
     expect(tonoCupo(ponencia({ inscritos: 20 }))).toBe('error')
     expect(tonoCupo(ponencia({ cupo: null }))).toBe('neutral')
+  })
+
+  it('el aforo cuenta solo a los presenciales y los virtuales se suman aparte (backend 030)', () => {
+    const mixta = ponencia({ cupo: 20, inscritos: 25, inscritosPresenciales: 18, inscritosVirtuales: 7 })
+    expect(presenciales(mixta)).toBe(18)
+    expect(textoCupo(mixta)).toBe('18 / 20 · +7 virtuales')
+    expect(textoCupo(ponencia({ cupo: null, inscritos: 3, inscritosPresenciales: 2, inscritosVirtuales: 1 }))).toBe('2 · sin límite · +1 virtual')
+    expect(tonoCupo(mixta)).toBe('warn')
+    expect(tonoCupo(ponencia({ cupo: 20, inscritos: 30, inscritosPresenciales: 5, inscritosVirtuales: 25 }))).toBe('ok')
+    expect(tonoCupo(ponencia({ cupo: 20, inscritos: 21, inscritosPresenciales: 20, inscritosVirtuales: 1 }))).toBe('error')
+  })
+
+  it('un backend anterior no separa los inscritos: todos cuentan como presenciales', () => {
+    expect(presenciales(ponencia({ inscritos: 7 }))).toBe(7)
+    expect(textoCupo(ponencia({ inscritos: 7 }))).toBe('7 / 20')
+  })
+})
+
+describe('validación con el congreso', () => {
+  const base = { validada: true as const, modoAsistencia: 'PRESENCIAL' as const, congreso: { estado: 'APROBADO', tipo: 'Público general', categoria: 'Público general' } }
+
+  it('una inscripción validada muestra su modo y el tipo del congreso', () => {
+    expect(etiquetaValidacion(base)).toMatchObject({ texto: 'Presencial', tono: 'brand' })
+    expect(etiquetaValidacion({ ...base, modoAsistencia: 'VIRTUAL' })).toMatchObject({ texto: 'Virtual', tono: 'info', detalle: 'Congresista aprobado · Público general' })
+  })
+
+  it('sin validar es ámbar y un pago que ya no está aprobado, rojo', () => {
+    expect(etiquetaValidacion({ validada: false, modoAsistencia: 'PRESENCIAL', congreso: null })).toMatchObject({ texto: 'Sin validar', tono: 'warn' })
+    expect(etiquetaValidacion({ ...base, congreso: { estado: 'EN_REVISION', tipo: null, categoria: null } })).toMatchObject({ texto: 'Presencial · pago no vigente', tono: 'error' })
+  })
+
+  it('un backend anterior no envía la validación: no se marca nada', () => {
+    expect(etiquetaValidacion({})).toBeNull()
+  })
+
+  it('el modo se llama presencial salvo que sea virtual', () => {
+    expect(etiquetaModo('VIRTUAL')).toBe('Virtual')
+    expect(etiquetaModo('PRESENCIAL')).toBe('Presencial')
+    expect(etiquetaModo(undefined)).toBe('Presencial')
+  })
+
+  it('los textos del interruptor explican el efecto de cada cambio', () => {
+    expect(textoCambioAcceso(true)).toMatchObject({ titulo: 'Encender el acceso libre', confirmar: 'Encender acceso libre' })
+    expect(textoCambioAcceso(true).mensaje).toContain('solo con su documento')
+    expect(textoCambioAcceso(false).mensaje).toContain('pago aprobado')
+    expect(textoCambioAcceso(false).mensaje).toContain('Sin validar')
   })
 })
 
@@ -148,10 +198,10 @@ describe('formulario de la ponencia', () => {
 
 describe('filtros de las inscripciones', () => {
   it('lee la query ignorando valores inválidos', () => {
-    expect(filtrosPonenciaDesdeQuery({ ponenciaId: '7', fecha: '2026-10-27', modalidad: 'VIRTUAL', estado: 'CANCELADO', asistencia: 'si', procedencia: 'SIN_DATO', origen: 'PUERTA', q: 'ana', page: '3' }))
-      .toEqual({ ponenciaId: '7', fecha: '2026-10-27', modalidad: 'VIRTUAL', estado: 'CANCELADO', asistencia: 'si', procedencia: 'SIN_DATO', origen: 'PUERTA', q: 'ana', page: 3 })
-    expect(filtrosPonenciaDesdeQuery({ ponenciaId: 'abc', fecha: 'hoy', modalidad: 'X', estado: 'x', asistencia: 'tal vez', procedencia: 'otro', origen: 'otro', page: '-2', q: ['a'] }))
-      .toEqual({ ponenciaId: '', fecha: '', modalidad: '', estado: '', asistencia: '', procedencia: '', origen: '', q: '', page: 1 })
+    expect(filtrosPonenciaDesdeQuery({ ponenciaId: '7', fecha: '2026-10-27', modalidad: 'VIRTUAL', estado: 'CANCELADO', asistencia: 'si', procedencia: 'SIN_DATO', origen: 'PUERTA', validacion: 'no', modo: 'VIRTUAL', q: 'ana', page: '3' }))
+      .toEqual({ ponenciaId: '7', fecha: '2026-10-27', modalidad: 'VIRTUAL', estado: 'CANCELADO', asistencia: 'si', procedencia: 'SIN_DATO', origen: 'PUERTA', validacion: 'no', modo: 'VIRTUAL', q: 'ana', page: 3 })
+    expect(filtrosPonenciaDesdeQuery({ ponenciaId: 'abc', fecha: 'hoy', modalidad: 'X', estado: 'x', asistencia: 'tal vez', procedencia: 'otro', origen: 'otro', validacion: 'quizás', modo: 'HIBRIDO', page: '-2', q: ['a'] }))
+      .toEqual({ ponenciaId: '', fecha: '', modalidad: '', estado: '', asistencia: '', procedencia: '', origen: '', validacion: '', modo: '', q: '', page: 1 })
     expect(filtrosPonenciaDesdeQuery({ q: 'x'.repeat(300) }).q).toHaveLength(100)
   })
 
@@ -166,6 +216,12 @@ describe('filtros de las inscripciones', () => {
     expect(hayFiltros(filtrosPonenciaDesdeQuery({}))).toBe(false)
     expect(hayFiltros(filtrosPonenciaDesdeQuery({ page: '4' }))).toBe(false)
     expect(hayFiltros(filtrosPonenciaDesdeQuery({ asistencia: 'no' }))).toBe(true)
+    expect(hayFiltros(filtrosPonenciaDesdeQuery({ validacion: 'no' }))).toBe(true)
+    expect(hayFiltros(filtrosPonenciaDesdeQuery({ modo: 'VIRTUAL' }))).toBe(true)
+  })
+
+  it('la validación y el modo viajan como parámetros del backend', () => {
+    expect(parametrosPonencia(filtrosPonenciaDesdeQuery({ validacion: 'si', modo: 'PRESENCIAL' }))).toEqual({ validacion: 'si', modo: 'PRESENCIAL' })
   })
 
   it('enlace desde el programa', () => {
@@ -219,6 +275,14 @@ describe('puerta: resultados y errores', () => {
     expect(mensajeDePuerta(resultado({ esFueraDeHorario: true })).tono).toBe('aviso')
   })
 
+  it('un congresista virtual se marca con aviso: asiste en línea y no ocupa aforo', () => {
+    const m = mensajeDePuerta(resultado({ modoAsistencia: 'VIRTUAL' }))
+    expect(m.tono).toBe('aviso')
+    expect(m.detalle).toContain('Congresista virtual')
+    expect(m.detalle).toContain('no ocupa aforo')
+    expect(mensajeDePuerta(resultado({ modoAsistencia: 'PRESENCIAL', validada: true })).tono).toBe('ok')
+  })
+
   it('los errores de la puerta se traducen', () => {
     const error = (status: number, code: string, message = 'msg', fields?: Record<string, string>) => ({ status, data: { code, message, fields } })
     expect(errorDePuerta(error(422, 'NAMES_REQUIRED', 'x', { nombres: 'Ingresa los nombres' }))).toMatchObject({ tono: 'aviso', pideNombres: true, codigo: 'NAMES_REQUIRED' })
@@ -226,6 +290,14 @@ describe('puerta: resultados y errores', () => {
     expect(errorDePuerta(error(409, 'ATTENDANCE_ALREADY_REGISTERED', 'La asistencia ya fue registrada a las 12:05.'))).toMatchObject({ tono: 'aviso', titulo: 'Ya registrada' })
     expect(errorDePuerta(error(422, 'VALIDATION_ERROR', 'x', { numeroDocumento: 'El DNI debe tener 8 dígitos' }))).toMatchObject({ tono: 'error', detalle: 'El DNI debe tener 8 dígitos' })
     expect(errorDePuerta(error(500, 'ERROR'))).toMatchObject({ tono: 'error', titulo: 'No se pudo registrar' })
+  })
+
+  it('quien no es congresista con el pago aprobado se rechaza con el motivo (backend 030)', () => {
+    const error = (code: string, message: string) => ({ status: 422, data: { code, message } })
+    expect(errorDePuerta(error('CONGRESS_REGISTRATION_NOT_FOUND', 'El documento no está entre los inscritos al congreso.')))
+      .toMatchObject({ tono: 'error', titulo: 'No está inscrito al congreso', detalle: 'El documento no está entre los inscritos al congreso.', pideNombres: false })
+    expect(errorDePuerta(error('CONGRESS_PAYMENT_PENDING', 'Pago pendiente.'))).toMatchObject({ tono: 'error', titulo: 'Pago del congreso pendiente' })
+    expect(errorDePuerta(error('CONGRESS_REGISTRATION_REJECTED', 'Rechazada.'))).toMatchObject({ tono: 'error', titulo: 'Inscripción al congreso rechazada' })
   })
 })
 

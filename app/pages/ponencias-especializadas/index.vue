@@ -7,6 +7,7 @@ import {
   duracionTexto,
   enlaceInscripciones,
   etiquetaModalidad,
+  presenciales,
   rangoHorario,
   textoCupo,
   tonoCupo,
@@ -21,6 +22,7 @@ const auth = useAuthStore()
 const eventos = useEventoStore()
 const toast = useToast()
 const { confirmar } = useConfirm()
+const { accesoLibre, guardar: guardarAcceso } = useAccesoPonencias()
 
 const ponencias = ref<PonenciaEspecializada[]>([])
 const cargando = ref(false)
@@ -35,8 +37,9 @@ const dias = computed(() => agruparPorDia(ponencias.value))
 const totales = computed(() => ({
   ponencias: ponencias.value.length,
   inscritos: ponencias.value.reduce((suma, p) => suma + p.inscritos, 0),
+  virtuales: ponencias.value.reduce((suma, p) => suma + (p.inscritosVirtuales ?? 0), 0),
   asistentes: ponencias.value.reduce((suma, p) => suma + p.asistentes, 0),
-  llenas: ponencias.value.filter((p) => p.cupo !== null && p.inscritos >= p.cupo).length,
+  llenas: ponencias.value.filter((p) => p.cupo !== null && presenciales(p) >= p.cupo).length,
 }))
 
 /** Respuestas que llegan tarde (de otro evento) se descartan. */
@@ -123,10 +126,12 @@ async function publicar(ponencia: PonenciaEspecializada) {
     <template v-else>
       <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <AppStat etiqueta="Ponencias" :valor="numero(totales.ponencias)" icon="heroicons:presentation-chart-bar" />
-        <AppStat etiqueta="Inscritos vigentes" :valor="numero(totales.inscritos)" icon="heroicons:clipboard-document-check" tono="info" />
+        <AppStat etiqueta="Inscritos vigentes" :valor="numero(totales.inscritos)" :detalle="totales.virtuales ? `${numero(totales.virtuales)} virtuales (sin aforo)` : undefined" icon="heroicons:clipboard-document-check" tono="info" />
         <AppStat etiqueta="Asistieron" :valor="numero(totales.asistentes)" icon="heroicons:check-circle" tono="ok" />
-        <AppStat etiqueta="Con cupo lleno" :valor="numero(totales.llenas)" icon="heroicons:no-symbol" tono="warn" />
+        <AppStat etiqueta="Con cupo lleno" :valor="numero(totales.llenas)" detalle="Aforo presencial" icon="heroicons:no-symbol" tono="warn" />
       </div>
+
+      <AccesoPonenciasCard :acceso-libre="accesoLibre" :puede-cambiar="puedeGestionar" :guardar="guardarAcceso" />
 
       <div v-if="cargando && !ponencias.length" class="card py-14 text-center text-sm text-slate-400">Cargando ponencias…</div>
       <section v-else-if="!ponencias.length" class="card">
@@ -173,7 +178,7 @@ async function publicar(ponencia: PonenciaEspecializada) {
                   <span v-else class="font-semibold text-white tabular-nums">{{ soles(ponencia.precio) }}</span>
                 </td>
                 <td class="whitespace-nowrap">
-                  <AppBadge :tono="tonoCupo(ponencia)" :title="ponencia.cupo === null ? 'Sin límite de cupo' : `Quedan ${ponencia.cuposDisponibles}`">
+                  <AppBadge :tono="tonoCupo(ponencia)" :title="ponencia.cupo === null ? 'Sin límite de cupo' : `Quedan ${ponencia.cuposDisponibles} cupos presenciales; los virtuales no tienen límite`">
                     {{ textoCupo(ponencia) }}
                   </AppBadge>
                   <p class="mt-0.5 text-xs text-slate-500">{{ ponencia.asistentes }} asistieron</p>

@@ -8,6 +8,7 @@ import {
   etiquetaModalidad,
   etiquetaOrigen,
   etiquetaProcedencia,
+  etiquetaValidacion,
   FILTROS_PONENCIA_VACIOS,
   filtrosPonenciaDesdeQuery,
   hayFiltros,
@@ -23,7 +24,7 @@ import {
 definePageMeta({ permiso: 'especializadas.ver' })
 useHead({ title: 'Inscripciones a ponencias · Panel CIISIC' })
 
-type MetaConAsistentes = Meta & { asistieron?: number }
+type MetaConAsistentes = Meta & { asistieron?: number, sinValidar?: number }
 
 const { api } = useApi()
 const auth = useAuthStore()
@@ -32,6 +33,7 @@ const toast = useToast()
 const route = useRoute()
 const router = useRouter()
 const { confirmar } = useConfirm()
+const { accesoLibre } = useAccesoPonencias()
 
 const filtros = reactive<FiltrosInscripcionesPonencia>(filtrosPonenciaDesdeQuery(route.query))
 const filas = ref<InscripcionPonencia[]>([])
@@ -108,7 +110,7 @@ watch(busqueda, (valor) => {
   }, 350)
 })
 
-watch(() => [filtros.ponenciaId, filtros.fecha, filtros.modalidad, filtros.estado, filtros.asistencia, filtros.procedencia, filtros.origen], () => aplicar())
+watch(() => [filtros.ponenciaId, filtros.fecha, filtros.modalidad, filtros.estado, filtros.asistencia, filtros.procedencia, filtros.origen, filtros.validacion, filtros.modo], () => aplicar())
 
 watch(() => eventos.seleccionadoId, (id, anterior) => {
   filas.value = []
@@ -197,11 +199,13 @@ async function anularAsistencia(fila: InscripcionPonencia) {
         <p class="kicker">{{ eventos.seleccionado?.nombreCorto }}</p>
         <h1 class="mt-1 text-3xl font-extrabold">Inscripciones a ponencias</h1>
         <p class="mt-1 max-w-3xl text-sm text-slate-400">
-          Quienes se inscribieron desde la landing, a mano o en puerta. Cada persona se identifica por su documento; correo y celular son opcionales.
+          Quienes se inscribieron desde la landing, a mano o en puerta. Cada persona se identifica por su documento. «Congreso» indica con qué inscripción aprobada se validó y si asiste de forma presencial o virtual (la virtual no ocupa aforo).
         </p>
       </div>
       <AppButton v-if="puedeInscribir && eventos.seleccionadoId" icon="heroicons:user-plus" :disabled="!ponencias.length" @click="inscribirAbierto = true">Inscribir manualmente</AppButton>
     </div>
+
+    <AvisoAccesoLibre :activo="accesoLibre" />
 
     <section v-if="eventos.cargado && !eventos.seleccionadoId" class="card">
       <AvisoSinEventos />
@@ -260,6 +264,21 @@ async function anularAsistencia(fila: InscripcionPonencia) {
               <option v-for="m in MODALIDADES" :key="m.valor" :value="m.valor">{{ m.etiqueta }}</option>
             </select>
           </div>
+          <div>
+            <label for="pe-validacion" class="sr-only">Validación con el congreso</label>
+            <select id="pe-validacion" v-model="filtros.validacion" class="field-control">
+              <option value="">Validadas y sin validar</option>
+              <option value="si">Validadas (congresista aprobado)</option>
+              <option value="no">Sin validar</option>
+            </select>
+          </div>
+          <div>
+            <label for="pe-modo" class="sr-only">Modo de asistencia</label>
+            <select id="pe-modo" v-model="filtros.modo" class="field-control">
+              <option value="">Asisten presencial o virtual</option>
+              <option v-for="m in MODALIDADES" :key="m.valor" :value="m.valor">Asisten de forma {{ m.etiqueta.toLowerCase() }}</option>
+            </select>
+          </div>
           <div class="flex gap-3">
             <div class="min-w-0 flex-1">
               <label for="pe-origen" class="sr-only">Origen</label>
@@ -279,6 +298,9 @@ async function anularAsistencia(fila: InscripcionPonencia) {
         <div v-if="meta" class="flex flex-wrap gap-x-6 gap-y-1 border-b border-white/10 px-5 py-3 text-sm text-slate-400" aria-live="polite">
           <span><strong class="text-white tabular-nums">{{ numero(meta.total) }}</strong> inscripciones</span>
           <span><strong class="text-emerald-300 tabular-nums">{{ numero(meta.asistieron ?? 0) }}</strong> con asistencia</span>
+          <button v-if="meta.sinValidar" type="button" class="text-amber-300 underline-offset-2 hover:underline" @click="filtros.validacion = 'no'">
+            <strong class="tabular-nums">{{ numero(meta.sinValidar) }}</strong> sin validar
+          </button>
         </div>
         <div class="relative overflow-x-auto">
           <table class="table-base">
@@ -287,6 +309,7 @@ async function anularAsistencia(fila: InscripcionPonencia) {
                 <th>Persona</th>
                 <th>Ponencia</th>
                 <th>Procedencia</th>
+                <th>Congreso</th>
                 <th>Inscripción</th>
                 <th>Asistencia</th>
                 <th><span class="sr-only">Acciones</span></th>
@@ -307,6 +330,13 @@ async function anularAsistencia(fila: InscripcionPonencia) {
                   </p>
                 </td>
                 <td><AppBadge :tono="fila.asistente.procedencia === 'INTERNO' ? 'brand' : 'neutral'">{{ etiquetaProcedencia(fila.asistente.procedencia) }}</AppBadge></td>
+                <td class="whitespace-nowrap">
+                  <template v-if="etiquetaValidacion(fila)">
+                    <AppBadge :tono="etiquetaValidacion(fila)!.tono" :title="etiquetaValidacion(fila)!.detalle">{{ etiquetaValidacion(fila)!.texto }}</AppBadge>
+                    <p v-if="fila.congreso?.tipo" class="mt-0.5 max-w-44 truncate text-xs text-slate-500" :title="fila.congreso.tipo">{{ fila.congreso.tipo }}</p>
+                  </template>
+                  <span v-else class="text-slate-500">—</span>
+                </td>
                 <td>
                   <AppBadge :tono="fila.estado === 'INSCRITO' ? 'ok' : 'error'" :title="fila.estado === 'CANCELADO' ? etiquetaMotivoCancelacion(fila.motivoCancelacion) : undefined">
                     {{ fila.estado === 'INSCRITO' ? 'Inscrita' : 'Cancelada' }}

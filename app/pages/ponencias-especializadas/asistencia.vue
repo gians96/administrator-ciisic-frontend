@@ -13,6 +13,7 @@ import {
   ponenciaDePuertaInicial,
   rangoHorario,
   textoCupo,
+  presenciales,
   tonoCupo,
   validarPersona,
   type MensajePuerta,
@@ -37,6 +38,7 @@ const { api } = useApi()
 const eventos = useEventoStore()
 const toast = useToast()
 const route = useRoute()
+const { accesoLibre } = useAccesoPonencias()
 
 const ponencias = ref<PonenciaEspecializada[]>([])
 const cargando = ref(false)
@@ -118,8 +120,10 @@ function actualizarConteo(resultado: ResultadoPuerta) {
   const actual = ponencias.value.find((p) => p.id === resultado.ponencia.id)
   if (!actual) return
   actual.inscritos = resultado.ponencia.inscritos
+  actual.inscritosPresenciales = resultado.ponencia.presenciales ?? resultado.ponencia.inscritos
+  actual.inscritosVirtuales = resultado.ponencia.virtuales ?? 0
   actual.asistentes = resultado.ponencia.asistentes
-  actual.cuposDisponibles = actual.cupo === null ? null : Math.max(0, actual.cupo - actual.inscritos)
+  actual.cuposDisponibles = actual.cupo === null ? null : Math.max(0, actual.cupo - presenciales(actual))
 }
 
 function anotar(documento: string, mensaje: MensajePuerta) {
@@ -182,9 +186,11 @@ async function cargarConteos() {
       <p class="kicker">{{ eventos.seleccionado?.nombreCorto }}</p>
       <h1 class="mt-1 text-3xl font-extrabold">Asistencia en puerta</h1>
       <p class="mt-1 max-w-3xl text-sm text-slate-400">
-        Escribe o escanea el DNI. Si la persona está inscrita se marca su asistencia; si no, se busca el DNI, se inscribe en el acto (si hay cupo) y se marca. Quien cambia de ponencia libera su cupo en la anterior.
+        Escribe o escanea el DNI. Si la persona está inscrita se marca su asistencia; si no, se inscribe en el acto (si hay cupo) y se marca. Debe ser congresista con el pago aprobado (se comprueba con el DNI); el congresista virtual no ocupa aforo. Quien cambia de ponencia libera su cupo en la anterior.
       </p>
     </div>
+
+    <AvisoAccesoLibre :activo="accesoLibre" />
 
     <section v-if="eventos.cargado && !eventos.seleccionadoId" class="card">
       <AvisoSinEventos />
@@ -203,7 +209,7 @@ async function cargarConteos() {
         </select>
         <div v-if="ponencia" class="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
           <span class="text-slate-300">{{ ponencia.ambiente }} · {{ rangoHorario(ponencia.horaInicio, ponencia.horaFin) }}</span>
-          <AppBadge :tono="tonoCupo(ponencia)">Inscritos {{ textoCupo(ponencia) }}</AppBadge>
+          <AppBadge :tono="tonoCupo(ponencia)" title="Presenciales sobre el aforo; los virtuales no lo ocupan">Inscritos {{ textoCupo(ponencia) }}</AppBadge>
           <AppBadge tono="ok">{{ numero(ponencia.asistentes) }} asistieron</AppBadge>
           <AppBadge v-if="ponencia.cuposDisponibles !== null" :tono="ponencia.cuposDisponibles === 0 ? 'error' : 'neutral'">
             {{ ponencia.cuposDisponibles === 0 ? 'Sin cupos' : `Quedan ${ponencia.cuposDisponibles}` }}

@@ -159,6 +159,10 @@ const RESPALDO_POR_CODIGO: Readonly<Record<string, string>> = {
   TALK_FULL: 'La ponencia ya no tiene cupos disponibles.',
   ROOM_CONFLICT: 'Ese ambiente ya está ocupado a esa hora por otra ponencia presencial.',
   SCHEDULE_CONFLICT: 'Las ponencias se cruzan en horario.',
+  // Solo congresistas con el pago aprobado (backend spec 030)
+  CONGRESS_REGISTRATION_NOT_FOUND: 'El documento no está entre los inscritos al congreso.',
+  CONGRESS_PAYMENT_PENDING: 'La inscripción al congreso aún no tiene el pago aprobado.',
+  CONGRESS_REGISTRATION_REJECTED: 'La inscripción al congreso fue rechazada o cancelada.',
 
   // Archivos (foto del portal, QR de pagos)
   FILE_REQUIRED: 'Adjunta el archivo.',
