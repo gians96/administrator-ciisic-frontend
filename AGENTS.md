@@ -135,23 +135,17 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   responda cómo se entrega el acceso, qué certificados y asistencia corresponden a los virtuales y si se exige
   constancia.
 - **Tipos sin estudiantes UNDC** (spec 013): el interruptor `tipo.excluyeEstudiantesUndc` («No admitir estudiantes UNDC» en el editor de tipos, insignia «Sin estudiantes UNDC» en la lista) se enciende en los tipos virtuales. Bloquea solo a estudiantes UNDC (verificados con SIVIRENO o con correo de código `@undc.edu.pe`), no a docentes, administrativos ni externos, y solo frena inscripciones nuevas (las ya hechas se rechazan o cancelan a mano; las cortesías no aplican la regla). Es independiente de «Disponible para» y de «Modalidad». Ausente = `false`. **Backend 020 primero**: el anterior descarta la clave sin error y el editor lo advierte (`backendSinExcluyeEstudiantes`, `excluyeEstudiantesNoGuardado`).
-- **Delegaciones con convenio** (spec 014; backend 023): pestaña Delegaciones de Eventos (`DelegacionesPanel` con
-  `DelegacionAlta`, `DelegacionDetalle` y `FilasIntegrantes` en `app/components/delegaciones/`; lógica pura en
-  `app/utils/delegaciones.ts`). **El servidor decide el tipo y el precio**: el panel solo muestra un estimado
-  (`estimarGrupo`, con los precios de los tipos `delegacion_general`, `delegacion_grupal` y `delegacion_virtual` de
-  la categoría `DELEGACIONES`) y nunca envía precios. Presencial: S/ 60 con menos de 10 integrantes y S/ 50 desde 10;
-  virtual: S/ 30 sin escalas, y solo se ofrece si existe el tipo `delegacion_virtual`. Los vouchers son varios
-  (multipart `pagos` + `vouchers`); el staff los verifica o rechaza y el saldo solo informa. El delegado, con su link
-  (`/delegaciones?delegacion=<código>` de la landing; su origen es `ORIGEN_LANDING_CONFIGURADO`, porque panel y landing viven en dominios distintos), solo agrega; quitar integrantes, eliminar vouchers y aprobar al
-  grupo son del panel. Un DNI de 7 dígitos (Excel pierde el cero) se completa a 8 (`normalizarDni`). **Backend 023
-  primero.** **Tarifa administrable** (spec 015; backend 024, sin migración): la tarjeta de la pestaña lee
-  `GET events/:id/delegations/tarifa` y «Editar tarifa» (`TarifaDelegacionesForm`) la guarda con `PUT` enviando solo lo
-  que cambió (`cuerpoTarifa`): precios y mínimo presenciales, precio virtual y si la modalidad virtual se ofrece. Rige
-  para delegaciones nuevas; «aplicar a las existentes» solo alcanza a las que no tienen integrantes ni vouchers. En
-  `DelegacionDetalle`, «Tarifa de esta delegación» edita modalidad (solo sin integrantes), mínimo y precios de esa
-  delegación con `PUT delegations/:id` (en virtual el precio es único) y marca el convenio (`esTarifaDeConvenio`). El
-  panel sigue sin enviar montos por inscripción. Con un backend sin la ruta (`esNoDisponible`) la tarjeta se arma con los
-  tipos y no hay «Editar tarifa». **Backend 024 primero.**
+- **Delegaciones con planes propios** (spec 021; backend 029; reemplazan las specs 014 y 015): página `/delegaciones` (`delegaciones.ver`; ya no es una pestaña de Eventos) con
+  `DelegacionesPanel`, `DelegacionAlta`, `DelegacionDetalle`, `PlanesEditor` y `FilasIntegrantes` en `app/components/delegaciones/`; lógica pura en `app/utils/delegaciones.ts`. **Cada delegación tiene
+  sus planes** Con kit, Sin kit y Virtual (activo, precio por persona y promocional opcional desde el mínimo de la delegación) y **cada integrante elige el suyo**; **el servidor decide el precio**: el
+  panel solo manda el `plan` y muestra un estimado (`estimarGrupo`, solo con `pagos.ver`). Ya no hay tarifa global ni categoría `DELEGACIONES`. Los vouchers son varios (multipart `pagos` + `vouchers`) y son
+  **del grupo**; el saldo solo informa. El delegado, con su link (`/delegaciones?delegacion=<código>` de la landing; su origen es `ORIGEN_LANDING_CONFIGURADO`), agrega integrantes y vouchers; con el **link
+  individual** (`?unirme=<código>`, que se enciende, apaga y regenera en «Links y correo institucional») cada integrante se inscribe solo, con el prefijo del correo del **dominio** de la delegación
+  (`dominioCorreo`, sin Google). **Cada botón sigue al permiso de su acción** (`auth.puede`): crear, datos, integrantes, cambio de plan y subir vouchers = `delegaciones.inscribir` (Comisión
+  elegible); planes, precios, dominio, links y borrar voucher = `delegaciones.gestionar` (solo Owner y Administrador); verificar o rechazar vouchers y aprobar al grupo = `inscripciones.validar`
+  (Tesorero); ver el archivo del voucher = `pagos.ver`. Sin `pagos.ver` los importes llegan en `null` (sin totales ni vouchers); una Comisión que crea una delegación no fija precios: sus planes nacen apagados
+  hasta que un Owner o Administrador los configure. El staff puede inscribir con cualquier correo aunque haya dominio (solo se le avisa). Un DNI de 7 dígitos (Excel pierde el cero) se completa a 8
+  (`normalizarDni`). **Backend 029 primero** (su migración convierte las delegaciones existentes).
 - **Reportes de seguimiento por asesor** (spec 016; backend 025): `/reportes` (`reportes.ver`) cruza el padrón de la facultad con las
   inscripciones **en cada consulta**; el panel solo muestra y descarga (`useApi().descargar`, en blob, con el nombre que envía el
   servidor: el de cada docente). Lógica pura en `app/utils/reportes.ts` (nombres con sufijo `Reporte` donde chocarían con
@@ -243,17 +237,17 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–019
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–019 y 021
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
 escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de
-asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable, reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo, docentes con DNI y página común). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
+asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable (reemplazada por la 021, delegaciones con planes propios), reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo, docentes con DNI y página común). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
 `backend-ciisic/specs/013-roles-permisos/contracts/`; código por correo, portal, fotocheck,
 asistencia por QR, alta de participantes y cortesías en
 `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`; modalidad virtual en
 `backend-ciisic/specs/018-modalidad-virtual/contracts/`; tipos que no admiten estudiantes UNDC en
 `backend-ciisic/specs/020-virtual-sin-estudiantes-undc/contracts/`; delegaciones con convenio en
-`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y su tarifa en `backend-ciisic/specs/024-tarifa-delegaciones/contracts/`; reportes por asesor en `backend-ciisic/specs/025-reportes-asesores/contracts/`, los enlaces de los docentes en `backend-ciisic/specs/026-enlaces-docentes/contracts/` y los de los ciclos en `backend-ciisic/specs/027-enlaces-ciclo/contracts/` y los docentes con DNI en `backend-ciisic/specs/028-docentes-dni/contracts/`.
+`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y, con planes y tarifa propios, en `backend-ciisic/specs/029-delegaciones-planes/contracts/`; reportes por asesor en `backend-ciisic/specs/025-reportes-asesores/contracts/`, los enlaces de los docentes en `backend-ciisic/specs/026-enlaces-docentes/contracts/` y los de los ciclos en `backend-ciisic/specs/027-enlaces-ciclo/contracts/` y los docentes con DNI en `backend-ciisic/specs/028-docentes-dni/contracts/`.
 
 ## Antes de dar por terminado
 

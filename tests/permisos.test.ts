@@ -25,7 +25,7 @@ import {
 
 const PERMISOS_TESORERO: Permiso[] = [
   'resumen.ver', 'inscripciones.ver', 'inscripciones.exportar', 'credenciales.reenviar', 'pagos.ver', 'inscripciones.validar',
-  'asistencia.ver', 'asistencia.exportar', 'ponencias.ver', 'mensajes.ver', 'certificados.ver', 'reportes.ver', 'reportes.exportar',
+  'asistencia.ver', 'asistencia.exportar', 'ponencias.ver', 'mensajes.ver', 'certificados.ver', 'reportes.ver', 'reportes.exportar', 'delegaciones.ver',
 ]
 
 const acceso = (permisos: Permiso[], alcance: AccesoPanel['alcance'] = 'EVENTO'): AccesoPanel =>
@@ -39,8 +39,8 @@ const COMISION = acceso(['asistencia.marcar', 'asistencia.ver'])
 const rutas = (a: AccesoPanel | null) => menuPara(a).flatMap((seccion) => seccion.items.map((item) => item.to))
 
 describe('permisos: catálogo', () => {
-  it('tiene los 33 permisos del backend, sin repetir', () => {
-    expect(PERMISOS).toHaveLength(36)
+  it('tiene los 39 permisos del backend, sin repetir', () => {
+    expect(PERMISOS).toHaveLength(39)
     expect(new Set(PERMISOS).size).toBe(PERMISOS.length)
     expect(esPermiso('pagos.ver')).toBe(true)
     expect(esPermiso('pagos.editar')).toBe(false)
@@ -112,14 +112,14 @@ describe('permisos: accesoDeSesion', () => {
 
 describe('permisos: menú', () => {
   it('Owner ve todo; Administrador, todo menos Sistema', () => {
-    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/asistencia', '/reportes', '/escanear', '/ponencias', '/mensajes', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', RUTA_PUERTA, '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
+    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/asistencia', '/delegaciones', '/reportes', '/escanear', '/ponencias', '/mensajes', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', RUTA_PUERTA, '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
     expect(rutas(ADMINISTRADOR)).not.toContain('/sistema')
     expect(rutas(ADMINISTRADOR)).toContain('/administradores')
   })
 
   it('Tesorero: solo el Congreso; la sección Configuración se oculta', () => {
     expect(menuPara(TESORERO).map((seccion) => seccion.titulo)).toEqual(['Congreso'])
-    expect(rutas(TESORERO)).toEqual(['/', '/inscripciones', '/asistencia', '/reportes', '/ponencias', '/mensajes'])
+    expect(rutas(TESORERO)).toEqual(['/', '/inscripciones', '/asistencia', '/delegaciones', '/reportes', '/ponencias', '/mensajes'])
   })
 
   it('Ponencias especializadas: programa e inscripciones con «ver»; la puerta, con «asistencia»', () => {
@@ -268,5 +268,20 @@ describe('permisos: etiquetas y tono del rol', () => {
     expect(tonoRol('TESORERO')).toBe('info')
     expect(tonoRol('desconocido')).toBe('neutral')
     expect(tonoRol(null)).toBe('neutral')
+  })
+})
+
+describe('permisos de las delegaciones (spec 029)', () => {
+  it('están en el catálogo y inscribir implica ver', () => {
+    for (const permiso of ['delegaciones.gestionar', 'delegaciones.ver', 'delegaciones.inscribir'] as const) expect(esPermiso(permiso)).toBe(true)
+    expect(conDependencias(['delegaciones.inscribir'])).toEqual(['delegaciones.ver', 'delegaciones.inscribir'])
+  })
+
+  it('«Delegaciones» sale en el menú con «delegaciones.ver»: el Tesorero y la Comisión elegida la ven; quien solo marca asistencia, no', () => {
+    const item = MENU.flatMap((seccion) => seccion.items).find((i) => i.to === '/delegaciones')
+    expect(item?.permiso).toBe('delegaciones.ver')
+    expect(rutas(TESORERO)).toContain('/delegaciones')
+    expect(rutas(acceso(['delegaciones.ver', 'delegaciones.inscribir']))).toContain('/delegaciones')
+    expect(rutas(COMISION)).not.toContain('/delegaciones')
   })
 })

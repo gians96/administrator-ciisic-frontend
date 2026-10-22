@@ -1,22 +1,28 @@
 <script setup lang="ts">
-import type { DelegacionDetalle, PagoDelegacion, Respuesta } from '~/types/api'
+import type { CodigoPlan, DelegacionDetalle, InscripcionDelegacion, PagoDelegacion, Respuesta } from '~/types/api'
 import { aErrorApi, mensajeError } from '~/utils/errores'
 import { fechaDia, nombreCompleto, numero, soles } from '~/utils/formato'
 import {
-  BANCOS, BILLETERAS, ETIQUETA_ESTADO_PAGO, ETIQUETA_MODALIDAD, MAX_VOUCHERS_POR_ENVIO, MIN_INTEGRANTES_MAXIMO, TONO_ESTADO_PAGO, VOUCHER_ACCEPT,
-  cuerpoTarifaDelegacion, enlaceInscripcionDelegacion, esTarifaDeConvenio, filaVacia, filasParaEnviar, formularioDeTarifaDelegacion, formularioPagos,
-  hoyLima, normalizarDni, pagoVacio, tarifaParaModalidad, textoSaldo, validarPago, validarTarifaDelegacion,
-  type FilaEditable, type FormularioTarifaDelegacion, type PagoFormulario, type TarifaDelegaciones,
+  BANCOS, BILLETERAS, cambiosDePlanes, cantidadesPorPlan, enlaceInscripcionDelegacion, enlaceInscripcionIndividual, errorDeDominio, errorDeMinimo, estimarGrupo,
+  ETIQUETA_ESTADO_PAGO, ETIQUETA_PLAN, filaVacia, filasParaEnviar, formularioDePlanes, formularioPagos, hoyLima, MAX_VOUCHERS_POR_ENVIO, normalizarDni,
+  normalizarDominio, pagoVacio, planesActivos, planPorDefecto, TONO_ESTADO_PAGO, validarPlanes, VOUCHER_ACCEPT,
+  type Cifra, type FilaEditable, type FormularioPlanes, type PagoFormulario,
 } from '~/utils/delegaciones'
 
-/** `tarifa` es la del evento: precarga la de cada modalidad y permite marcar la que es un convenio. */
-const props = defineProps<{ abierto: boolean, delegacionId: number | null, tarifa: TarifaDelegaciones }>()
+const props = defineProps<{ abierto: boolean, delegacionId: number | null }>()
 const emit = defineEmits<{ cerrar: [], cambio: [] }>()
 
 const { api, urlArchivo } = useApi()
 const toast = useToast()
+const auth = useAuthStore()
 const { copiar } = useCopiar()
 const { confirmar } = useConfirm()
+
+// Cada botón sigue al permiso de su acción (spec 029): el Tesorero valida, la Comisión inscribe y solo Owner y Administrador configuran
+const puedeGestionar = computed(() => auth.puede('delegaciones.gestionar'))
+const puedeInscribir = computed(() => auth.puede('delegaciones.inscribir'))
+const puedeValidar = computed(() => auth.puede('inscripciones.validar'))
+const puedeVerVouchers = computed(() => auth.puede('pagos.ver'))
 
 const detalle = ref<DelegacionDetalle | null>(null)
 const cargando = ref(false)
@@ -40,14 +46,20 @@ function recibir(nuevo: DelegacionDetalle) {
   emit('cambio')
 }
 
-const enlace = computed(() => (detalle.value ? enlaceInscripcionDelegacion(detalle.value.codigoLink) : ''))
+const activos = computed(() => (detalle.value ? planesActivos(detalle.value.planes) : []))
+const codigosActivos = computed<CodigoPlan[]>(() => activos.value.map((plan) => plan.codigo))
+const planUnico = computed(() => (detalle.value ? planPorDefecto(detalle.value.planes) : ''))
 
-async function copiarLink() {
-  if (!(await copiar(enlace.value))) {
+// ─── Links ───
+const enlace = computed(() => (detalle.value?.codigoLink ? enlaceInscripcionDelegacion(detalle.value.codigoLink) : ''))
+const enlaceIndividual = computed(() => (detalle.value?.codigoInscripcion ? enlaceInscripcionIndividual(detalle.value.codigoInscripcion) : ''))
+
+async function copiarEnlace(url: string, aviso: string) {
+  if (!(await copiar(url))) {
     toast.error('No se pudo copiar el link. Revisa los permisos del portapapeles del navegador.')
     return
   }
-  toast.exito('Link copiado: envíaselo al delegado.')
+  toast.exito(aviso)
 }
 
 // ─── Aprobar al grupo ───
@@ -56,7 +68,7 @@ const porRevisar = computed(() => detalle.value?.inscripciones.filter((i) => ['P
 
 async function aprobar() {
   if (!detalle.value) return
-  const saldo = detalle.value.pago.saldo
+  const saldo = detalle.value.pago?.saldo ?? 0
   const aviso = saldo > 0.005 ? ` Ojo: aún falta declarar ${soles(saldo)} en vouchers.` : ''
   const sinVerificar = detalle.value.pagos.some((pago) => pago.estado === 'PENDIENTE')
   const ok = await confirmar({
@@ -83,6 +95,15 @@ const agregando = ref(false)
 const erroresIntegrantes = ref<Record<string, string>>({})
 const nuevos = computed(() => filasParaEnviar(filas.value))
 
+/** Lo que costará el grupo con los integrantes que ya tiene más los que están por agregarse (solo con `pagos.ver`). */
+const estimadoNuevos = computed(() => {
+  const d = detalle.value
+  if (!d || !nuevos.value.length) return null
+  const cantidades = cantidadesPorPlan(filas.value, planUnico.value)
+  for (const plan of d.planes) cantidades[plan.codigo] = (cantidades[plan.codigo] ?? 0) + plan.integrantes
+  return estimarGrupo(d.planes, cantidades, d.minIntegrantes)
+})
+
 async function agregarIntegrantes() {
   if (!detalle.value || !nuevos.value.length) {
     toast.error('Escribe al menos un integrante con documento, nombres y correo.')
@@ -93,7 +114,7 @@ async function agregarIntegrantes() {
   try {
     const respuesta = await api<Respuesta<DelegacionDetalle>>(`delegations/${detalle.value.id}/inscriptions`, { method: 'POST', body: { participantes: nuevos.value } })
     recibir(respuesta.data)
-    filas.value = [filaVacia()]
+    filas.value = [filaVacia(planUnico.value)]
     const resumen = [
       respuesta.data.registrados ? `${respuesta.data.registrados} registrado(s)` : '',
       respuesta.data.omitidos ? `${respuesta.data.omitidos} ya estaba(n)` : '',
@@ -109,13 +130,36 @@ async function agregarIntegrantes() {
 
 async function quitar(inscripcionId: number, nombre: string) {
   if (!detalle.value) return
-  const ok = await confirmar({ titulo: 'Quitar del grupo', mensaje: `¿Quitar a ${nombre} de la delegación? Se recalcula la tarifa de todos.`, textoConfirmar: 'Quitar', peligro: true })
+  const ok = await confirmar({ titulo: 'Quitar del grupo', mensaje: `¿Quitar a ${nombre} de la delegación? Se recalcula el precio de su plan para todos.`, textoConfirmar: 'Quitar', peligro: true })
   if (!ok) return
   try {
     recibir((await api<Respuesta<DelegacionDetalle>>(`delegations/${detalle.value.id}/inscriptions/${inscripcionId}`, { method: 'DELETE' })).data)
     toast.exito('Integrante quitado.')
   } catch (error) {
     toast.error(mensajeError(error))
+  }
+}
+
+/** Planes a los que se puede mover un integrante: los activos y el que ya tiene (aunque esté apagado). */
+function planesDestino(inscripcion: InscripcionDelegacion): CodigoPlan[] {
+  const actuales = new Set<CodigoPlan>(codigosActivos.value)
+  if (inscripcion.plan) actuales.add(inscripcion.plan)
+  return [...actuales]
+}
+
+const puedeCambiarPlan = (inscripcion: InscripcionDelegacion) => puedeInscribir.value && !['RECHAZADO', 'CANCELADO'].includes(inscripcion.estado.codigo)
+
+async function cambiarPlan(inscripcion: InscripcionDelegacion, evento: Event) {
+  if (!detalle.value) return
+  const plan = (evento.target as HTMLSelectElement).value as CodigoPlan
+  if (plan === inscripcion.plan) return
+  try {
+    recibir((await api<Respuesta<DelegacionDetalle>>(`delegations/${detalle.value.id}/inscriptions/${inscripcion.id}`, { method: 'PATCH', body: { plan } })).data)
+    toast.exito(`Ahora es «${ETIQUETA_PLAN[plan]}».`)
+  } catch (error) {
+    toast.error(mensajeError(error))
+    // El selector vuelve al plan que tiene
+    await cargar()
   }
 }
 
@@ -248,60 +292,109 @@ async function guardarDatos() {
   }
 }
 
-// ─── Tarifa de esta delegación ───
-const edicionTarifa = reactive<FormularioTarifaDelegacion>({ modalidad: 'PRESENCIAL', minIntegrantes: '', precioEstandar: '', precioPromocional: '' })
-const erroresTarifa = ref<Record<string, string>>({})
-const guardandoTarifa = ref(false)
-const convenio = computed(() => (detalle.value ? esTarifaDeConvenio(detalle.value, props.tarifa) : false))
-const tarifaVigente = computed(() => {
-  const d = detalle.value
-  if (!d) return ''
-  return d.modalidad === 'VIRTUAL'
-    ? `${soles(d.precioEstandar)} por persona, sin escalas`
-    : `${soles(d.precioEstandar)} por persona y ${soles(d.precioPromocional)} desde ${numero(d.minIntegrantes)} integrantes`
-})
+// ─── Planes y precios (solo Owner y Administrador) ───
+const edicionPlanes = ref<FormularioPlanes>(formularioDePlanes([]))
+const edicionMinimo = ref<Cifra>('')
+const erroresPlanes = ref<Record<string, string>>({})
+const guardandoPlanes = ref(false)
 
 watch(detalle, (valor) => {
   if (!valor) return
-  Object.assign(edicionTarifa, formularioDeTarifaDelegacion(valor))
-  erroresTarifa.value = {}
+  edicionPlanes.value = formularioDePlanes(valor.planes)
+  edicionMinimo.value = valor.minIntegrantes
+  erroresPlanes.value = {}
 })
 
-/** Al elegir otra modalidad se precargan los precios del evento para ella (el staff aún puede ajustarlos). */
-function alCambiarModalidad() {
-  Object.assign(edicionTarifa, tarifaParaModalidad(edicionTarifa.modalidad, props.tarifa))
-}
-
-async function guardarTarifa() {
+async function guardarPlanes() {
   if (!detalle.value) return
-  erroresTarifa.value = validarTarifaDelegacion(edicionTarifa)
-  if (Object.keys(erroresTarifa.value).length) {
-    toast.error('Revisa la tarifa de la delegación.')
+  erroresPlanes.value = validarPlanes(edicionPlanes.value)
+  const minimo = errorDeMinimo(edicionMinimo.value)
+  if (minimo) erroresPlanes.value.minIntegrantes = minimo
+  if (Object.keys(erroresPlanes.value).length) {
+    toast.error('Revisa los planes: hay campos por corregir.')
     return
   }
-  const cuerpo = cuerpoTarifaDelegacion(edicionTarifa, detalle.value)
-  if (!cuerpo) {
-    toast.info('No hay cambios en la tarifa.')
+  const planes = cambiosDePlanes(edicionPlanes.value, detalle.value.planes)
+  const cambiaMinimo = typeof edicionMinimo.value === 'number' && edicionMinimo.value !== detalle.value.minIntegrantes
+  if (!planes && !cambiaMinimo) {
+    toast.info('No hay cambios en los planes.')
     return
   }
   const integrantes = detalle.value.totalIntegrantes
   if (integrantes > 0) {
     const ok = await confirmar({
-      titulo: 'Cambiar la tarifa de la delegación',
-      mensaje: `Se recalcula el monto de los ${numero(integrantes)} integrante(s) del grupo y el saldo de la delegación cambia.`,
-      textoConfirmar: 'Cambiar tarifa',
+      titulo: 'Cambiar los planes de la delegación',
+      mensaje: `Se recalcula el precio de los ${numero(integrantes)} integrante(s) del grupo y el saldo de la delegación cambia.`,
+      textoConfirmar: 'Guardar planes',
     })
     if (!ok) return
   }
-  guardandoTarifa.value = true
+  guardandoPlanes.value = true
   try {
-    recibir((await api<Respuesta<DelegacionDetalle>>(`delegations/${detalle.value.id}`, { method: 'PUT', body: cuerpo })).data)
-    toast.exito('Tarifa de la delegación guardada.')
+    recibir((await api<Respuesta<DelegacionDetalle>>(`delegations/${detalle.value.id}/config`, {
+      method: 'PUT',
+      body: { ...(planes ? { planes } : {}), ...(cambiaMinimo ? { minIntegrantes: edicionMinimo.value } : {}) },
+    })).data)
+    toast.exito('Planes guardados.')
   } catch (error) {
-    erroresTarifa.value = aErrorApi(error).fields ?? {}
+    erroresPlanes.value = aErrorApi(error).fields ?? {}
     toast.error(mensajeError(error))
   } finally {
-    guardandoTarifa.value = false
+    guardandoPlanes.value = false
+  }
+}
+
+// ─── Links y correo (solo Owner y Administrador) ───
+const edicionDominio = ref('')
+const edicionIndividual = ref(false)
+const errorDominio = ref<string | null>(null)
+const guardandoLinks = ref(false)
+
+watch(detalle, (valor) => {
+  if (!valor) return
+  edicionDominio.value = valor.dominioCorreo ?? ''
+  edicionIndividual.value = valor.inscripcionIndividual
+  errorDominio.value = null
+})
+
+async function guardarLinks() {
+  if (!detalle.value) return
+  errorDominio.value = errorDeDominio(edicionDominio.value)
+  if (errorDominio.value) return
+  const dominio = normalizarDominio(edicionDominio.value)
+  const cuerpo: Record<string, string | boolean | null> = {}
+  if (dominio !== (detalle.value.dominioCorreo ?? '')) cuerpo.dominioCorreo = dominio || null
+  if (edicionIndividual.value !== detalle.value.inscripcionIndividual) cuerpo.inscripcionIndividual = edicionIndividual.value
+  if (!Object.keys(cuerpo).length) {
+    toast.info('No hay cambios en los links ni en el dominio.')
+    return
+  }
+  guardandoLinks.value = true
+  try {
+    recibir((await api<Respuesta<DelegacionDetalle>>(`delegations/${detalle.value.id}/config`, { method: 'PUT', body: cuerpo })).data)
+    toast.exito('Links y dominio guardados.')
+  } catch (error) {
+    errorDominio.value = aErrorApi(error).fields?.dominioCorreo ?? null
+    toast.error(mensajeError(error))
+  } finally {
+    guardandoLinks.value = false
+  }
+}
+
+async function regenerar(cual: 'delegado' | 'individual') {
+  if (!detalle.value) return
+  const ok = await confirmar({
+    titulo: cual === 'delegado' ? 'Regenerar el link del delegado' : 'Regenerar el link individual',
+    mensaje: 'El link anterior deja de funcionar: tendrás que enviar el nuevo.',
+    textoConfirmar: 'Regenerar',
+    peligro: true,
+  })
+  if (!ok) return
+  try {
+    recibir((await api<Respuesta<DelegacionDetalle>>(`delegations/${detalle.value.id}/links/regenerate`, { method: 'POST', body: { enlace: cual } })).data)
+    toast.exito('Link nuevo generado. Cópialo para enviarlo.')
+  } catch (error) {
+    toast.error(mensajeError(error))
   }
 }
 
@@ -315,63 +408,87 @@ watch(() => [props.abierto, props.delegacionId] as const, ([abierto, id]) => {
   erroresPagos.value = []
   void cargar()
 }, { immediate: true })
+
+// Con un solo plan activo las filas nuevas ya lo traen elegido
+watch(planUnico, (plan) => {
+  for (const fila of filas.value) if (!fila.plan) fila.plan = plan
+})
 </script>
 
 <template>
-  <AppModal :abierto="abierto" :titulo="detalle?.nombre ?? 'Delegación'" descripcion="Integrantes, vouchers y aprobación del grupo." ancho="xl" @cerrar="emit('cerrar')">
+  <AppModal :abierto="abierto" :titulo="detalle?.nombre ?? 'Delegación'" descripcion="Planes, integrantes, vouchers y aprobación del grupo." ancho="xl" @cerrar="emit('cerrar')">
     <div v-if="cargando && !detalle" class="py-10 text-center text-sm text-slate-400">Cargando…</div>
     <div v-else-if="detalle" class="space-y-8">
       <!-- Resumen -->
       <section class="space-y-3">
         <div class="flex flex-wrap items-center gap-2">
-          <AppBadge :tono="detalle.modalidad === 'VIRTUAL' ? 'info' : 'brand'">{{ ETIQUETA_MODALIDAD[detalle.modalidad] }}</AppBadge>
-          <AppBadge v-if="detalle.tipoInscripcion" tono="neutral">{{ detalle.tipoInscripcion.nombre }}</AppBadge>
-          <AppBadge v-if="convenio" tono="warn">Tarifa de convenio</AppBadge>
+          <AppBadge v-for="plan in activos" :key="plan.codigo" :tono="plan.modalidad === 'VIRTUAL' ? 'info' : 'brand'">{{ ETIQUETA_PLAN[plan.codigo] }}</AppBadge>
+          <AppBadge v-if="!activos.length" tono="warn">Sin planes activos</AppBadge>
+          <AppBadge v-if="detalle.dominioCorreo" tono="neutral">@{{ detalle.dominioCorreo }}</AppBadge>
+          <AppBadge v-if="detalle.inscripcionIndividual" tono="neutral">Link individual</AppBadge>
           <AppBadge v-if="!detalle.activo" tono="error">Inactiva</AppBadge>
           <span v-if="detalle.institucion" class="text-sm text-slate-400">{{ detalle.institucion }}</span>
         </div>
-        <dl class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <dl class="grid gap-3 sm:grid-cols-2" :class="detalle.pago ? 'lg:grid-cols-4' : 'lg:grid-cols-2'">
           <div class="rounded-xl bg-white/5 px-4 py-3">
             <dt class="text-xs uppercase tracking-wide text-slate-400">Integrantes</dt>
             <dd class="mt-0.5 text-2xl font-bold tabular-nums">{{ numero(detalle.totalIntegrantes) }}</dd>
           </div>
-          <div class="rounded-xl bg-white/5 px-4 py-3">
-            <dt class="text-xs uppercase tracking-wide text-slate-400">Por persona</dt>
-            <dd class="mt-0.5 text-2xl font-bold tabular-nums">{{ soles(detalle.precioUnitario) }}</dd>
-          </div>
-          <div class="rounded-xl bg-white/5 px-4 py-3">
-            <dt class="text-xs uppercase tracking-wide text-slate-400">Total a pagar</dt>
-            <dd class="mt-0.5 text-2xl font-bold tabular-nums">{{ soles(detalle.pago.totalAPagar) }}</dd>
-          </div>
-          <div class="rounded-xl bg-white/5 px-4 py-3">
-            <dt class="text-xs uppercase tracking-wide text-slate-400">Declarado</dt>
-            <dd class="mt-0.5 text-2xl font-bold tabular-nums">{{ soles(detalle.pago.declarado) }}</dd>
-            <dd class="text-xs text-slate-400">Verificado {{ soles(detalle.pago.verificado) }}</dd>
-          </div>
-          <div class="rounded-xl px-4 py-3" :class="detalle.pago.saldo > 0.005 ? 'bg-amber-400/10' : 'bg-emerald-400/10'">
-            <dt class="text-xs uppercase tracking-wide text-slate-400">Saldo</dt>
-            <dd class="mt-0.5 text-2xl font-bold tabular-nums">{{ soles(detalle.pago.saldo) }}</dd>
-            <dd class="text-xs" :class="detalle.pago.saldo > 0.005 ? 'text-amber-200' : 'text-emerald-200'">{{ textoSaldo(detalle.pago.saldo) }}</dd>
-          </div>
+          <template v-if="detalle.pago">
+            <div class="rounded-xl bg-white/5 px-4 py-3">
+              <dt class="text-xs uppercase tracking-wide text-slate-400">Total a pagar</dt>
+              <dd class="mt-0.5 text-2xl font-bold tabular-nums">{{ soles(detalle.pago.totalAPagar) }}</dd>
+            </div>
+            <div class="rounded-xl bg-white/5 px-4 py-3">
+              <dt class="text-xs uppercase tracking-wide text-slate-400">Declarado</dt>
+              <dd class="mt-0.5 text-2xl font-bold tabular-nums">{{ soles(detalle.pago.declarado) }}</dd>
+              <dd class="text-xs text-slate-400">Verificado {{ soles(detalle.pago.verificado) }}</dd>
+            </div>
+            <div class="rounded-xl px-4 py-3" :class="detalle.pago.saldo > 0.005 ? 'bg-amber-400/10' : 'bg-emerald-400/10'">
+              <dt class="text-xs uppercase tracking-wide text-slate-400">Saldo</dt>
+              <dd class="mt-0.5 text-2xl font-bold tabular-nums">{{ soles(detalle.pago.saldo) }}</dd>
+              <dd class="text-xs" :class="detalle.pago.saldo > 0.005 ? 'text-amber-200' : 'text-emerald-200'">{{ textoSaldo(detalle.pago.saldo) }}</dd>
+            </div>
+          </template>
         </dl>
+
+        <ul class="grid gap-3 sm:grid-cols-3">
+          <li v-for="plan in detalle.planes" :key="plan.codigo" class="rounded-xl px-4 py-3" :class="plan.activo ? 'bg-white/5' : 'bg-white/[.02] opacity-70'">
+            <p class="flex items-center justify-between gap-2 text-sm font-semibold text-white">
+              {{ ETIQUETA_PLAN[plan.codigo] }}
+              <AppBadge :tono="plan.activo ? 'ok' : 'neutral'">{{ plan.activo ? 'Activo' : 'Apagado' }}</AppBadge>
+            </p>
+            <p class="mt-1 text-sm text-slate-300">
+              <template v-if="plan.precioUnitario !== null">
+                <span class="font-bold tabular-nums text-white">{{ soles(plan.precioUnitario) }}</span> por persona
+                <span v-if="plan.precioPromocional !== null && plan.precioPromocional < (plan.precio ?? 0)" class="block text-xs text-slate-400">
+                  {{ soles(plan.precio) }} · {{ soles(plan.precioPromocional) }} desde {{ numero(detalle.minIntegrantes) }}
+                </span>
+              </template>
+              <template v-else>—</template>
+            </p>
+            <p class="text-xs text-slate-400">{{ numero(plan.integrantes) }} integrante(s)</p>
+          </li>
+        </ul>
         <p v-if="detalle.faltanParaPromocional !== null" class="rounded-xl bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
-          Faltan {{ detalle.faltanParaPromocional }} integrante(s) para la tarifa promocional de {{ soles(detalle.precioPromocional) }} por persona.
+          Faltan {{ detalle.faltanParaPromocional }} integrante(s) para el precio promocional.
         </p>
-        <p v-else-if="detalle.modalidad === 'PRESENCIAL' && detalle.totalIntegrantes" class="rounded-xl bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200">
-          Tarifa promocional aplicada: {{ soles(detalle.precioPromocional) }} por persona desde {{ detalle.minIntegrantes }} integrantes.
-        </p>
+
         <div class="flex flex-wrap items-center gap-2">
-          <AppButton variant="secondary" icon="heroicons:link" @click="copiarLink">Copiar link del delegado</AppButton>
-          <AppButton variant="secondary" icon="heroicons:arrow-top-right-on-square" :to="enlace">Abrir link</AppButton>
-          <AppButton variant="success" icon="heroicons:check-badge" :disabled="!porRevisar" :loading="aprobando" @click="aprobar">
+          <template v-if="enlace">
+            <AppButton variant="secondary" icon="heroicons:link" @click="copiarEnlace(enlace, 'Link copiado: envíaselo al delegado.')">Copiar link del delegado</AppButton>
+            <AppButton variant="secondary" icon="heroicons:arrow-top-right-on-square" :to="enlace">Abrir link</AppButton>
+          </template>
+          <AppButton v-if="enlaceIndividual" variant="secondary" icon="heroicons:user-plus" @click="copiarEnlace(enlaceIndividual, 'Link individual copiado: compártelo con los integrantes.')">Copiar link individual</AppButton>
+          <AppButton v-if="puedeValidar" variant="success" icon="heroicons:check-badge" :disabled="!porRevisar" :loading="aprobando" @click="aprobar">
             Aprobar al grupo ({{ porRevisar }})
           </AppButton>
         </div>
-        <p class="truncate font-mono text-xs text-slate-500" :title="enlace">{{ enlace }}</p>
+        <p v-if="enlace" class="truncate font-mono text-xs text-slate-500" :title="enlace">{{ enlace }}</p>
       </section>
 
       <!-- Vouchers -->
-      <section class="space-y-3">
+      <section v-if="detalle.pago" class="space-y-3">
         <h3 class="kicker">Vouchers ({{ detalle.pagos.length }})</h3>
         <div v-if="detalle.pagos.length" class="overflow-x-auto">
           <table class="table-base">
@@ -390,22 +507,24 @@ watch(() => [props.abierto, props.delegacionId] as const, ([abierto, id]) => {
                 </td>
                 <td class="text-right">
                   <div class="flex flex-wrap justify-end gap-1">
-                    <a :href="urlVoucher(pago)" target="_blank" rel="noopener" class="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1.5 text-xs text-white ring-1 ring-white/15 ring-inset hover:bg-white/10">
+                    <a v-if="puedeVerVouchers" :href="urlVoucher(pago)" target="_blank" rel="noopener" class="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1.5 text-xs text-white ring-1 ring-white/15 ring-inset hover:bg-white/10">
                       <Icon name="heroicons:document-arrow-down" class="size-3.5" aria-hidden="true" /> Ver
                     </a>
-                    <AppButton v-if="pago.estado !== 'VERIFICADO'" size="sm" variant="success" @click="marcarPago(pago, 'VERIFICADO')">Verificar</AppButton>
-                    <AppButton v-if="pago.estado !== 'RECHAZADO'" size="sm" variant="danger" @click="rechazando = pago">Rechazar</AppButton>
-                    <AppButton v-if="pago.estado !== 'PENDIENTE'" size="sm" variant="ghost" @click="marcarPago(pago, 'PENDIENTE')">Pendiente</AppButton>
-                    <AppButton v-if="pago.estado !== 'VERIFICADO'" size="sm" variant="ghost" icon="heroicons:trash" aria-label="Eliminar voucher" @click="eliminarPago(pago)" />
+                    <template v-if="puedeValidar">
+                      <AppButton v-if="pago.estado !== 'VERIFICADO'" size="sm" variant="success" @click="marcarPago(pago, 'VERIFICADO')">Verificar</AppButton>
+                      <AppButton v-if="pago.estado !== 'RECHAZADO'" size="sm" variant="danger" @click="rechazando = pago">Rechazar</AppButton>
+                      <AppButton v-if="pago.estado !== 'PENDIENTE'" size="sm" variant="ghost" @click="marcarPago(pago, 'PENDIENTE')">Pendiente</AppButton>
+                    </template>
+                    <AppButton v-if="puedeGestionar && pago.estado !== 'VERIFICADO'" size="sm" variant="ghost" icon="heroicons:trash" aria-label="Eliminar voucher" @click="eliminarPago(pago)" />
                   </div>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-        <p v-else class="rounded-xl bg-white/5 px-4 py-3 text-sm text-slate-400">Aún no hay vouchers. Agrégalos abajo o el delegado los sube con su link.</p>
+        <p v-else class="rounded-xl bg-white/5 px-4 py-3 text-sm text-slate-400">Aún no hay vouchers. El delegado los sube con su link{{ puedeInscribir ? ' o puedes agregarlos abajo' : '' }}.</p>
 
-        <details class="rounded-xl bg-white/5 p-4">
+        <details v-if="puedeInscribir" class="rounded-xl bg-white/5 p-4">
           <summary class="cursor-pointer text-sm font-semibold text-slate-200">Agregar vouchers</summary>
           <form class="mt-4 space-y-3" @submit.prevent="subirPagos">
             <div v-for="(pago, indice) in pagos" :key="indice" class="rounded-xl bg-white/5 p-3">
@@ -469,75 +588,84 @@ watch(() => [props.abierto, props.delegacionId] as const, ([abierto, id]) => {
         <div class="overflow-x-auto">
           <table class="table-base">
             <thead>
-              <tr><th>Integrante</th><th>Documento</th><th>Correo</th><th>Estado</th><th class="text-right">Monto</th><th class="text-right"><span class="sr-only">Acciones</span></th></tr>
+              <tr><th>Integrante</th><th>Documento</th><th>Correo</th><th>Plan</th><th>Estado</th><th class="text-right">Monto</th><th class="text-right"><span class="sr-only">Acciones</span></th></tr>
             </thead>
             <tbody>
               <tr v-for="inscripcion in detalle.inscripciones" :key="inscripcion.id">
                 <td class="whitespace-nowrap">{{ nombreCompleto(inscripcion.participante) }}</td>
                 <td class="font-mono text-xs">{{ inscripcion.participante.tipoDocumento.toUpperCase() }} {{ inscripcion.participante.numeroDocumento }}</td>
                 <td class="text-xs text-slate-400">{{ inscripcion.participante.correo }}</td>
+                <td class="whitespace-nowrap">
+                  <select v-if="puedeCambiarPlan(inscripcion)" :value="inscripcion.plan ?? ''" class="field-control py-1 text-xs" :aria-label="`Plan de ${nombreCompleto(inscripcion.participante)}`" @change="cambiarPlan(inscripcion, $event)">
+                    <option v-if="!inscripcion.plan" value="" disabled>Sin plan</option>
+                    <option v-for="plan in planesDestino(inscripcion)" :key="plan" :value="plan">{{ ETIQUETA_PLAN[plan] }}</option>
+                  </select>
+                  <span v-else class="text-xs">{{ inscripcion.plan ? ETIQUETA_PLAN[inscripcion.plan] : '—' }}</span>
+                </td>
                 <td><AppBadge :estado="inscripcion.estado.codigo">{{ inscripcion.estado.nombre }}</AppBadge></td>
                 <td class="text-right tabular-nums">{{ soles(inscripcion.monto) }}</td>
                 <td class="text-right">
-                  <AppButton v-if="inscripcion.estado.codigo !== 'APROBADO'" size="sm" variant="ghost" icon="heroicons:user-minus" :aria-label="`Quitar a ${nombreCompleto(inscripcion.participante)}`" @click="quitar(inscripcion.id, nombreCompleto(inscripcion.participante))" />
+                  <AppButton v-if="puedeInscribir && inscripcion.estado.codigo !== 'APROBADO'" size="sm" variant="ghost" icon="heroicons:user-minus" :aria-label="`Quitar a ${nombreCompleto(inscripcion.participante)}`" @click="quitar(inscripcion.id, nombreCompleto(inscripcion.participante))" />
                 </td>
               </tr>
               <tr v-if="!detalle.inscripciones.length">
-                <td colspan="6" class="py-6 text-center text-slate-400">Aún no hay integrantes registrados.</td>
+                <td colspan="7" class="py-6 text-center text-slate-400">Aún no hay integrantes registrados.</td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        <details class="rounded-xl bg-white/5 p-4" :open="!detalle.inscripciones.length">
+        <details v-if="puedeInscribir" class="rounded-xl bg-white/5 p-4" :open="!detalle.inscripciones.length && activos.length > 0">
           <summary class="cursor-pointer text-sm font-semibold text-slate-200">Agregar integrantes</summary>
-          <form class="mt-4 space-y-3" @submit.prevent="agregarIntegrantes">
-            <FilasIntegrantes v-model="filas" :errores="erroresIntegrantes" />
+          <p v-if="!activos.length" class="mt-4 rounded-xl bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
+            La delegación aún no tiene planes activos: un Owner o Administrador debe configurar sus precios para poder inscribir integrantes.
+          </p>
+          <form v-else class="mt-4 space-y-3" @submit.prevent="agregarIntegrantes">
+            <FilasIntegrantes v-model="filas" :planes="codigosActivos" :dominio="detalle.dominioCorreo" :errores="erroresIntegrantes" />
             <div class="flex flex-wrap items-center justify-between gap-2">
-              <p class="text-xs text-slate-400">{{ nuevos.length }} por agregar · la tarifa se recalcula para todo el grupo.</p>
+              <p class="text-xs text-slate-400">
+                {{ nuevos.length }} por agregar · el precio de cada plan se recalcula para todo el grupo.
+                <template v-if="estimadoNuevos"> Total estimado: <strong class="text-slate-200">{{ soles(estimadoNuevos.total) }}</strong>.</template>
+              </p>
               <AppButton type="submit" icon="heroicons:user-plus" :loading="agregando">Registrar integrantes</AppButton>
             </div>
           </form>
         </details>
       </section>
 
-      <!-- Tarifa de esta delegación -->
-      <details class="rounded-xl bg-white/5 p-4">
-        <summary class="cursor-pointer text-sm font-semibold text-slate-200">Tarifa de esta delegación</summary>
-        <form class="mt-4 space-y-4" @submit.prevent="guardarTarifa">
-          <p class="text-sm text-slate-400">
-            Cobra <span class="text-slate-200">{{ tarifaVigente }}</span>.
-            {{ convenio ? 'Es distinta de la tarifa del evento (convenio).' : 'Coincide con la tarifa del evento.' }}
-            Cambiarla recalcula el monto de todos sus integrantes.
-          </p>
-          <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <AppField label="Cómo asiste" for="tf-modalidad" :hint="detalle.totalIntegrantes > 0 ? 'Solo cambia mientras el grupo no tenga integrantes.' : undefined">
-              <select id="tf-modalidad" v-model="edicionTarifa.modalidad" class="field-control" :disabled="detalle.totalIntegrantes > 0" @change="alCambiarModalidad">
-                <option value="PRESENCIAL">{{ ETIQUETA_MODALIDAD.PRESENCIAL }}</option>
-                <option value="VIRTUAL" :disabled="!tarifa.virtual && detalle.modalidad !== 'VIRTUAL'">{{ ETIQUETA_MODALIDAD.VIRTUAL }}</option>
-              </select>
+      <!-- Planes y precios -->
+      <details v-if="puedeGestionar" class="rounded-xl bg-white/5 p-4" :open="!activos.length">
+        <summary class="cursor-pointer text-sm font-semibold text-slate-200">Planes y precios</summary>
+        <form class="mt-4 space-y-4" @submit.prevent="guardarPlanes">
+          <p class="text-sm text-slate-400">Cada integrante elige uno de los planes activos. Apagar un plan no toca a quienes ya lo tienen; cambiar un precio recalcula a todos los de ese plan.</p>
+          <PlanesEditor v-model="edicionPlanes" v-model:min-integrantes="edicionMinimo" :errores="erroresPlanes" prefijo="det" />
+          <AppButton type="submit" :loading="guardandoPlanes">Guardar planes</AppButton>
+        </form>
+      </details>
+
+      <!-- Links y correo -->
+      <details v-if="puedeGestionar" class="rounded-xl bg-white/5 p-4">
+        <summary class="cursor-pointer text-sm font-semibold text-slate-200">Links y correo institucional</summary>
+        <form class="mt-4 space-y-4" @submit.prevent="guardarLinks">
+          <div class="grid gap-4 md:grid-cols-2">
+            <AppField label="Dominio del correo" for="lk-dominio" :error="errorDominio" hint="Con unac.edu.pe, en los links solo se aceptan correos @unac.edu.pe (en el individual basta escribir lo de antes de la @). Vacío = cualquier correo. El staff puede inscribir otros.">
+              <input id="lk-dominio" v-model="edicionDominio" class="field-control" maxlength="100" placeholder="unac.edu.pe" autocomplete="off">
             </AppField>
-            <template v-if="edicionTarifa.modalidad === 'PRESENCIAL'">
-              <AppField label="Precio por persona (S/)" for="tf-estandar" required :error="erroresTarifa.precioEstandar">
-                <input id="tf-estandar" v-model.number="edicionTarifa.precioEstandar" type="number" min="0" step="0.01" inputmode="decimal" class="field-control">
-              </AppField>
-              <AppField label="Precio promocional (S/)" for="tf-promocional" required :error="erroresTarifa.precioPromocional">
-                <input id="tf-promocional" v-model.number="edicionTarifa.precioPromocional" type="number" min="0" step="0.01" inputmode="decimal" class="field-control">
-              </AppField>
-              <AppField label="Mínimo de integrantes" for="tf-minimo" required :error="erroresTarifa.minIntegrantes" :hint="`Entre 1 y ${MIN_INTEGRANTES_MAXIMO}.`">
-                <input id="tf-minimo" v-model.number="edicionTarifa.minIntegrantes" type="number" min="1" :max="MIN_INTEGRANTES_MAXIMO" step="1" inputmode="numeric" class="field-control">
-              </AppField>
-            </template>
-            <AppField v-else label="Precio por persona (S/)" for="tf-virtual" required :error="erroresTarifa.precioEstandar" hint="Tarifa única, sin escalas.">
-              <input id="tf-virtual" v-model.number="edicionTarifa.precioEstandar" type="number" min="0" step="0.01" inputmode="decimal" class="field-control">
-            </AppField>
+            <div class="self-start pt-6">
+              <AppSwitch v-model="edicionIndividual" label="Cada integrante se inscribe con su link" descripcion="Apagado, solo el delegado (o el staff) inscribe a los integrantes." />
+            </div>
           </div>
-          <AppButton type="submit" :loading="guardandoTarifa">Guardar tarifa</AppButton>
+          <div class="flex flex-wrap items-center gap-2">
+            <AppButton type="submit" :loading="guardandoLinks">Guardar</AppButton>
+            <AppButton type="button" variant="secondary" icon="heroicons:arrow-path" @click="regenerar('delegado')">Regenerar link del delegado</AppButton>
+            <AppButton v-if="detalle.inscripcionIndividual" type="button" variant="secondary" icon="heroicons:arrow-path" @click="regenerar('individual')">Regenerar link individual</AppButton>
+          </div>
+          <p v-if="enlaceIndividual" class="truncate font-mono text-xs text-slate-500" :title="enlaceIndividual">{{ enlaceIndividual }}</p>
         </form>
       </details>
 
       <!-- Datos -->
-      <details class="rounded-xl bg-white/5 p-4">
+      <details v-if="puedeInscribir" class="rounded-xl bg-white/5 p-4">
         <summary class="cursor-pointer text-sm font-semibold text-slate-200">Datos de la delegación y del delegado</summary>
         <form class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3" @submit.prevent="guardarDatos">
           <AppField label="Nombre de la delegación" for="ed-nombre" required :error="erroresEdicion.nombre">

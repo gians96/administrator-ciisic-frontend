@@ -23,6 +23,7 @@ export const ETIQUETAS_PERMISO: Readonly<Record<Permiso, string>> = {
   'certificados.gestionar': 'Gestionar plantillas y emitir certificados',
   'especializadas.gestionar': 'Crear, editar y eliminar ponencias especializadas',
   'reportes.gestionar': 'Cargar el padrón de estudiantes y los asesores por sección',
+  'delegaciones.gestionar': 'Configurar delegaciones: planes, precios, dominio del correo y links',
 
   'resumen.ver': 'Ver el resumen del evento',
   'inscripciones.ver': 'Ver inscritos (nombre, documento, correo y celular)',
@@ -45,6 +46,8 @@ export const ETIQUETAS_PERMISO: Readonly<Record<Permiso, string>> = {
   'especializadas.asistencia': 'Tomar asistencia en ponencias especializadas (inscribe al instante con el DNI)',
   'reportes.ver': 'Ver el seguimiento de estudiantes por asesor',
   'reportes.exportar': 'Descargar el seguimiento por asesor en Excel y PDF',
+  'delegaciones.ver': 'Ver las delegaciones, sus integrantes y vouchers',
+  'delegaciones.inscribir': 'Crear delegaciones e inscribir y mover a sus integrantes',
 }
 
 /** Catálogo completo, en el orden del backend. */
@@ -70,6 +73,7 @@ export const DEPENDENCIAS: Readonly<Partial<Record<Permiso, readonly Permiso[]>>
   'especializadas.asistencia': ['especializadas.ver'],
   'reportes.ver': ['inscripciones.ver'],
   'reportes.exportar': ['reportes.ver'],
+  'delegaciones.inscribir': ['delegaciones.ver'],
 }
 
 type Dependencias = Readonly<Partial<Record<Permiso, readonly Permiso[]>>>
@@ -212,6 +216,7 @@ export const MENU: readonly SeccionMenu[] = [
       { to: '/', label: 'Resumen', icon: 'heroicons:squares-2x2', permiso: 'resumen.ver' },
       { to: '/inscripciones', label: 'Inscripciones', icon: 'heroicons:clipboard-document-check', permiso: 'inscripciones.ver' },
       { to: '/asistencia', label: 'Asistencia', icon: 'heroicons:qr-code', permiso: 'asistencia.ver' },
+      { to: '/delegaciones', label: 'Delegaciones', icon: 'heroicons:user-group', permiso: 'delegaciones.ver' },
       { to: '/reportes', label: 'Reportes', icon: 'heroicons:chart-bar-square', permiso: 'reportes.ver' },
       { to: RUTA_ESCANER, label: 'Escanear asistencia', icon: 'heroicons:camera', permiso: 'asistencia.marcar' },
       { to: '/ponencias', label: 'Ponencias', icon: 'heroicons:document-text', permiso: 'ponencias.ver' },

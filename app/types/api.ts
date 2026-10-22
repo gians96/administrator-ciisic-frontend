@@ -48,6 +48,7 @@ export type Permiso =
   | 'certificados.gestionar'
   | 'especializadas.gestionar'
   | 'reportes.gestionar'
+  | 'delegaciones.gestionar'
   // Por evento: las cuentas con alcance `EVENTO` los ejercen solo en sus eventos
   | 'resumen.ver'
   | 'inscripciones.ver'
@@ -70,6 +71,8 @@ export type Permiso =
   | 'especializadas.asistencia'
   | 'reportes.ver'
   | 'reportes.exportar'
+  | 'delegaciones.ver'
+  | 'delegaciones.inscribir'
 
 /** Acceso efectivo de la cuenta (`usuario.acceso` de la sesión, el login y Google). */
 export interface AccesoPanel {
@@ -237,7 +240,7 @@ export interface Categoria {
   tipos: TipoInscripcion[]
 }
 
-// ─── Delegaciones (backend specs 021–023) ───
+// ─── Delegaciones (backend specs 021–023 y 029) ───
 
 export interface DelegacionRepresentante {
   nombre: string | null
@@ -275,53 +278,57 @@ export interface PagoDelegacion {
   creadoEn: string
 }
 
-/**
- * Tarifa de las delegaciones del evento (backend spec 024: `GET|PUT events/:id/delegations/tarifa`). `virtual` es
- * `null` mientras el evento no tenga el tipo `delegacion_virtual`; con `activo: false` la landing no ofrece la
- * modalidad. `sinIntegrantes` cuenta las delegaciones sin integrantes activos ni vouchers (las únicas que alcanza
- * «aplicar a las existentes»).
- */
-export interface TarifaDelegacionesAdmin {
-  minIntegrantes: number
-  presencial: { precioEstandar: number, precioPromocional: number }
-  virtual: { precio: number, activo: boolean } | null
-  delegaciones: { total: number, sinIntegrantes: number }
-}
+/** Plan de una delegación (backend spec 029): un tipo de su categoría oculta. */
+export type CodigoPlan = 'CON_KIT' | 'SIN_KIT' | 'VIRTUAL'
 
-/** Respuesta del `PUT`: la tarifa ya guardada y cuántas delegaciones recibieron la copia. */
-export interface TarifaDelegacionesGuardada extends TarifaDelegacionesAdmin {
-  delegacionesActualizadas: number
-}
-
-export interface TipoDelegacion {
-  id: number
-  codigo: string
-  nombre: string
+export interface PlanDelegacion {
+  codigo: CodigoPlan
+  tipoInscripcionId: number
   etiqueta: string | null
-  modalidad?: ModalidadAsistencia
+  modalidad: ModalidadAsistencia
+  /** Apagado: no admite altas nuevas, pero quienes ya lo tienen lo conservan. */
+  activo: boolean
+  /** Sin `pagos.ver` los importes llegan en `null`. */
+  precio: number | null
+  /** `null` = sin escala: el plan cobra siempre su precio. */
+  precioPromocional: number | null
+  /** Lo que paga hoy cada integrante de este plan (con el promocional si el grupo ya llegó al mínimo). */
+  precioUnitario: number | null
+  integrantes: number
 }
+
+/** Cambios de un plan en `PUT delegations/:id/config` o en el alta; lo que no se envía se conserva. */
+export interface CambiosPlan {
+  activo?: boolean
+  precio?: number
+  precioPromocional?: number | null
+}
+
+export type CambiosPlanes = Partial<Record<CodigoPlan, CambiosPlan>>
 
 export interface Delegacion {
   id: number
   eventoId: number
   nombre: string
-  codigoLink: string
   institucion: string | null
-  modalidad: ModalidadAsistencia
+  /** Link del delegado. `null` si la cuenta no inscribe ni gestiona (p. ej. el Tesorero). */
+  codigoLink: string | null
+  /** Link individual (cada integrante se inscribe solo). `null` si está apagado o no se puede ver. */
+  codigoInscripcion: string | null
+  inscripcionIndividual: boolean
+  /** Dominio de los correos de los integrantes que se inscriben por link (`unac.edu.pe`); `null` = cualquiera. */
+  dominioCorreo: string | null
   representante: DelegacionRepresentante
+  /** Integrantes activos desde los que los planes con precio promocional lo cobran. */
   minIntegrantes: number
-  precioEstandar: number
-  precioPromocional: number
-  /** Tarifa vigente por persona según el total actual. */
-  precioUnitario: number
+  planes: PlanDelegacion[]
   /** Integrantes activos: los rechazados y cancelados no cuentan. */
   totalIntegrantes: number
-  montoTotal: number
-  /** Cuántos faltan para la tarifa promocional; `null` si ya aplica o la modalidad no tiene escala. */
+  /** Sin `pagos.ver`: `null`. */
+  montoTotal: number | null
+  /** Cuántos faltan para el precio promocional; `null` si ningún plan lo tiene o ya aplica. */
   faltanParaPromocional: number | null
-  /** Tipo vigente del grupo (lo decide el servidor): General, Promocional o Virtual. */
-  tipoInscripcion: TipoDelegacion | null
-  pago: ResumenPagoDelegacion
+  pago: ResumenPagoDelegacion | null
   activo: boolean
   creadoEn: string
   actualizadoEn: string
@@ -331,7 +338,8 @@ export interface InscripcionDelegacion {
   id: number
   participante: ParticipanteRef
   estado: EstadoRef
-  monto: number
+  plan: CodigoPlan | null
+  monto: number | null
   creadoEn: string
 }
 
@@ -354,9 +362,8 @@ export interface DelegacionEnInscripcion {
   totalIntegrantes: number
 }
 
-/** En el detalle se agregan la modalidad y el resumen de pagos (este solo con `pagos.ver`, spec 013). */
+/** En el detalle se agrega el resumen de pagos (solo con `pagos.ver`, spec 013). */
 export interface DelegacionEnDetalle extends DelegacionEnInscripcion {
-  modalidad?: ModalidadAsistencia
   pago?: ResumenPagoDelegacion | null
 }
 

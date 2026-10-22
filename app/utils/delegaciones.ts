@@ -1,19 +1,18 @@
 // ============================================================================
-// DELEGACIONES: tarifa por persona, carga masiva y enlace público (funciones puras)
+// DELEGACIONES (backend spec 029): planes por delegación, carga masiva y links públicos (funciones puras)
 // ============================================================================
 
-import type { Delegacion, EstadoPagoDelegacion, ModalidadAsistencia, TarifaDelegacionesAdmin } from '~/types/api'
+import type { CambiosPlanes, CodigoPlan, EstadoPagoDelegacion, PlanDelegacion } from '~/types/api'
 
+/** Mínimo de integrantes con el que nace una delegación (desde ahí los planes con promocional lo cobran). */
 export const MIN_INTEGRANTES_POR_DEFECTO = 10
-export const PRECIO_ESTANDAR_POR_DEFECTO = 60
-export const PRECIO_PROMOCIONAL_POR_DEFECTO = 50
 
-/** Tarifa por persona: la promocional en cuanto la delegación alcanza el mínimo. */
-export function precioUnitarioDelegacion(precioEstandar: number, precioPromocional: number, minIntegrantes: number, totalIntegrantes: number): number {
-  return totalIntegrantes >= minIntegrantes ? precioPromocional : precioEstandar
+/** Precio por persona de un plan: el promocional (si lo tiene) en cuanto la delegación alcanza el mínimo. */
+export function precioUnitarioPlan(precio: number, precioPromocional: number | null, minIntegrantes: number, totalIntegrantes: number): number {
+  return precioPromocional !== null && precioPromocional < precio && totalIntegrantes >= minIntegrantes ? precioPromocional : precio
 }
 
-/** Costo total de la delegación con la tarifa vigente. */
+/** Costo total con el precio por persona. */
 export function montoDelegacion(precioUnitario: number, totalIntegrantes: number): number {
   return Math.round(precioUnitario * totalIntegrantes * 100) / 100
 }
@@ -25,6 +24,8 @@ export interface FilaParticipanteDelegacion {
   apellidos: string
   correo: string
   celular: string
+  /** Plan del integrante; `''` mientras no se elige (el servidor asume el único plan activo). */
+  plan: CodigoPlan | ''
 }
 
 export interface ResultadoCargaDelegacion {
@@ -59,7 +60,8 @@ function esEncabezado(campos: string[]): boolean {
  * - `DNI, Nombres, Apellidos, Correo`
  * - `DNI, Nombres completos, Correo` (la última palabra pasa a ser el apellido)
  * Acepta coma, punto y coma o tabulador. Ignora líneas vacías y una cabecera. Los errores se
- * informan con el número de línea para poder corregir el texto antes de enviarlo.
+ * informan con el número de línea para poder corregir el texto antes de enviarlo. El plan no viene en
+ * el texto: quien pega la lista lo elige para todas las filas.
  */
 export function parsearParticipantesDelegacion(texto: string): ResultadoCargaDelegacion {
   const lineas = texto.split(/\r?\n/).map((linea) => linea.trim()).filter(Boolean)
@@ -109,6 +111,7 @@ export function parsearParticipantesDelegacion(texto: string): ResultadoCargaDel
       apellidos: apellidos.trim(),
       correo: correo.toLowerCase(),
       celular,
+      plan: '',
     })
   })
 
@@ -135,51 +138,206 @@ export function origenLanding(): string {
   return typeof window === 'undefined' ? '' : window.location.origin
 }
 
-/**
- * Link que abre el formulario de la delegación en la landing (`/delegaciones?delegacion=<código>`).
- * La página `/delegaciones` es la que lee el parámetro y precarga la delegación.
- */
+/** Link del delegado en la landing (`/delegaciones?delegacion=<código>`): ve su grupo y agrega integrantes y vouchers. */
 export function enlaceInscripcionDelegacion(codigoLink: string, origen = origenLanding()): string {
   const base = origen.replace(/\/+$/, '')
   return `${base}/delegaciones?delegacion=${encodeURIComponent(codigoLink)}`
 }
 
-// ─── Convenio (backend spec 023): modalidad, estimado en vivo y vouchers ───
+/** Link individual en la landing (`/delegaciones?unirme=<código>`): cada integrante se inscribe solo. */
+export function enlaceInscripcionIndividual(codigoInscripcion: string, origen = origenLanding()): string {
+  const base = origen.replace(/\/+$/, '')
+  return `${base}/delegaciones?unirme=${encodeURIComponent(codigoInscripcion)}`
+}
 
+// ─── Planes (backend spec 029) ───
 
-export const PRECIO_VIRTUAL_POR_DEFECTO = 30
+/** Los tres planes de una delegación, en el orden en que se muestran. */
+export const PLANES: ReadonlyArray<{ codigo: CodigoPlan, etiqueta: string, descripcion: string }> = [
+  { codigo: 'CON_KIT', etiqueta: 'Con kit', descripcion: 'Presencial con kit de merchandising' },
+  { codigo: 'SIN_KIT', etiqueta: 'Sin kit', descripcion: 'Presencial sin kit' },
+  { codigo: 'VIRTUAL', etiqueta: 'Virtual', descripcion: 'Participación virtual' },
+]
 
-export const ETIQUETA_MODALIDAD: Record<ModalidadAsistencia, string> = { PRESENCIAL: 'Presencial', VIRTUAL: 'Virtual' }
+export const ETIQUETA_PLAN: Record<CodigoPlan, string> = { CON_KIT: 'Con kit', SIN_KIT: 'Sin kit', VIRTUAL: 'Virtual' }
 
-export interface TarifaDelegaciones {
-  minIntegrantes: number
-  precioEstandar: number
-  precioPromocional: number
-  /** `null` mientras el evento no tenga el tipo `delegacion_virtual`. */
-  virtual: { precio: number } | null
+export function esCodigoPlan(valor: unknown): valor is CodigoPlan {
+  return valor === 'CON_KIT' || valor === 'SIN_KIT' || valor === 'VIRTUAL'
+}
+
+/** Planes que admiten integrantes nuevos (activos), en orden. */
+export function planesActivos(planes: readonly PlanDelegacion[]): PlanDelegacion[] {
+  return planes.filter((plan) => plan.activo)
+}
+
+/** Plan con el que se precarga una fila: el único activo; con varios, ninguno (hay que elegir). */
+export function planPorDefecto(planes: readonly PlanDelegacion[]): CodigoPlan | '' {
+  const activos = planesActivos(planes)
+  return activos.length === 1 ? (activos[0]?.codigo ?? '') : ''
+}
+
+/** Resumen corto de lo que ofrece una delegación: «Con kit S/ 80.00 · Sin kit S/ 60.00». Sin precios (sin `pagos.ver`) solo los nombres. */
+export function resumenPlanes(planes: readonly PlanDelegacion[]): string {
+  return planesActivos(planes).map((plan) => (plan.precio === null ? ETIQUETA_PLAN[plan.codigo] : `${ETIQUETA_PLAN[plan.codigo]} S/ ${plan.precio.toFixed(2)}`)).join(' · ')
 }
 
 export interface EstimadoGrupo {
-  precioUnitario: number
+  /** Integrantes considerados. */
+  integrantes: number
   total: number
-  /** Cuántos faltan para la tarifa promocional; `null` si ya aplica o no hay escala. */
+  /** Cuántos faltan para el precio promocional; `null` si ningún plan lo tiene o ya aplica. */
   faltan: number | null
+  /** Precio por persona de cada plan con ese total. */
+  unitarios: Partial<Record<CodigoPlan, number>>
 }
 
 /**
- * Lo que costará un grupo de `integrantes` según la modalidad: presencial paga el estándar y, desde el
- * mínimo, el promocional; virtual paga una tarifa única. Es un estimado: el servidor calcula el monto.
+ * Lo que costará un grupo según cuántos integrantes hay en cada plan. Es un estimado: el servidor calcula el
+ * monto. Necesita los precios (`pagos.ver`); sin ellos devuelve `null`.
  */
-export function estimarGrupo(modalidad: ModalidadAsistencia, integrantes: number, tarifa: TarifaDelegaciones): EstimadoGrupo {
-  const cantidad = Math.max(0, Math.trunc(integrantes) || 0)
-  if (modalidad === 'VIRTUAL') {
-    const precio = tarifa.virtual?.precio ?? PRECIO_VIRTUAL_POR_DEFECTO
-    return { precioUnitario: precio, total: montoDelegacion(precio, cantidad), faltan: null }
+export function estimarGrupo(planes: readonly PlanDelegacion[], cantidades: Partial<Record<CodigoPlan, number>>, minIntegrantes: number): EstimadoGrupo | null {
+  if (planes.some((plan) => plan.precio === null)) return null
+  const entero = (codigo: CodigoPlan) => Math.max(0, Math.trunc(cantidades[codigo] ?? 0))
+  const integrantes = PLANES.reduce((suma, { codigo }) => suma + entero(codigo), 0)
+  const unitarios: Partial<Record<CodigoPlan, number>> = {}
+  let total = 0
+  for (const plan of planes) {
+    const unitario = precioUnitarioPlan(plan.precio ?? 0, plan.precioPromocional, minIntegrantes, integrantes)
+    unitarios[plan.codigo] = unitario
+    total += montoDelegacion(unitario, entero(plan.codigo))
   }
-  const unitario = precioUnitarioDelegacion(tarifa.precioEstandar, tarifa.precioPromocional, tarifa.minIntegrantes, cantidad)
-  const faltan = tarifa.precioPromocional < tarifa.precioEstandar && cantidad < tarifa.minIntegrantes ? tarifa.minIntegrantes - cantidad : null
-  return { precioUnitario: unitario, total: montoDelegacion(unitario, cantidad), faltan }
+  const hayEscala = planes.some((plan) => plan.activo && plan.precioPromocional !== null && plan.precio !== null && plan.precioPromocional < plan.precio)
+  return { integrantes, total: Math.round(total * 100) / 100, faltan: hayEscala && integrantes < minIntegrantes ? minIntegrantes - integrantes : null, unitarios }
 }
+
+/** Valor de un campo numérico del formulario: `''` mientras está vacío (`v-model.number`). */
+export type Cifra = number | ''
+
+export const MIN_INTEGRANTES_MAXIMO = 1000
+
+const esCifra = (valor: Cifra): valor is number => typeof valor === 'number' && Number.isFinite(valor)
+/** Los precios se guardan con hasta dos decimales. */
+const tieneCentavos = (valor: number) => Math.abs(valor * 100 - Math.round(valor * 100)) < 1e-6
+
+/** Lo que edita el staff de cada plan. `precioPromocional: ''` = sin escala. */
+export interface FormularioPlan {
+  activo: boolean
+  precio: Cifra
+  precioPromocional: Cifra
+}
+
+export type FormularioPlanes = Record<CodigoPlan, FormularioPlan>
+
+/** Planes de una delegación nueva: los tres apagados y sin precio. */
+export function planesVacios(): FormularioPlanes {
+  return {
+    CON_KIT: { activo: false, precio: '', precioPromocional: '' },
+    SIN_KIT: { activo: false, precio: '', precioPromocional: '' },
+    VIRTUAL: { activo: false, precio: '', precioPromocional: '' },
+  }
+}
+
+/** Los planes de una delegación ya creada como los edita el formulario (sin `pagos.ver` los precios quedan vacíos). */
+export function formularioDePlanes(planes: readonly PlanDelegacion[]): FormularioPlanes {
+  const formulario = planesVacios()
+  for (const plan of planes) {
+    formulario[plan.codigo] = { activo: plan.activo, precio: plan.precio ?? '', precioPromocional: plan.precioPromocional ?? '' }
+  }
+  return formulario
+}
+
+function errorDePrecio(valor: Cifra): string | null {
+  if (!esCifra(valor) || valor < 0) return 'Escribe un precio válido (0 o más).'
+  return tieneCentavos(valor) ? null : 'Usa hasta dos decimales.'
+}
+
+export function errorDeMinimo(valor: Cifra): string | null {
+  return esCifra(valor) && Number.isInteger(valor) && valor >= 1 && valor <= MIN_INTEGRANTES_MAXIMO
+    ? null
+    : `Escribe un número entero de 1 a ${MIN_INTEGRANTES_MAXIMO}.`
+}
+
+/**
+ * Errores por campo de los planes (`CON_KIT.precio`, `SIN_KIT.precioPromocional`…; vacío si es válido), con los
+ * mismos límites que el backend: un plan activo necesita precio mayor que cero y el promocional no supera al precio.
+ */
+export function validarPlanes(form: FormularioPlanes): Record<string, string> {
+  const errores: Record<string, string> = {}
+  for (const { codigo } of PLANES) {
+    const plan = form[codigo]
+    if (plan.precio !== '') {
+      const error = errorDePrecio(plan.precio)
+      if (error) errores[`${codigo}.precio`] = error
+    }
+    if (plan.activo && !(esCifra(plan.precio) && plan.precio > 0)) errores[`${codigo}.precio`] ??= 'Un plan activo necesita un precio mayor que cero.'
+    if (plan.precioPromocional !== '') {
+      const error = errorDePrecio(plan.precioPromocional)
+      if (error) errores[`${codigo}.precioPromocional`] = error
+      else if (esCifra(plan.precio) && esCifra(plan.precioPromocional) && plan.precioPromocional > plan.precio) {
+        errores[`${codigo}.precioPromocional`] = 'El promocional no puede ser mayor que el precio.'
+      }
+    }
+  }
+  return errores
+}
+
+/**
+ * Cuerpo de `planes` del alta: de cada plan con datos (activo o con precio), lo que escribió el staff. `null` si no
+ * hay ninguno (los tres nacen apagados). Se asume el formulario ya validado.
+ */
+export function planesParaAlta(form: FormularioPlanes): CambiosPlanes | null {
+  const cuerpo: CambiosPlanes = {}
+  for (const { codigo } of PLANES) {
+    const plan = form[codigo]
+    if (!plan.activo && plan.precio === '') continue
+    cuerpo[codigo] = {
+      activo: plan.activo,
+      ...(esCifra(plan.precio) ? { precio: plan.precio } : {}),
+      ...(esCifra(plan.precioPromocional) ? { precioPromocional: plan.precioPromocional } : {}),
+    }
+  }
+  return Object.keys(cuerpo).length ? cuerpo : null
+}
+
+/** Cuerpo de `planes` de `PUT delegations/:id/config` con **solo lo que cambió**; `null` si no cambió nada. */
+export function cambiosDePlanes(form: FormularioPlanes, actuales: readonly PlanDelegacion[]): CambiosPlanes | null {
+  const cuerpo: CambiosPlanes = {}
+  for (const { codigo } of PLANES) {
+    const plan = form[codigo]
+    const actual = actuales.find((candidato) => candidato.codigo === codigo)
+    const cambios: NonNullable<CambiosPlanes[CodigoPlan]> = {}
+    if (plan.activo !== (actual?.activo ?? false)) cambios.activo = plan.activo
+    if (esCifra(plan.precio) && plan.precio !== (actual?.precio ?? null)) cambios.precio = plan.precio
+    const promocionalActual = actual?.precioPromocional ?? null
+    if (esCifra(plan.precioPromocional) && plan.precioPromocional !== promocionalActual) cambios.precioPromocional = plan.precioPromocional
+    if (plan.precioPromocional === '' && promocionalActual !== null) cambios.precioPromocional = null
+    if (Object.keys(cambios).length) cuerpo[codigo] = cambios
+  }
+  return Object.keys(cuerpo).length ? cuerpo : null
+}
+
+// ─── Correo con dominio (backend spec 029) ───
+
+/** Dominio normalizado como lo guarda el backend: minúsculas y sin arroba (`''` = sin filtro). */
+export function normalizarDominio(texto: string): string {
+  return texto.trim().toLowerCase().replace(/^@+/, '')
+}
+
+const DOMINIO = /^(?!-)[a-z0-9-]+(\.[a-z0-9-]+)+$/
+
+export function errorDeDominio(texto: string): string | null {
+  const dominio = normalizarDominio(texto)
+  if (!dominio) return null
+  return DOMINIO.test(dominio) && dominio.length <= 100 ? null : 'Escribe un dominio como unac.edu.pe.'
+}
+
+/** El correo está fuera del dominio de la delegación (el staff puede inscribirlo igual: solo es un aviso). */
+export function correoFueraDeDominio(correo: string, dominio: string | null): boolean {
+  if (!dominio || !correo.trim()) return false
+  return !correo.trim().toLowerCase().endsWith(`@${dominio}`)
+}
+
+// ─── Vouchers ───
 
 export const ETIQUETA_ESTADO_PAGO: Record<EstadoPagoDelegacion, string> = {
   PENDIENTE: 'Por revisar',
@@ -260,6 +418,8 @@ export function hoyLima(ahora: Date = new Date()): string {
   return formatoFechaLima.format(ahora)
 }
 
+// ─── Integrantes ───
+
 /** Fila editable de integrante (formulario): la fila validada es `FilaParticipanteDelegacion`. */
 export interface FilaEditable extends FilaParticipanteDelegacion {
   /** Clave estable para `v-for`. */
@@ -271,18 +431,18 @@ export interface FilaEditable extends FilaParticipanteDelegacion {
 
 let contadorFilas = 0
 
-export function filaVacia(): FilaEditable {
+export function filaVacia(plan: CodigoPlan | '' = ''): FilaEditable {
   contadorFilas += 1
-  return { clave: contadorFilas, tipoDocumento: 'dni', numeroDocumento: '', nombres: '', apellidos: '', correo: '', celular: '', aviso: '', buscando: false }
+  return { clave: contadorFilas, tipoDocumento: 'dni', numeroDocumento: '', nombres: '', apellidos: '', correo: '', celular: '', plan, aviso: '', buscando: false }
 }
 
-/** Una fila está en blanco si no tiene ningún dato (se ignora al enviar). */
-export function filaEnBlanco(fila: FilaParticipanteDelegacion): boolean {
+/** Una fila está en blanco si no tiene ningún dato (se ignora al enviar; el plan precargado no cuenta). */
+export function filaEnBlanco(fila: Omit<FilaParticipanteDelegacion, 'plan'>): boolean {
   return !fila.numeroDocumento.trim() && !fila.nombres.trim() && !fila.apellidos.trim() && !fila.correo.trim() && !fila.celular.trim()
 }
 
 /** Las filas con datos, limpias y listas para enviar al backend. */
-export function filasParaEnviar(filas: FilaEditable[]): FilaParticipanteDelegacion[] {
+export function filasParaEnviar(filas: FilaEditable[]): Array<Omit<FilaParticipanteDelegacion, 'plan'> & { plan?: CodigoPlan }> {
   return filas.filter((fila) => !filaEnBlanco(fila)).map((fila) => ({
     tipoDocumento: fila.tipoDocumento,
     numeroDocumento: fila.tipoDocumento === 'dni' ? normalizarDni(fila.numeroDocumento).toUpperCase() : fila.numeroDocumento.trim().toUpperCase(),
@@ -290,187 +450,17 @@ export function filasParaEnviar(filas: FilaEditable[]): FilaParticipanteDelegaci
     apellidos: fila.apellidos.trim(),
     correo: fila.correo.trim().toLowerCase(),
     celular: fila.celular.trim(),
+    ...(fila.plan ? { plan: fila.plan } : {}),
   }))
 }
 
-/** Tarifa por modalidad a partir de los tipos de la categoría `DELEGACIONES` del evento. */
-export function tarifaDeTipos(tipos: ReadonlyArray<{ codigo: string, precio: number | null, activo: boolean }>): TarifaDelegaciones {
-  const precio = (codigo: string) => tipos.find((tipo) => tipo.activo && tipo.codigo === codigo)?.precio ?? null
-  const virtual = precio('delegacion_virtual')
-  return {
-    minIntegrantes: MIN_INTEGRANTES_POR_DEFECTO,
-    precioEstandar: precio('delegacion_general') ?? PRECIO_ESTANDAR_POR_DEFECTO,
-    precioPromocional: precio('delegacion_grupal') ?? PRECIO_PROMOCIONAL_POR_DEFECTO,
-    virtual: virtual === null ? null : { precio: virtual },
+/** Cuántos integrantes hay por plan en las filas con datos (para el estimado). Sin plan elegido cuentan en `porDefecto`. */
+export function cantidadesPorPlan(filas: readonly FilaEditable[], porDefecto: CodigoPlan | ''): Partial<Record<CodigoPlan, number>> {
+  const cantidades: Partial<Record<CodigoPlan, number>> = {}
+  for (const fila of filas) {
+    if (filaEnBlanco(fila)) continue
+    const plan = fila.plan || porDefecto
+    if (plan) cantidades[plan] = (cantidades[plan] ?? 0) + 1
   }
-}
-
-// ─── Tarifa del evento y de cada delegación (backend spec 024) ───
-
-/** Valor de un campo numérico del formulario: `''` mientras está vacío (`v-model.number`). */
-export type Cifra = number | ''
-
-export const MIN_INTEGRANTES_MAXIMO = 1000
-
-const esCifra = (valor: Cifra): valor is number => typeof valor === 'number' && Number.isFinite(valor)
-/** Los precios se guardan con hasta dos decimales. */
-const tieneCentavos = (valor: number) => Math.abs(valor * 100 - Math.round(valor * 100)) < 1e-6
-
-/** Tarifa que usa el alta y el estimado: la virtual solo se ofrece si su tipo existe y está activo. */
-export function tarifaDeAdmin(tarifa: TarifaDelegacionesAdmin): TarifaDelegaciones {
-  return {
-    minIntegrantes: tarifa.minIntegrantes,
-    precioEstandar: tarifa.presencial.precioEstandar,
-    precioPromocional: tarifa.presencial.precioPromocional,
-    virtual: tarifa.virtual?.activo ? { precio: tarifa.virtual.precio } : null,
-  }
-}
-
-/** Lo que edita el staff en «Editar tarifa». `precioVirtual` y `virtualActivo` solo cuentan si la virtual se ofrece. */
-export interface FormularioTarifa {
-  minIntegrantes: Cifra
-  precioEstandar: Cifra
-  precioPromocional: Cifra
-  precioVirtual: Cifra
-  virtualActivo: boolean
-  aplicarAExistentes: boolean
-}
-
-export function formularioDeTarifa(tarifa: TarifaDelegacionesAdmin): FormularioTarifa {
-  return {
-    minIntegrantes: tarifa.minIntegrantes,
-    precioEstandar: tarifa.presencial.precioEstandar,
-    precioPromocional: tarifa.presencial.precioPromocional,
-    precioVirtual: tarifa.virtual?.precio ?? PRECIO_VIRTUAL_POR_DEFECTO,
-    virtualActivo: tarifa.virtual?.activo ?? false,
-    aplicarAExistentes: false,
-  }
-}
-
-function errorDePrecio(valor: Cifra): string | null {
-  if (!esCifra(valor) || valor < 0) return 'Escribe un precio válido (0 o más).'
-  return tieneCentavos(valor) ? null : 'Usa hasta dos decimales.'
-}
-
-function errorDeMinimo(valor: Cifra): string | null {
-  return esCifra(valor) && Number.isInteger(valor) && valor >= 1 && valor <= MIN_INTEGRANTES_MAXIMO
-    ? null
-    : `Escribe un número entero de 1 a ${MIN_INTEGRANTES_MAXIMO}.`
-}
-
-/** Errores por campo del formulario de la tarifa (vacío si es válido). Los mismos límites que el backend. */
-export function validarTarifa(form: FormularioTarifa): Record<string, string> {
-  const errores: Record<string, string> = {}
-  const minimo = errorDeMinimo(form.minIntegrantes)
-  if (minimo) errores.minIntegrantes = minimo
-  const estandar = errorDePrecio(form.precioEstandar)
-  if (estandar) errores.precioEstandar = estandar
-  const promocional = errorDePrecio(form.precioPromocional)
-  if (promocional) errores.precioPromocional = promocional
-  else if (!estandar && esCifra(form.precioEstandar) && esCifra(form.precioPromocional) && form.precioPromocional > form.precioEstandar) {
-    errores.precioPromocional = 'El precio promocional no puede ser mayor que el estándar.'
-  }
-  if (form.virtualActivo) {
-    const virtual = errorDePrecio(form.precioVirtual)
-    if (virtual) errores.precioVirtual = virtual
-  }
-  return errores
-}
-
-/**
- * Cuerpo del `PUT events/:id/delegations/tarifa` con **solo lo que cambió**; `null` si no hay nada que guardar.
- * Sin tipo virtual (`actual.virtual === null`) el precio virtual solo se envía al encender la modalidad, porque
- * enviarlo crea el tipo. Se asume el formulario ya validado (`validarTarifa`).
- */
-export function cuerpoTarifa(form: FormularioTarifa, actual: TarifaDelegacionesAdmin): Record<string, number | boolean> | null {
-  const cuerpo: Record<string, number | boolean> = {}
-  if (esCifra(form.minIntegrantes) && form.minIntegrantes !== actual.minIntegrantes) cuerpo.minIntegrantes = form.minIntegrantes
-  if (esCifra(form.precioEstandar) && form.precioEstandar !== actual.presencial.precioEstandar) cuerpo.precioEstandar = form.precioEstandar
-  if (esCifra(form.precioPromocional) && form.precioPromocional !== actual.presencial.precioPromocional) cuerpo.precioPromocional = form.precioPromocional
-  if (actual.virtual) {
-    if (esCifra(form.precioVirtual) && form.precioVirtual !== actual.virtual.precio) cuerpo.precioVirtual = form.precioVirtual
-    if (form.virtualActivo !== actual.virtual.activo) cuerpo.virtualActivo = form.virtualActivo
-  } else if (form.virtualActivo && esCifra(form.precioVirtual)) {
-    cuerpo.virtualActivo = true
-    cuerpo.precioVirtual = form.precioVirtual
-  }
-  if (form.aplicarAExistentes) cuerpo.aplicarAExistentes = true
-  return Object.keys(cuerpo).length ? cuerpo : null
-}
-
-/** Mensaje tras guardar la tarifa: cuántas delegaciones recibieron la copia, si se pidió. */
-export function textoTarifaGuardada(delegacionesActualizadas: number, aplicoAExistentes: boolean): string {
-  if (!aplicoAExistentes) return 'Tarifa guardada. Rige para las delegaciones nuevas; las ya creadas conservan la suya.'
-  if (!delegacionesActualizadas) return 'Tarifa guardada. Ninguna delegación existente estaba sin integrantes ni vouchers.'
-  return `Tarifa guardada y aplicada a ${delegacionesActualizadas} delegación(es) sin integrantes ni vouchers.`
-}
-
-/** Valores de la tarifa del evento para una modalidad (lo que copia una delegación al crearse o al cambiar de modalidad). */
-export function tarifaParaModalidad(modalidad: ModalidadAsistencia, tarifa: TarifaDelegaciones): Pick<FormularioTarifaDelegacion, 'minIntegrantes' | 'precioEstandar' | 'precioPromocional'> {
-  if (modalidad === 'VIRTUAL') {
-    const precio = tarifa.virtual?.precio ?? PRECIO_VIRTUAL_POR_DEFECTO
-    return { minIntegrantes: tarifa.minIntegrantes, precioEstandar: precio, precioPromocional: precio }
-  }
-  return { minIntegrantes: tarifa.minIntegrantes, precioEstandar: tarifa.precioEstandar, precioPromocional: tarifa.precioPromocional }
-}
-
-/** Tarifa de una delegación en «Tarifa de esta delegación». En virtual `precioEstandar` es el precio único por persona. */
-export interface FormularioTarifaDelegacion {
-  modalidad: ModalidadAsistencia
-  minIntegrantes: Cifra
-  precioEstandar: Cifra
-  precioPromocional: Cifra
-}
-
-type TarifaDeDelegacion = Pick<Delegacion, 'modalidad' | 'minIntegrantes' | 'precioEstandar' | 'precioPromocional'>
-
-export function formularioDeTarifaDelegacion(delegacion: TarifaDeDelegacion): FormularioTarifaDelegacion {
-  return {
-    modalidad: delegacion.modalidad,
-    minIntegrantes: delegacion.minIntegrantes,
-    precioEstandar: delegacion.precioEstandar,
-    precioPromocional: delegacion.precioPromocional,
-  }
-}
-
-/** Errores por campo de la tarifa de una delegación; la virtual solo valida su precio único (y el mínimo, que no se usa). */
-export function validarTarifaDelegacion(form: FormularioTarifaDelegacion): Record<string, string> {
-  const errores: Record<string, string> = {}
-  const minimo = errorDeMinimo(form.minIntegrantes)
-  if (minimo) errores.minIntegrantes = minimo
-  const estandar = errorDePrecio(form.precioEstandar)
-  if (estandar) errores.precioEstandar = estandar
-  if (form.modalidad === 'PRESENCIAL') {
-    const promocional = errorDePrecio(form.precioPromocional)
-    if (promocional) errores.precioPromocional = promocional
-    else if (!estandar && esCifra(form.precioEstandar) && esCifra(form.precioPromocional) && form.precioPromocional > form.precioEstandar) {
-      errores.precioPromocional = 'El precio promocional no puede ser mayor que el estándar.'
-    }
-  }
-  return errores
-}
-
-/**
- * Cuerpo del `PUT delegations/:id` con la tarifa que cambió (`null` si no cambió nada). Al cambiar la modalidad se
- * envían también las tres cifras del formulario (ya precargadas con la tarifa de esa modalidad). En virtual el
- * promocional es siempre igual al estándar: no hay escalas.
- */
-export function cuerpoTarifaDelegacion(form: FormularioTarifaDelegacion, actual: TarifaDeDelegacion): Record<string, string | number> | null {
-  const cambiaModalidad = form.modalidad !== actual.modalidad
-  const promocional = form.modalidad === 'VIRTUAL' ? form.precioEstandar : form.precioPromocional
-  const cuerpo: Record<string, string | number> = {}
-  if (cambiaModalidad) cuerpo.modalidad = form.modalidad
-  if (esCifra(form.minIntegrantes) && (cambiaModalidad || form.minIntegrantes !== actual.minIntegrantes)) cuerpo.minIntegrantes = form.minIntegrantes
-  if (esCifra(form.precioEstandar) && (cambiaModalidad || form.precioEstandar !== actual.precioEstandar)) cuerpo.precioEstandar = form.precioEstandar
-  if (esCifra(promocional) && (cambiaModalidad || promocional !== actual.precioPromocional)) cuerpo.precioPromocional = promocional
-  return Object.keys(cuerpo).length ? cuerpo : null
-}
-
-/** La delegación cobra distinto de la tarifa del evento (un convenio): se marca en el detalle. */
-export function esTarifaDeConvenio(delegacion: TarifaDeDelegacion, tarifa: TarifaDelegaciones): boolean {
-  const evento = tarifaParaModalidad(delegacion.modalidad, tarifa)
-  if (delegacion.modalidad === 'VIRTUAL') return delegacion.precioEstandar !== evento.precioEstandar
-  return delegacion.minIntegrantes !== evento.minIntegrantes
-    || delegacion.precioEstandar !== evento.precioEstandar
-    || delegacion.precioPromocional !== evento.precioPromocional
+  return cantidades
 }

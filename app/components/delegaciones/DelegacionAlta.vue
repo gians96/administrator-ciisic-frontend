@@ -1,22 +1,26 @@
 <script setup lang="ts">
-import type { DelegacionDetalle, ModalidadAsistencia, Respuesta } from '~/types/api'
+import type { CodigoPlan, DelegacionDetalle, PlanDelegacion, Respuesta } from '~/types/api'
 import { aErrorApi, mensajeError } from '~/utils/errores'
 import { numero, soles } from '~/utils/formato'
 import {
-  ETIQUETA_MODALIDAD, estimarGrupo, filaVacia, filasParaEnviar, normalizarDni, type FilaEditable, type TarifaDelegaciones,
+  cantidadesPorPlan, errorDeDominio, errorDeMinimo, estimarGrupo, ETIQUETA_PLAN, filaVacia, filasParaEnviar, MIN_INTEGRANTES_POR_DEFECTO,
+  normalizarDni, normalizarDominio, PLANES, planesParaAlta, planesVacios, validarPlanes, type Cifra, type FilaEditable, type FormularioPlanes,
 } from '~/utils/delegaciones'
 
-const props = defineProps<{ abierto: boolean, eventoId: number, tarifa: TarifaDelegaciones }>()
+const props = defineProps<{ abierto: boolean, eventoId: number }>()
 const emit = defineEmits<{ cerrar: [], creada: [DelegacionDetalle] }>()
 
 const { api } = useApi()
 const { buscar } = useDni()
 const toast = useToast()
+const auth = useAuthStore()
+
+/** Planes, precios, dominio y link individual los fija solo quien gestiona delegaciones (Owner y Administrador). */
+const puedeConfigurar = computed(() => auth.puede('delegaciones.gestionar'))
 
 const form = reactive({
   nombre: '',
   institucion: '',
-  modalidad: 'PRESENCIAL' as ModalidadAsistencia,
   tipoDocumento: 'dni' as 'dni' | 'ce',
   numeroDocumento: '',
   nombres: '',
@@ -24,18 +28,30 @@ const form = reactive({
   correo: '',
   celular: '',
   esIntegrante: false,
+  planDelegado: '' as CodigoPlan | '',
+  dominio: '',
+  inscripcionIndividual: false,
 })
+const planes = ref<FormularioPlanes>(planesVacios())
+const minIntegrantes = ref<Cifra>(MIN_INTEGRANTES_POR_DEFECTO)
 const filas = ref<FilaEditable[]>([filaVacia()])
 const errores = ref<Record<string, string>>({})
+const erroresConfig = ref<Record<string, string>>({})
 const guardando = ref(false)
 const buscandoDelegado = ref(false)
 const avisoDelegado = ref('')
 
 watch(() => props.abierto, (abierto) => {
   if (!abierto) return
-  Object.assign(form, { nombre: '', institucion: '', modalidad: 'PRESENCIAL', tipoDocumento: 'dni', numeroDocumento: '', nombres: '', apellidos: '', correo: '', celular: '', esIntegrante: false })
+  Object.assign(form, {
+    nombre: '', institucion: '', tipoDocumento: 'dni', numeroDocumento: '', nombres: '', apellidos: '', correo: '', celular: '',
+    esIntegrante: false, planDelegado: '', dominio: '', inscripcionIndividual: false,
+  })
+  planes.value = planesVacios()
+  minIntegrantes.value = MIN_INTEGRANTES_POR_DEFECTO
   filas.value = [filaVacia()]
   errores.value = {}
+  erroresConfig.value = {}
   avisoDelegado.value = ''
 })
 
@@ -60,25 +76,70 @@ function alSalirDelDocumento() {
   void alEscribirDocumento()
 }
 
+/** Planes que ya admiten integrantes: los activos con precio. Sin ellos (la Comisión no los fija) no hay integrantes que cargar. */
+const planesActivos = computed<CodigoPlan[]>(() => (puedeConfigurar.value
+  ? PLANES.filter(({ codigo }) => planes.value[codigo].activo && Number(planes.value[codigo].precio) > 0).map(({ codigo }) => codigo)
+  : []))
+const planUnico = computed<CodigoPlan | ''>(() => (planesActivos.value.length === 1 ? (planesActivos.value[0] ?? '') : ''))
+
 const integrantes = computed(() => filasParaEnviar(filas.value))
 const cantidad = computed(() => integrantes.value.length + (form.esIntegrante ? 1 : 0))
-const estimado = computed(() => estimarGrupo(form.modalidad, cantidad.value, props.tarifa))
-const virtualDisponible = computed(() => props.tarifa.virtual !== null)
+
+/** Los planes del formulario con la forma de los del servidor, solo para estimar el total en vivo. */
+const planesParaEstimar = computed<PlanDelegacion[]>(() => PLANES.map(({ codigo }) => {
+  const plan = planes.value[codigo]
+  return {
+    codigo,
+    tipoInscripcionId: 0,
+    etiqueta: ETIQUETA_PLAN[codigo],
+    modalidad: codigo === 'VIRTUAL' ? 'VIRTUAL' : 'PRESENCIAL',
+    activo: plan.activo,
+    precio: typeof plan.precio === 'number' ? plan.precio : 0,
+    precioPromocional: typeof plan.precioPromocional === 'number' ? plan.precioPromocional : null,
+    precioUnitario: null,
+    integrantes: 0,
+  }
+}))
+const estimado = computed(() => {
+  if (!puedeConfigurar.value || !planesActivos.value.length || !cantidad.value) return null
+  const cantidades = cantidadesPorPlan(filas.value, planUnico.value)
+  if (form.esIntegrante) {
+    const plan = form.planDelegado || planUnico.value
+    if (plan) cantidades[plan] = (cantidades[plan] ?? 0) + 1
+  }
+  return estimarGrupo(planesParaEstimar.value.filter((plan) => plan.activo), cantidades, typeof minIntegrantes.value === 'number' ? minIntegrantes.value : MIN_INTEGRANTES_POR_DEFECTO)
+})
 
 /** Errores del backend sin el prefijo de la sección (`representante.correo` → `correo`). */
 const erroresDelegado = computed(() => Object.fromEntries(Object.entries(errores.value).filter(([campo]) => campo.startsWith('representante.')).map(([campo, texto]) => [campo.replace('representante.', ''), texto])))
 const erroresFilas = computed(() => Object.fromEntries(Object.entries(errores.value).filter(([campo]) => campo.startsWith('participantes['))))
 
+/** Errores de la configuración (planes, mínimo y dominio) antes de enviar: los mismos límites que el backend. */
+function validarConfiguracion(): Record<string, string> {
+  if (!puedeConfigurar.value) return {}
+  const resultado = validarPlanes(planes.value)
+  const minimo = errorDeMinimo(minIntegrantes.value)
+  if (minimo) resultado.minIntegrantes = minimo
+  const dominio = errorDeDominio(form.dominio)
+  if (dominio) resultado.dominioCorreo = dominio
+  return resultado
+}
+
 async function guardar() {
-  guardando.value = true
   errores.value = {}
+  erroresConfig.value = validarConfiguracion()
+  if (Object.keys(erroresConfig.value).length) {
+    toast.error('Revisa los planes y la configuración: hay campos por corregir.')
+    return
+  }
+  guardando.value = true
   try {
+    const dominio = normalizarDominio(form.dominio)
     const respuesta = await api<Respuesta<DelegacionDetalle>>(`events/${props.eventoId}/delegations`, {
       method: 'POST',
       body: {
         nombre: form.nombre.trim(),
         institucion: form.institucion.trim() || null,
-        modalidad: form.modalidad,
         representante: {
           nombres: form.nombres.trim(),
           apellidos: form.apellidos.trim(),
@@ -87,11 +148,20 @@ async function guardar() {
           correo: form.correo.trim().toLowerCase(),
           celular: form.celular.trim(),
           esIntegrante: form.esIntegrante,
+          ...(form.esIntegrante && (form.planDelegado || planUnico.value) ? { plan: form.planDelegado || planUnico.value } : {}),
         },
         participantes: integrantes.value,
+        ...(puedeConfigurar.value
+          ? {
+              planes: planesParaAlta(planes.value) ?? undefined,
+              minIntegrantes: minIntegrantes.value,
+              dominioCorreo: dominio || undefined,
+              inscripcionIndividual: form.inscripcionIndividual || undefined,
+            }
+          : {}),
       },
     })
-    toast.exito('Delegación creada. Copia su link para enviárselo al delegado.')
+    toast.exito(puedeConfigurar.value ? 'Delegación creada. Copia su link para enviárselo al delegado.' : 'Delegación creada. Un Owner o Administrador debe configurar sus planes y precios.')
     emit('creada', respuesta.data)
   } catch (error) {
     errores.value = aErrorApi(error).fields ?? {}
@@ -103,7 +173,7 @@ async function guardar() {
 </script>
 
 <template>
-  <AppModal :abierto="abierto" titulo="Nueva delegación" descripcion="Registra al delegado y, si ya los tienes, a sus integrantes. Se genera un link para que el delegado complete o amplíe su grupo." ancho="xl" @cerrar="emit('cerrar')">
+  <AppModal :abierto="abierto" titulo="Nueva delegación" descripcion="Registra al delegado y define los planes de la delegación. Se genera un link para que el delegado complete o amplíe su grupo." ancho="xl" @cerrar="emit('cerrar')">
     <form id="form-delegacion-alta" class="space-y-6" @submit.prevent="guardar">
       <section class="space-y-3">
         <h3 class="kicker">Delegado</h3>
@@ -133,6 +203,12 @@ async function guardar() {
             <input v-model="form.esIntegrante" type="checkbox" class="size-4 rounded">
             El delegado también asiste (cuenta como integrante)
           </label>
+          <AppField v-if="form.esIntegrante && planesActivos.length > 1" label="Plan del delegado" for="alta-plan-delegado" required :error="erroresDelegado.plan">
+            <select id="alta-plan-delegado" v-model="form.planDelegado" class="field-control">
+              <option value="" disabled>Elige…</option>
+              <option v-for="plan in planesActivos" :key="plan" :value="plan">{{ ETIQUETA_PLAN[plan] }}</option>
+            </select>
+          </AppField>
         </div>
       </section>
 
@@ -146,33 +222,41 @@ async function guardar() {
             <input id="alta-institucion" v-model="form.institucion" class="field-control" maxlength="191" placeholder="Universidad Nacional de Huancavelica">
           </AppField>
         </div>
-        <fieldset>
-          <legend class="field-label">Cómo asiste</legend>
-          <div class="mt-1 flex flex-wrap gap-3">
-            <label v-for="modalidad in (['PRESENCIAL', 'VIRTUAL'] as const)" :key="modalidad" class="flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm" :class="modalidad === 'VIRTUAL' && !virtualDisponible ? 'opacity-50' : 'cursor-pointer'">
-              <input v-model="form.modalidad" type="radio" name="alta-modalidad" :value="modalidad" :disabled="modalidad === 'VIRTUAL' && !virtualDisponible">
-              {{ ETIQUETA_MODALIDAD[modalidad] }}
-              <span class="text-xs text-slate-400">
-                {{ modalidad === 'PRESENCIAL' ? `${soles(tarifa.precioEstandar)} · ${soles(tarifa.precioPromocional)} desde ${tarifa.minIntegrantes}` : (tarifa.virtual ? `${soles(tarifa.virtual.precio)} todos` : 'sin tipo') }}
-              </span>
-            </label>
+      </section>
+
+      <template v-if="puedeConfigurar">
+        <section class="space-y-3">
+          <h3 class="kicker">Planes y precios</h3>
+          <p class="text-xs text-slate-400">Cada integrante elige uno de los planes activos. Lo que no actives no se ofrece; puedes cambiarlo después en el detalle.</p>
+          <PlanesEditor v-model="planes" v-model:min-integrantes="minIntegrantes" :errores="erroresConfig" prefijo="alta" />
+        </section>
+
+        <section class="space-y-3">
+          <h3 class="kicker">Correo y link individual</h3>
+          <div class="grid gap-4 md:grid-cols-2">
+            <AppField label="Dominio del correo" for="alta-dominio" :error="erroresConfig.dominioCorreo || errores.dominioCorreo" hint="Opcional. Con unac.edu.pe solo se aceptan correos @unac.edu.pe en los links; el staff puede inscribir otros.">
+              <input id="alta-dominio" v-model="form.dominio" class="field-control" maxlength="100" placeholder="unac.edu.pe" autocomplete="off">
+            </AppField>
+            <div class="self-end pb-1">
+              <AppSwitch v-model="form.inscripcionIndividual" label="Cada integrante se inscribe con su link" descripcion="Además del link del delegado, genera un link individual para compartir con el grupo." />
+            </div>
           </div>
-          <p v-if="!virtualDisponible" class="field-hint">La modalidad virtual no se ofrece: actívala con «Editar tarifa» en esta pestaña (o crea el tipo <span class="font-mono">delegacion_virtual</span> en Tipos de inscripción).</p>
-        </fieldset>
-      </section>
+        </section>
+      </template>
+      <p v-else class="rounded-xl bg-white/5 px-4 py-3 text-sm text-slate-300">
+        Los planes, precios, dominio del correo y link individual los configura un Owner o Administrador. Hasta entonces la delegación no admite integrantes.
+      </p>
 
-      <section class="space-y-3">
+      <section v-if="planesActivos.length" class="space-y-3">
         <h3 class="kicker">Integrantes <span class="font-normal normal-case text-slate-400">(opcional: se pueden agregar después)</span></h3>
-        <FilasIntegrantes v-model="filas" :errores="erroresFilas" :desfase="form.esIntegrante ? 1 : 0" />
+        <FilasIntegrantes v-model="filas" :planes="planesActivos" :dominio="normalizarDominio(form.dominio) || null" :errores="erroresFilas" :desfase="form.esIntegrante ? 1 : 0" />
       </section>
 
-      <p class="rounded-xl px-4 py-3 text-sm" :class="estimado.faltan === null && form.modalidad === 'PRESENCIAL' && cantidad ? 'bg-emerald-400/10 text-emerald-200' : 'bg-white/5 text-slate-300'" aria-live="polite">
-        <span class="font-semibold text-white">{{ numero(cantidad) }}</span> integrante(s) ×
-        <span class="font-semibold text-white">{{ soles(estimado.precioUnitario) }}</span> =
+      <p v-if="estimado" class="rounded-xl px-4 py-3 text-sm" :class="estimado.faltan === null ? 'bg-emerald-400/10 text-emerald-200' : 'bg-white/5 text-slate-300'" aria-live="polite">
+        <span class="font-semibold text-white">{{ numero(estimado.integrantes) }}</span> integrante(s) =
         <span class="text-lg font-bold text-white">{{ soles(estimado.total) }}</span>
-        <template v-if="estimado.faltan !== null"> · faltan {{ estimado.faltan }} para {{ soles(tarifa.precioPromocional) }} por persona.</template>
-        <template v-else-if="form.modalidad === 'PRESENCIAL' && cantidad"> · tarifa promocional aplicada.</template>
-        <span class="block text-xs text-slate-400">Estimado: el servidor calcula el monto definitivo.</span>
+        <template v-if="estimado.faltan !== null"> · faltan {{ estimado.faltan }} para el precio promocional.</template>
+        <span class="block text-xs text-slate-400">Estimado: el servidor calcula el monto definitivo según el plan de cada integrante.</span>
       </p>
       <p v-if="errores.body" class="text-sm text-red-300">{{ errores.body }}</p>
     </form>
