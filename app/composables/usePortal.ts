@@ -1,5 +1,5 @@
 import type { NitroFetchOptions } from 'nitropack'
-import { leerCuerpoDeError, nombreDeArchivo } from '~/utils/descargas'
+import { guardarArchivo, leerCuerpoDeError, nombreDeArchivo } from '~/utils/descargas'
 import { aErrorApi } from '~/utils/errores'
 import { datosDeImagen } from '~/utils/fotocheck'
 import { reaccionPortalAError, redireccionPara, rutaLoginTrasCierre } from '~/utils/sesion'
@@ -62,14 +62,7 @@ export function usePortal() {
     })
     const archivo: unknown = respuesta._data
     if (!(archivo instanceof Blob)) throw Object.assign(new Error('Respuesta sin archivo'), { status: 502 })
-    const enlace = document.createElement('a')
-    enlace.href = URL.createObjectURL(archivo)
-    enlace.download = nombreDeArchivo(respuesta.headers.get('content-disposition'), respaldo)
-    document.body.appendChild(enlace)
-    enlace.click()
-    enlace.remove()
-    // Safari necesita que la URL siga viva un momento después del clic
-    setTimeout(() => URL.revokeObjectURL(enlace.href), 30_000)
+    guardarArchivo(archivo, nombreDeArchivo(respuesta.headers.get('content-disposition'), respaldo))
   }
 
   /**

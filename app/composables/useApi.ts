@@ -1,4 +1,5 @@
 import type { NitroFetchOptions } from 'nitropack'
+import { guardarArchivo, leerCuerpoDeError, nombreDeArchivo } from '~/utils/descargas'
 import { aErrorApi } from '~/utils/errores'
 import { reaccionAError, redireccionPara, rutaLoginTrasCierre } from '~/utils/sesion'
 
@@ -42,20 +43,42 @@ function iniciarReaccion(forzar: boolean, recargarEventos: boolean): Promise<voi
  * casos el error se relanza para que la pantalla lo muestre.
  */
 export function useApi() {
+  /** Reacciona al error de una llamada (login, releer acceso); quien llama lo relanza para mostrarlo. */
+  async function alFallar(error: unknown, silenciar401?: boolean): Promise<void> {
+    const e = aErrorApi(error)
+    const reaccion = reaccionAError(e, silenciar401)
+    if (reaccion === 'LOGIN') {
+      useAuthStore().limpiar()
+      await navigateTo(rutaLoginTrasCierre(e.code, useRouter().currentRoute.value.fullPath))
+    } else if (reaccion === 'RELEER_ACCESO' && !reaccionEnCurso) {
+      await iniciarReaccion(false, true)
+    }
+  }
+
   async function api<T>(ruta: string, opciones: Opciones = {}): Promise<T> {
     try {
       return await $fetch<T>(`/api/backend/${ruta.replace(/^\/+/, '')}`, opciones as NitroFetchOptions<string>)
     } catch (error) {
-      const e = aErrorApi(error)
-      const reaccion = reaccionAError(e, opciones.silenciar401)
-      if (reaccion === 'LOGIN') {
-        useAuthStore().limpiar()
-        await navigateTo(rutaLoginTrasCierre(e.code, useRouter().currentRoute.value.fullPath))
-      } else if (reaccion === 'RELEER_ACCESO' && !reaccionEnCurso) {
-        await iniciarReaccion(false, true)
-      }
+      await alFallar(error, opciones.silenciar401)
       throw error
     }
+  }
+
+  /**
+   * Descarga un archivo del backend (Excel, PDF) y lo entrega al navegador con el nombre que envía el
+   * servidor (`respaldo` si no trae uno). Se hace con `$fetch` en blob y no con un enlace directo para que un
+   * error (sin padrón, sesión vencida, límite de descargas) se muestre con su mensaje y no como el JSON del
+   * backend en otra pestaña.
+   */
+  async function descargar(ruta: string, respaldo: string): Promise<void> {
+    const respuesta = await $fetch.raw<Blob>(`/api/backend/${ruta.replace(/^\/+/, '')}`, { responseType: 'blob', retry: 0 }).catch(async (error: unknown) => {
+      await leerCuerpoDeError(error)
+      await alFallar(error)
+      throw error
+    })
+    const archivo: unknown = respuesta._data
+    if (!(archivo instanceof Blob)) throw Object.assign(new Error('Respuesta sin archivo'), { status: 502 })
+    guardarArchivo(archivo, nombreDeArchivo(respuesta.headers.get('content-disposition'), respaldo))
   }
 
   /**
@@ -72,5 +95,5 @@ export function useApi() {
     return `/api/backend/${ruta.replace(/^\/+/, '')}`
   }
 
-  return { api, urlArchivo, releerAcceso }
+  return { api, descargar, urlArchivo, releerAcceso }
 }

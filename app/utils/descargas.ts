@@ -31,6 +31,18 @@ export function nombreDeArchivo(contentDisposition: string | null | undefined, r
   return nombre || respaldo
 }
 
+/** Entrega el archivo descargado al navegador (como si se hiciera clic en un enlace de descarga). */
+export function guardarArchivo(archivo: Blob, nombre: string): void {
+  const enlace = document.createElement('a')
+  enlace.href = URL.createObjectURL(archivo)
+  enlace.download = nombre
+  document.body.appendChild(enlace)
+  enlace.click()
+  enlace.remove()
+  // Safari necesita que la URL siga viva un momento después del clic
+  setTimeout(() => URL.revokeObjectURL(enlace.href), 30_000)
+}
+
 /** Espera antes de reintentar solo la credencial cuando el backend está ocupado (`503 PDF_BUSY`). */
 export const ESPERA_PDF_OCUPADO_MS = 3000
 

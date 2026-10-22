@@ -25,7 +25,7 @@ import {
 
 const PERMISOS_TESORERO: Permiso[] = [
   'resumen.ver', 'inscripciones.ver', 'inscripciones.exportar', 'credenciales.reenviar', 'pagos.ver', 'inscripciones.validar',
-  'asistencia.ver', 'asistencia.exportar', 'ponencias.ver', 'mensajes.ver', 'certificados.ver',
+  'asistencia.ver', 'asistencia.exportar', 'ponencias.ver', 'mensajes.ver', 'certificados.ver', 'reportes.ver', 'reportes.exportar',
 ]
 
 const acceso = (permisos: Permiso[], alcance: AccesoPanel['alcance'] = 'EVENTO'): AccesoPanel =>
@@ -40,7 +40,7 @@ const rutas = (a: AccesoPanel | null) => menuPara(a).flatMap((seccion) => seccio
 
 describe('permisos: catálogo', () => {
   it('tiene los 33 permisos del backend, sin repetir', () => {
-    expect(PERMISOS).toHaveLength(33)
+    expect(PERMISOS).toHaveLength(36)
     expect(new Set(PERMISOS).size).toBe(PERMISOS.length)
     expect(esPermiso('pagos.ver')).toBe(true)
     expect(esPermiso('pagos.editar')).toBe(false)
@@ -112,14 +112,14 @@ describe('permisos: accesoDeSesion', () => {
 
 describe('permisos: menú', () => {
   it('Owner ve todo; Administrador, todo menos Sistema', () => {
-    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/asistencia', '/escanear', '/ponencias', '/mensajes', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', RUTA_PUERTA, '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
+    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/asistencia', '/reportes', '/escanear', '/ponencias', '/mensajes', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', RUTA_PUERTA, '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
     expect(rutas(ADMINISTRADOR)).not.toContain('/sistema')
     expect(rutas(ADMINISTRADOR)).toContain('/administradores')
   })
 
   it('Tesorero: solo el Congreso; la sección Configuración se oculta', () => {
     expect(menuPara(TESORERO).map((seccion) => seccion.titulo)).toEqual(['Congreso'])
-    expect(rutas(TESORERO)).toEqual(['/', '/inscripciones', '/asistencia', '/ponencias', '/mensajes'])
+    expect(rutas(TESORERO)).toEqual(['/', '/inscripciones', '/asistencia', '/reportes', '/ponencias', '/mensajes'])
   })
 
   it('Ponencias especializadas: programa e inscripciones con «ver»; la puerta, con «asistencia»', () => {

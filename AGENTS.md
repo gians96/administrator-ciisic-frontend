@@ -152,6 +152,15 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   delegación con `PUT delegations/:id` (en virtual el precio es único) y marca el convenio (`esTarifaDeConvenio`). El
   panel sigue sin enviar montos por inscripción. Con un backend sin la ruta (`esNoDisponible`) la tarjeta se arma con los
   tipos y no hay «Editar tarifa». **Backend 024 primero.**
+- **Reportes de seguimiento por asesor** (spec 016; backend 025): `/reportes` (`reportes.ver`) cruza el padrón de la facultad con las
+  inscripciones **en cada consulta**; el panel solo muestra y descarga (`useApi().descargar`, en blob, con el nombre que envía el
+  servidor: el de cada docente). Lógica pura en `app/utils/reportes.ts` (nombres con sufijo `Reporte` donde chocarían con
+  `utils/filtros.ts`, porque Nuxt auto-importa `app/utils`) y componentes en `app/components/reportes/`. **Pagó = inscripción aprobada**;
+  en revisión (voucher sin validar) y rechazado/cancelado no cuentan; «No pagaron» = todo lo que no es «Pagó». Asesor, ciclo, sección y
+  turno **delimitan** el grupo (indicadores, tablas y descargas); situación y búsqueda solo afectan al listado. El reporte de un docente
+  es siempre el suyo completo, sin importar los filtros. Sin `pagos.ver` llegan `monto`, `fechaPago` y `recaudado` en `null` (`conPago`
+  `false`): sin esas columnas. Excel y PDF: `reportes.exportar`; cargar el padrón (siempre «Revisar archivo» antes de confirmar, que
+  **reemplaza** el padrón): `reportes.gestionar`, solo Owner y Administrador. **Backend 025 primero.**
 - Ponencias especializadas (spec 012; **no** son los papers de `/ponencias`): sus tres pantallas están en
   `app/pages/ponencias-especializadas/` y su lógica pura en `app/utils/ponenciasEspecializadas.ts`. El programa se
   edita solo con `especializadas.gestionar`; inscribir y corregir, con `especializadas.inscribir`; la puerta
@@ -216,17 +225,17 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–015
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–016
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
 escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de
-asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
+asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable, reportes de seguimiento por asesor). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
 `backend-ciisic/specs/013-roles-permisos/contracts/`; código por correo, portal, fotocheck,
 asistencia por QR, alta de participantes y cortesías en
 `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`; modalidad virtual en
 `backend-ciisic/specs/018-modalidad-virtual/contracts/`; tipos que no admiten estudiantes UNDC en
 `backend-ciisic/specs/020-virtual-sin-estudiantes-undc/contracts/`; delegaciones con convenio en
-`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y su tarifa en `backend-ciisic/specs/024-tarifa-delegaciones/contracts/`.
+`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y su tarifa en `backend-ciisic/specs/024-tarifa-delegaciones/contracts/`; reportes por asesor en `backend-ciisic/specs/025-reportes-asesores/contracts/`.
 
 ## Antes de dar por terminado
 

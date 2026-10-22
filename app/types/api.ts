@@ -47,6 +47,7 @@ export type Permiso =
   | 'legacy.usar'
   | 'certificados.gestionar'
   | 'especializadas.gestionar'
+  | 'reportes.gestionar'
   // Por evento: las cuentas con alcance `EVENTO` los ejercen solo en sus eventos
   | 'resumen.ver'
   | 'inscripciones.ver'
@@ -67,6 +68,8 @@ export type Permiso =
   | 'especializadas.ver'
   | 'especializadas.inscribir'
   | 'especializadas.asistencia'
+  | 'reportes.ver'
+  | 'reportes.exportar'
 
 /** Acceso efectivo de la cuenta (`usuario.acceso` de la sesión, el login y Google). */
 export interface AccesoPanel {
@@ -693,4 +696,102 @@ export interface PruebaUndcApi {
   codigoHttp: number | null
   latenciaMs: number
   configuracion: ConfiguracionSistema
+}
+
+// ─── Seguimiento por asesor (spec 025 del backend, spec 016 del panel) ───
+
+/** Pagó = inscripción aprobada; en revisión = voucher enviado sin validar; rechazado incluye lo cancelado. */
+export type SituacionSeguimiento = 'PAGADO' | 'EN_REVISION' | 'RECHAZADO' | 'SIN_INSCRIPCION'
+
+/** Filtro del listado: una situación o `NO_PAGADO` (todas menos `PAGADO`). */
+export type FiltroSituacionSeguimiento = SituacionSeguimiento | 'NO_PAGADO'
+
+export interface AsesorRef {
+  id: number
+  nombre: string
+}
+
+export interface SeccionRef {
+  ciclo: string
+  seccion: string
+}
+
+export interface ContadoresSeguimiento {
+  alumnos: number
+  pagaron: number
+  enRevision: number
+  rechazados: number
+  sinInscripcion: number
+  noPagaron: number
+  /** `pagaron / alumnos` (0 a 1). */
+  avance: number
+  /** Suma de lo aprobado; `null` sin `pagos.ver`. */
+  recaudado: number | null
+}
+
+export interface ResumenCiclo extends ContadoresSeguimiento {
+  ciclo: string
+}
+
+export interface ResumenSeccion extends ContadoresSeguimiento, SeccionRef {
+  turnos: string[]
+  asesores: AsesorRef[]
+}
+
+export interface ResumenAsesor extends ContadoresSeguimiento {
+  id: number
+  nombre: string
+  secciones: SeccionRef[]
+}
+
+export interface OpcionesSeguimiento {
+  ciclos: string[]
+  secciones: SeccionRef[]
+  turnos: string[]
+  asesores: AsesorRef[]
+}
+
+export interface ResumenSeguimiento {
+  semestre: string | null
+  importadoEn: string | null
+  generadoEn: string
+  hayPadron: boolean
+  /** `false` sin `pagos.ver`: montos, fechas de pago y recaudado llegan en `null`. */
+  conPago: boolean
+  opciones: OpcionesSeguimiento
+  totales: ContadoresSeguimiento
+  porCiclo: ResumenCiclo[]
+  porSeccion: ResumenSeccion[]
+  porAsesor: ResumenAsesor[]
+  alumnosSinAsesor: number
+}
+
+export interface AlumnoSeguimiento {
+  id: number
+  codigo: string
+  documento: string
+  nombre: string
+  correo: string | null
+  celular: string | null
+  carrera: string
+  ciclo: string
+  turno: string | null
+  seccion: string
+  asesores: AsesorRef[]
+  situacion: SituacionSeguimiento
+  estadoInscripcion: CodigoEstado | null
+  inscripcionId: number | null
+  coincidencia: 'DOCUMENTO' | 'CODIGO' | 'CORREO' | null
+  monto: number | null
+  fechaPago: string | null
+}
+
+export interface ResultadoImportacionPadron {
+  semestre: string
+  estudiantes: number
+  asesores: number
+  secciones: number
+  advertencias: string[]
+  /** `false` en la simulación: no se guardó nada. */
+  aplicado: boolean
 }

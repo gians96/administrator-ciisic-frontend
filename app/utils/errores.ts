@@ -112,6 +112,15 @@ export const MENSAJES_POR_CODIGO: Readonly<Record<string, string>> = {
   VOUCHER_NOT_FOUND: 'El archivo del voucher ya no está en el servidor.',
   REGISTRATION_CLOSED: 'Las inscripciones de este evento están cerradas.',
 
+  // Reportes de seguimiento por asesor (spec 025 del backend)
+  PADRON_NOT_LOADED: 'Aún no se cargó el padrón de estudiantes de este evento. Cárgalo con el Excel de la facultad.',
+  ADVISOR_NOT_FOUND: 'El asesor ya no existe en este evento (se volvió a cargar el padrón). Actualiza la página.',
+  PADRON_FILE_INVALID: 'No se pudo leer el archivo. Sube el Excel (.xlsx) de la facultad.',
+  PADRON_SHEET_NOT_FOUND: 'El Excel no tiene una hoja «ESTUDIANTES …». Revisa que sea el archivo de la facultad.',
+  PADRON_COLUMNS_MISSING: 'La hoja de estudiantes no tiene las columnas esperadas (DNI, CODIGO, ALUMNO, CICLO y SECCIÓN).',
+  PADRON_EMPTY: 'La hoja de estudiantes no tiene alumnos.',
+  PADRON_SEMESTER_REQUIRED: 'Indica el semestre del padrón con el formato AAAA-1 o AAAA-2 (por ejemplo, 2026-2).',
+
   // Configuración del sistema
   UNDC_API_NOT_CONFIGURED: 'Falta la URL o la API key de API_UNDC. Guárdalas y vuelve a probar la conexión.',
   INVALID_URL: 'La URL no es válida: usa https (http solo para localhost) y no incluyas usuario ni contraseña.',
