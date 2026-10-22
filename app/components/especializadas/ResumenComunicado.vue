@@ -133,7 +133,7 @@ async function enviar() {
         </p>
         <p class="mt-1 text-slate-300">{{ nombres }}</p>
         <p v-if="conAviso" class="mt-2 text-xs text-slate-400">
-          {{ conCorreoTotal }} {{ conCorreoTotal === 1 ? 'tiene' : 'tienen' }} correo registrado<template v-if="sinCorreoTotal">; a {{ sinCorreoTotal }} no se le puede escribir: copia el texto y avísale por otro medio</template>.
+          {{ conCorreoTotal }} de {{ personas.length }} {{ conCorreoTotal === 1 ? 'tiene' : 'tienen' }} correo registrado<template v-if="sinCorreoTotal">; a quien no tiene, avísale por otro medio (usa «Copiar texto»)</template>.
         </p>
       </section>
 

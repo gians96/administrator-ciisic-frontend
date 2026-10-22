@@ -215,7 +215,7 @@ async function bajar() {
       <section v-if="resumen" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5" aria-label="Totales del evento">
         <AppStat etiqueta="Personas" :valor="numero(resumen.personas)" :detalle="`${numero(resumen.inscripciones)} inscripciones vigentes`" icon="heroicons:users" />
         <AppStat etiqueta="Pueden asistir" :valor="numero(resumen.pueden)" :detalle="libre ? 'Acceso libre: todas' : 'Congreso con pago aprobado'" icon="heroicons:check-badge" tono="ok" />
-        <AppStat etiqueta="No pueden" :valor="numero(resumen.noPueden)" detalle="Sin pago aprobado al congreso" icon="heroicons:no-symbol" tono="error" />
+        <AppStat etiqueta="No pueden" :valor="numero(resumen.noPueden)" :detalle="libre ? 'Con acceso libre, nadie' : 'Sin pago aprobado al congreso'" icon="heroicons:no-symbol" tono="error" />
         <AppStat etiqueta="Sin validar" :valor="numero(resumen.sinValidar)" detalle="Entraron antes de la validación" icon="heroicons:shield-exclamation" tono="warn" />
         <AppStat etiqueta="Avisadas" :valor="numero(resumen.avisadas)" detalle="Ya recibieron el comunicado" icon="heroicons:envelope" tono="info" />
       </section>

@@ -5,4 +5,4 @@
 - [x] T003 `components/especializadas/ResumenComunicado.vue`: cancelar y avisar, texto editable, copiar, confirmación y resultado
 - [x] T004 Mensajes de error nuevos (`utils/errores.ts`) y pruebas Vitest (`tests/ponenciasEspecializadas.test.ts`, `tests/permisos.test.ts`)
 - [x] T005 `AGENTS.md` y `docs/overview.md`
-- [ ] T006 Probar en el navegador contra el backend local (sin enviar correos reales): filtros, elegir, cancelar sin correo, acceso libre y backend anterior
+- [x] T006 Probado en el navegador contra el backend 031 local con una BD de pruebas sin credencial de correo activa: filtros y URL, elegir a quienes no pueden, cancelar (omite a quien ya asistió), acceso libre (sin casillas), Excel y celular. Pendiente: probar contra un backend anterior
