@@ -6,9 +6,9 @@
 .cache
 dist
 
-# Dependencias (bun es el gestor del proyecto)
+# Dependencias (bun es el gestor del proyecto; package-lock.json se versiona solo para la imagen Docker y se
+# genera desde bun.lock con `bun run lock:npm`)
 node_modules
-package-lock.json
 pnpm-lock.yaml
 yarn.lock
 

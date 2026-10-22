@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
     "test": "vitest run",
+    "lock:npm": "node scripts/bun-lock-a-npm.mjs",
     "escaner:wasm": "node -e \"const fs=require('node:fs');const v=require('./node_modules/zxing-wasm/package.json').version;const d='public/zxing-wasm/'+v;fs.mkdirSync(d,{recursive:true});fs.copyFileSync('node_modules/zxing-wasm/dist/reader/zxing_reader.wasm',d+'/zxing_reader.wasm');console.log(d+'/zxing_reader.wasm')\""
   },
   "dependencies": {

@@ -24,7 +24,11 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
 
 - Nuxt 4 SPA (`ssr: false`) + servidor Nitro (BFF), **Tailwind v4 vía `@tailwindcss/vite`**
   (nunca `@nuxtjs/tailwindcss`), Pinia, `@nuxt/icon` (heroicons), chart.js, `vue-qrcode-reader`
-  (cámara del escáner, con el wasm de ZXing servido por el panel), Vitest. Gestor: **bun**.
+  (cámara del escáner, con el wasm de ZXing servido por el panel), Vitest. Gestor: **bun** en desarrollo; la
+  **imagen Docker instala con `npm ci`** (el servidor de Dokploy tiene una CPU sin SSE4.2 y Bun no arranca ahí) desde
+  `package-lock.json`, que se genera de `bun.lock` con `bun run lock:npm` (mismas versiones; ver
+  [`docs/configuracion-y-despliegue.md`](docs/configuracion-y-despliegue.md)). Cambiar dependencias = `bun install` +
+  `bun run lock:npm` + commit de ambos locks.
 - Única variable (runtime, servidor): `NUXT_BACKEND_BASE_URL` (ver [`.env.example`](.env.example)).
   El client ID de Google y la vida de la sesión vienen del backend.
 - Comandos:
@@ -34,6 +38,7 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   | Desarrollo (puerto 3001) | `bun run dev` |
   | Lint · tipos · pruebas | `bun run lint` · `bun run typecheck` · `bun run test` |
   | Build · vista previa | `bun run build` · `bun run preview` |
+  | Regenerar `package-lock.json` desde `bun.lock` (tras cambiar dependencias; lo usa la imagen Docker) | `bun run lock:npm` |
   | Copiar el wasm de ZXing del escáner a `public/zxing-wasm/<versión>/` (al actualizar `vue-qrcode-reader`) | `bun run escaner:wasm` |
 
 - Necesitas backend-ciisic en `http://localhost:3010` con un administrador (bootstrap) y, para

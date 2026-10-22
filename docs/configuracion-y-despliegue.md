@@ -51,6 +51,15 @@ No hace falta URI de redirección ni secreto. Pantalla de consentimiento en esta
 1. App nueva con el `Dockerfile` del repo, **detrás de HTTPS** (la cookie es `Secure` y la cámara
    del escáner solo funciona con HTTPS), p. ej. `admin-ciisic.episundc.pe`.
 2. Variable `NUXT_BACKEND_BASE_URL` con la URL interna del backend.
+
+> **La imagen se construye con Node/npm, no con Bun.** El Dockerfile instala con `npm ci` desde
+> `package-lock.json` porque el servidor de Dokploy tiene una CPU sin SSE4.2 y Bun no arranca ahí
+> (`this CPU is missing SSE4.2 support`, código 134). `package-lock.json` **se genera desde `bun.lock`**
+> (`bun run lock:npm`, `scripts/bun-lock-a-npm.mjs`) sin cambiar ninguna versión: la imagen instala lo mismo que
+> se desarrolla con bun. Tras cambiar dependencias: `bun install`, `bun run lock:npm` y commit de ambos locks
+> (`tests/lockNpm.test.ts` falla si se olvida). El conversor omite en el lock 5 `peerDependencies` que bun instala
+> fuera de rango (eslint 9 frente a `^10`, `vite` 8 frente a `^7` en `@vitest/mocker`…) porque `npm ci` las
+> rechaza; no cambia lo que se instala.
 3. Verificar: `/login` responde 200 (healthcheck de la imagen), inicio de sesión con contraseña y
    con Google, cookie httpOnly (el JWT no aparece en el almacenamiento del navegador), que cada
    rol (Owner, Administrador del sistema, Tesorero, Comisión) solo ve las pantallas de sus permisos

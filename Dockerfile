@@ -1,8 +1,11 @@
-# ===== Dependencias (bun) =====
-FROM oven/bun:1 AS deps
+# ===== Dependencias (npm) =====
+# Se instalan con npm y no con Bun: el servidor de Dokploy tiene una CPU sin SSE4.2 y Bun no arranca ahí
+# (`this CPU is missing SSE4.2 support`). package-lock.json se genera desde bun.lock sin cambiar ninguna
+# versión (`bun run lock:npm`), así que la imagen instala lo mismo que se desarrolla con bun.
+FROM node:22-slim AS deps
 WORKDIR /app
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile --ignore-scripts
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
 
 # ===== Build (Node) =====
 FROM node:22-slim AS build
