@@ -189,6 +189,13 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   «Sin validar», «pago no vigente») y los filtros `validacion` y `modo` (distinto de la `modalidad` de la ponencia). El alta manual y
   la puerta se rechazan con `CONGRESS_REGISTRATION_NOT_FOUND`, `CONGRESS_PAYMENT_PENDING` o `CONGRESS_REGISTRATION_REJECTED`; un virtual
   se marca con aviso ámbar y no consume aforo. El panel no decide quién puede inscribirse: lo hace el backend. **Backend 030 primero.**
+- **Resumen por persona de las ponencias** (spec 022; backend 031): `/ponencias-especializadas/resumen` (`especializadas.ver`) lista **una fila por persona** con su situación
+  actual en el congreso (`SituacionCongreso`: pago aprobado, en revisión, rechazado o no inscrito), `puede`, `validada` y `avisadoEn`; los totales (`meta.resumen`) son de todo el evento y no cambian con los
+  filtros. **El panel no decide quién puede**: solo deja elegir a quien `puede === false` (`esSeleccionable`) y el backend lo vuelve a comprobar, omite a quien ya tiene el pago aprobado o ya asistió y
+  lo informa. Cancelar y avisar o solo avisar (`especializadas.inscribir`) comparten `ResumenComunicado`: el texto es editable (`comunicadoPropuesto`; `{nombre}` lo reemplaza el servidor), se puede
+  copiar para quien no tiene correo, y se exige marcar la confirmación; hasta `MAXIMO_POR_ENVIO` (100) personas por envío. La cancelación se guarda aunque un correo falle (`resumenDeResultado`). Con el
+  acceso libre encendido todas pueden y no hay casillas. Las inscripciones canceladas por esto muestran el motivo `SIN_CONGRESO`. Un backend anterior responde 404 y la pantalla dice que aún no está
+  disponible. Los nombres de `SITUACIONES_CONGRESO` llevan sufijo porque `utils/reportes.ts` ya exporta `SITUACIONES`. **Backend 031 primero.**
 - Foto del perfil: recodificada con canvas (recorte cuadrado centrado, JPEG de 600 × 600 px, mínimo
   200 px) y con la casilla de consentimiento obligatoria; el multipart lleva solo `file` y
   `consentimiento=true`.
@@ -246,17 +253,17 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–021
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–022
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
 escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de
-asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable (reemplazada por la 021, delegaciones con planes propios), reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo, docentes con DNI y página común, ponencias especializadas solo para congresistas con pago aprobado). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
+asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable (reemplazada por la 021, delegaciones con planes propios), reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo, docentes con DNI y página común, ponencias especializadas solo para congresistas con pago aprobado, resumen por persona de las ponencias con cancelación y comunicado). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
 `backend-ciisic/specs/013-roles-permisos/contracts/`; código por correo, portal, fotocheck,
 asistencia por QR, alta de participantes y cortesías en
 `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`; modalidad virtual en
 `backend-ciisic/specs/018-modalidad-virtual/contracts/`; tipos que no admiten estudiantes UNDC en
 `backend-ciisic/specs/020-virtual-sin-estudiantes-undc/contracts/`; delegaciones con convenio en
-`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y, con planes y tarifa propios, en `backend-ciisic/specs/029-delegaciones-planes/contracts/`; reportes por asesor en `backend-ciisic/specs/025-reportes-asesores/contracts/`, los enlaces de los docentes en `backend-ciisic/specs/026-enlaces-docentes/contracts/` y los de los ciclos en `backend-ciisic/specs/027-enlaces-ciclo/contracts/` y los docentes con DNI en `backend-ciisic/specs/028-docentes-dni/contracts/`.
+`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y, con planes y tarifa propios, en `backend-ciisic/specs/029-delegaciones-planes/contracts/`; reportes por asesor en `backend-ciisic/specs/025-reportes-asesores/contracts/`, los enlaces de los docentes en `backend-ciisic/specs/026-enlaces-docentes/contracts/` y los de los ciclos en `backend-ciisic/specs/027-enlaces-ciclo/contracts/` y los docentes con DNI en `backend-ciisic/specs/028-docentes-dni/contracts/` y el resumen de ponencias en `backend-ciisic/specs/031-ponencias-resumen-personas/contracts/`.
 
 ## Antes de dar por terminado
 

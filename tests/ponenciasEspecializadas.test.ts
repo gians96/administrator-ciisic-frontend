@@ -1,32 +1,48 @@
 import { describe, expect, it } from 'vitest'
 import {
   agruparPorDia,
+  alternarSeleccion,
+  comunicadoPropuesto,
+  conCorreo,
+  cuerpoComunicado,
   cuerpoCorreccion,
   cuerpoPersona,
   cuerpoPonencia,
   duracionTexto,
   enlaceInscripciones,
   errorDePuerta,
+  esSeleccionable,
   etiquetaModo,
   etiquetaMotivoCancelacion,
   etiquetaOrigen,
   etiquetaProcedencia,
   etiquetaValidacion,
+  FILTROS_RESUMEN_VACIOS,
   filtrosPonenciaDesdeQuery,
+  filtrosResumenDesdeQuery,
   formularioPersona,
   formularioPonencia,
   hayFiltros,
+  hayFiltrosResumen,
   horaFinDesde,
+  listaDeNombres,
   mensajeDePuerta,
   minutosEntre,
   parametrosPonencia,
+  parametrosResumen,
   ponenciaDePuertaInicial,
   presenciales,
+  resumenDeResultado,
+  rutaDescargaResumen,
+  situacionDeResumen,
   textoCambioAcceso,
   textoCupo,
+  textoPuede,
   tonoCupo,
+  validarComunicado,
   validarPersona,
   validarPonencia,
+  type PersonaResumen,
   type PonenciaEspecializada,
   type ResultadoPuerta,
 } from '~/utils/ponenciasEspecializadas'
@@ -309,5 +325,147 @@ describe('etiquetas', () => {
     expect(etiquetaOrigen('OTRO')).toBe('OTRO')
     expect(etiquetaMotivoCancelacion('CAMBIO_EN_PUERTA')).toBe('Cambió de ponencia en puerta')
     expect(etiquetaMotivoCancelacion(null)).toBe('Cancelada')
+  })
+})
+
+const persona = (datos: Partial<PersonaResumen> = {}): PersonaResumen => ({
+  asistenteId: 1,
+  asistente: { id: 1, tipoDocumento: 'dni', numeroDocumento: '12345678', nombres: 'Ana María', apellidos: 'Pérez', correo: 'ana@gmail.com', celular: null, procedencia: null },
+  ponencias: 2, asistencias: 0, validada: false, avisadoEn: null, situacion: 'NO_INSCRITO', congreso: null, puede: false, ...datos,
+})
+
+describe('resumen por persona: filtros', () => {
+  it('lee la query y descarta los valores inválidos', () => {
+    expect(filtrosResumenDesdeQuery({ situacion: 'RECHAZADO', puede: 'no', validacion: 'si', modo: 'VIRTUAL', aviso: 'no', q: 'ana', page: '3' }))
+      .toEqual({ situacion: 'RECHAZADO', puede: 'no', validacion: 'si', modo: 'VIRTUAL', aviso: 'no', q: 'ana', page: 3 })
+    expect(filtrosResumenDesdeQuery({ situacion: 'X', puede: 'tal vez', modo: 'HIBRIDO', aviso: 1, page: '-2', q: 5 })).toEqual(FILTROS_RESUMEN_VACIOS)
+    expect(filtrosResumenDesdeQuery({ q: 'x'.repeat(300) }).q).toHaveLength(100)
+  })
+
+  it('arma los parámetros solo con lo que tiene valor y la página si no es la primera', () => {
+    expect(parametrosResumen({ ...FILTROS_RESUMEN_VACIOS })).toEqual({})
+    expect(parametrosResumen({ ...FILTROS_RESUMEN_VACIOS, puede: 'no', q: ' ana ', page: 2 })).toEqual({ puede: 'no', q: 'ana', page: '2' })
+    expect(parametrosResumen({ ...FILTROS_RESUMEN_VACIOS, puede: 'no', page: 2 }, false)).toEqual({ puede: 'no' })
+    expect(hayFiltrosResumen({ ...FILTROS_RESUMEN_VACIOS, page: 4 })).toBe(false)
+    expect(hayFiltrosResumen({ ...FILTROS_RESUMEN_VACIOS, aviso: 'si' })).toBe(true)
+  })
+
+  it('la descarga lleva los mismos filtros pero no la página', () => {
+    expect(rutaDescargaResumen(7, FILTROS_RESUMEN_VACIOS)).toBe('events/7/specialized-talk-attendees/export')
+    expect(rutaDescargaResumen(7, { ...FILTROS_RESUMEN_VACIOS, puede: 'no', q: 'pérez', page: 3 })).toBe('events/7/specialized-talk-attendees/export?puede=no&q=p%C3%A9rez')
+  })
+})
+
+describe('resumen por persona: situación y selección', () => {
+  it('etiqueta cada situación y no se rompe con una desconocida', () => {
+    expect(situacionDeResumen('APROBADO')).toMatchObject({ etiqueta: 'Pago aprobado', tono: 'ok' })
+    expect(situacionDeResumen('PAGO_PENDIENTE').tono).toBe('warn')
+    expect(situacionDeResumen('NO_INSCRITO').tono).toBe('error')
+    expect(situacionDeResumen('NUEVA')).toMatchObject({ etiqueta: 'NUEVA', tono: 'neutral' })
+  })
+
+  it('dice «Puede (acceso libre)» cuando puede sin tener el pago aprobado', () => {
+    expect(textoPuede(persona({ puede: false }))).toBe('No puede')
+    expect(textoPuede(persona({ puede: true, situacion: 'APROBADO' }))).toBe('Puede')
+    expect(textoPuede(persona({ puede: true, situacion: 'NO_INSCRITO' }))).toBe('Puede (acceso libre)')
+  })
+
+  it('solo se elige a quien no puede asistir', () => {
+    const sin = persona({ asistenteId: 1 })
+    const con = persona({ asistenteId: 2, puede: true, situacion: 'APROBADO' })
+    expect(esSeleccionable(sin)).toBe(true)
+    expect(esSeleccionable(con)).toBe(false)
+    expect(Object.keys(alternarSeleccion({}, [sin, con], true))).toEqual(['1'])
+  })
+
+  it('marcar y desmarcar conserva a las demás personas elegidas', () => {
+    const a = persona({ asistenteId: 1 })
+    const b = persona({ asistenteId: 2 })
+    const c = persona({ asistenteId: 3 })
+    const inicial = alternarSeleccion({}, [a], true)
+    const con = alternarSeleccion(inicial, [b, c], true)
+    expect(Object.keys(con)).toEqual(['1', '2', '3'])
+    expect(Object.keys(alternarSeleccion(con, [b], false))).toEqual(['1', '3'])
+    expect(inicial).toEqual({ 1: a })
+  })
+
+  it('sabe si tiene correo', () => {
+    expect(conCorreo(persona())).toBe(true)
+    expect(conCorreo(persona({ asistente: { ...persona().asistente, correo: '  ' } }))).toBe(false)
+    expect(conCorreo(persona({ asistente: { ...persona().asistente, correo: null } }))).toBe(false)
+  })
+
+  it('resume los nombres con «y N más»', () => {
+    expect(listaDeNombres(['Ana', 'Luis'])).toBe('Ana, Luis')
+    expect(listaDeNombres(['A', 'B', 'C', 'D', 'E', 'F', 'G'])).toBe('A, B, C, D, E y 2 más')
+  })
+})
+
+describe('resumen por persona: comunicado', () => {
+  it('propone un texto distinto al cancelar y al solo avisar, con {nombre} y el evento', () => {
+    const cancelar = comunicadoPropuesto('cancelar', 'CIISIC 2026')
+    const avisar = comunicadoPropuesto('avisar', 'CIISIC 2026')
+    expect(cancelar.mensaje).toContain('{nombre}')
+    expect(cancelar.mensaje).toContain('CIISIC 2026')
+    expect(cancelar.asunto).toContain('cancelada')
+    expect(avisar.asunto).not.toContain('cancelada')
+    expect(avisar.mensaje).not.toBe(cancelar.mensaje)
+    expect(comunicadoPropuesto('avisar', null).mensaje).toContain('el congreso')
+    for (const texto of [cancelar, avisar]) {
+      expect(texto.asunto.length).toBeLessThanOrEqual(150)
+      expect(texto.mensaje.length).toBeLessThanOrEqual(3000)
+    }
+  })
+
+  it('exige asunto y mensaje solo si se va a enviar', () => {
+    const vacio = { asunto: ' ', mensaje: '', notificar: true }
+    expect(Object.keys(validarComunicado(vacio, 'avisar')).sort()).toEqual(['asunto', 'mensaje'])
+    expect(Object.keys(validarComunicado(vacio, 'cancelar')).sort()).toEqual(['asunto', 'mensaje'])
+    expect(validarComunicado({ ...vacio, notificar: false }, 'cancelar')).toEqual({})
+    expect(validarComunicado({ asunto: 'x'.repeat(151), mensaje: 'y'.repeat(3001), notificar: true }, 'avisar')).toEqual({
+      asunto: 'El asunto admite hasta 150 caracteres.',
+      mensaje: 'El mensaje admite hasta 3000 caracteres.',
+    })
+    expect(validarComunicado({ asunto: 'Aviso', mensaje: 'Hola', notificar: true }, 'avisar')).toEqual({})
+  })
+
+  it('arma el cuerpo: sin correo no manda asunto ni mensaje', () => {
+    const form = { asunto: ' Asunto ', mensaje: ' Hola {nombre} ', notificar: true }
+    expect(cuerpoComunicado('cancelar', [3, 4], form)).toEqual({ asistenteIds: [3, 4], notificar: true, asunto: 'Asunto', mensaje: 'Hola {nombre}' })
+    expect(cuerpoComunicado('cancelar', [3], { ...form, notificar: false })).toEqual({ asistenteIds: [3], notificar: false })
+    expect(cuerpoComunicado('avisar', [3], form)).toEqual({ asistenteIds: [3], asunto: 'Asunto', mensaje: 'Hola {nombre}' })
+  })
+
+  it('cuenta lo hecho, los correos y las personas omitidas con su motivo', () => {
+    const lineas = resumenDeResultado('cancelar', {
+      personas: 3,
+      inscripciones: 4,
+      omitidas: [{ asistenteId: 8, motivo: 'PUEDE_ASISTIR' }, { asistenteId: 9, motivo: 'YA_ASISTIO' }, { asistenteId: 10, motivo: 'YA_ASISTIO' }],
+      avisos: { enviados: 2, sinCorreo: 1, fallidos: 0, sinCredencial: false },
+    }).map((l) => l.texto)
+    expect(lineas).toEqual([
+      'Se cancelaron 4 inscripciones de 3 personas.',
+      'Correo enviado a 2 personas.',
+      '1 persona no tiene correo registrado: avísales por otro medio.',
+      'Se omitió a 1 persona: ahora sí puede asistir (su pago ya está aprobado).',
+      'Se omitió a 2 personas: ya asistió a una ponencia.',
+    ])
+  })
+
+  it('avisa si no hay credencial o si un correo falló, y si no se canceló nada', () => {
+    const sinCredencial = resumenDeResultado('cancelar', { personas: 1, inscripciones: 1, omitidas: [], avisos: { enviados: 0, sinCorreo: 0, fallidos: 0, sinCredencial: true } })
+    expect(sinCredencial.map((l) => l.tono)).toEqual(['ok', 'error'])
+    expect(sinCredencial[0]?.texto).toBe('Se canceló 1 inscripción de 1 persona.')
+    const fallo = resumenDeResultado('avisar', { personas: 2, omitidas: [], avisos: { enviados: 1, sinCorreo: 0, fallidos: 1, sinCredencial: false } })
+    expect(fallo.map((l) => l.tono)).toEqual(['ok', 'error'])
+    expect(fallo[1]?.texto).toContain('La cancelación sí se guardó')
+    expect(resumenDeResultado('cancelar', { personas: 0, inscripciones: 0, omitidas: [{ asistenteId: 1, motivo: 'NO_ENCONTRADA' }], avisos: null }).map((l) => l.texto)).toEqual([
+      'No se canceló ninguna inscripción.',
+      'Se omitió a 1 persona: ya no tiene inscripciones vigentes.',
+    ])
+  })
+
+  it('el motivo SIN_CONGRESO se ve en las inscripciones canceladas', () => {
+    expect(etiquetaMotivoCancelacion('SIN_CONGRESO')).toBe('Cancelada: sin inscripción aprobada al congreso')
   })
 })

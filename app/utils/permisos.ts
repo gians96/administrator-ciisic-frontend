@@ -228,6 +228,7 @@ export const MENU: readonly SeccionMenu[] = [
     items: [
       { to: '/ponencias-especializadas', label: 'Programa', icon: 'heroicons:presentation-chart-bar', permiso: 'especializadas.ver' },
       { to: '/ponencias-especializadas/inscripciones', label: 'Inscripciones', icon: 'heroicons:clipboard-document-list', permiso: 'especializadas.ver' },
+      { to: '/ponencias-especializadas/resumen', label: 'Resumen', icon: 'heroicons:users', permiso: 'especializadas.ver' },
       { to: RUTA_PUERTA, label: 'Asistencia en puerta', icon: 'heroicons:identification', permiso: 'especializadas.asistencia' },
     ],
   },

@@ -163,7 +163,10 @@ const RESPALDO_POR_CODIGO: Readonly<Record<string, string>> = {
   CONGRESS_REGISTRATION_NOT_FOUND: 'El documento no está entre los inscritos al congreso.',
   CONGRESS_PAYMENT_PENDING: 'La inscripción al congreso aún no tiene el pago aprobado.',
   CONGRESS_REGISTRATION_REJECTED: 'La inscripción al congreso fue rechazada o cancelada.',
-
+  // Resumen por persona, cancelación y comunicado (backend spec 031)
+  FREE_ACCESS_ENABLED: 'El acceso libre está encendido: todas las personas pueden asistir, no hay a quién cancelar. Apágalo en el Programa para exigir el congreso.',
+  EMAIL_CREDENTIAL_UNAVAILABLE: 'No hay una credencial de correo activa para enviar el comunicado. Configúrala en Correo.',
+  ATTENDEES_NOT_FOUND: 'Ninguna de las personas elegidas necesita el aviso (ya pueden asistir o ya no tienen inscripciones).',
   // Archivos (foto del portal, QR de pagos)
   FILE_REQUIRED: 'Adjunta el archivo.',
   INVALID_FILE_TYPE: 'El tipo de archivo no está permitido.',

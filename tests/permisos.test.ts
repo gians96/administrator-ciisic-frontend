@@ -112,7 +112,7 @@ describe('permisos: accesoDeSesion', () => {
 
 describe('permisos: menú', () => {
   it('Owner ve todo; Administrador, todo menos Sistema', () => {
-    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/asistencia', '/delegaciones', '/reportes', '/escanear', '/ponencias', '/mensajes', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', RUTA_PUERTA, '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
+    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/asistencia', '/delegaciones', '/reportes', '/escanear', '/ponencias', '/mensajes', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen', RUTA_PUERTA, '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
     expect(rutas(ADMINISTRADOR)).not.toContain('/sistema')
     expect(rutas(ADMINISTRADOR)).toContain('/administradores')
   })
@@ -124,8 +124,8 @@ describe('permisos: menú', () => {
 
   it('Ponencias especializadas: programa e inscripciones con «ver»; la puerta, con «asistencia»', () => {
     expect(menuPara(acceso(['especializadas.ver'])).map((s) => s.titulo)).toEqual(['Ponencias especializadas'])
-    expect(rutas(acceso(['especializadas.ver']))).toEqual(['/ponencias-especializadas', '/ponencias-especializadas/inscripciones'])
-    expect(rutas(acceso(['especializadas.ver', 'especializadas.asistencia']))).toEqual(['/ponencias-especializadas', '/ponencias-especializadas/inscripciones', RUTA_PUERTA])
+    expect(rutas(acceso(['especializadas.ver']))).toEqual(['/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen'])
+    expect(rutas(acceso(['especializadas.ver', 'especializadas.asistencia']))).toEqual(['/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen', RUTA_PUERTA])
     // El Tesorero no tiene permisos de ponencias especializadas
     expect(rutas(TESORERO)).not.toContain('/ponencias-especializadas')
   })
@@ -139,7 +139,7 @@ describe('permisos: menú', () => {
 })
 
 describe('permisos: ítem activo del menú', () => {
-  const destinos = ['/', '/inscripciones', '/ponencias', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', RUTA_PUERTA, '/eventos']
+  const destinos = ['/', '/inscripciones', '/ponencias', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen', RUTA_PUERTA, '/eventos']
 
   it('marca solo el ítem de la ruta más específica', () => {
     expect(itemActivo('/', destinos)).toBe('/')

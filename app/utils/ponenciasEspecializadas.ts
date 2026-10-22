@@ -17,7 +17,7 @@ export type Modalidad = 'PRESENCIAL' | 'VIRTUAL'
 export type Procedencia = 'INTERNO' | 'EXTERNO'
 export type EstadoInscripcionPonencia = 'INSCRITO' | 'CANCELADO'
 export type OrigenInscripcion = 'LANDING' | 'STAFF' | 'PUERTA'
-export type MotivoCancelacion = 'STAFF' | 'CAMBIO_EN_PUERTA'
+export type MotivoCancelacion = 'STAFF' | 'CAMBIO_EN_PUERTA' | 'SIN_CONGRESO'
 
 export interface PonenteEspecializado {
   nombre: string
@@ -143,6 +143,7 @@ export function etiquetaOrigen(origen: string): string {
 
 export function etiquetaMotivoCancelacion(motivo: string | null | undefined): string {
   if (motivo === 'CAMBIO_EN_PUERTA') return 'Cambió de ponencia en puerta'
+  if (motivo === 'SIN_CONGRESO') return 'Cancelada: sin inscripción aprobada al congreso'
   if (motivo === 'STAFF') return 'Cancelada por el staff'
   return 'Cancelada'
 }
@@ -568,4 +569,260 @@ export function errorDePuerta(error: unknown): ErrorPuerta {
 /** Enlace a la lista de inscripciones filtrada por una ponencia. */
 export function enlaceInscripciones(ponenciaId: number): string {
   return `/ponencias-especializadas/inscripciones?ponenciaId=${ponenciaId}`
+}
+
+// ─── Resumen por persona, cancelación y comunicado (backend spec 031) ───
+
+/** Cómo está la persona en el congreso hoy: es lo que decide si puede asistir a las ponencias. */
+export type SituacionCongreso = 'APROBADO' | 'PAGO_PENDIENTE' | 'RECHAZADO' | 'NO_INSCRITO'
+
+export interface InscripcionCongresoResumen {
+  estado: string
+  tipo: string | null
+  categoria: string | null
+  modo: Modalidad
+}
+
+export interface PersonaResumen {
+  asistenteId: number
+  asistente: AsistentePonencia
+  /** Inscripciones vigentes a ponencias. */
+  ponencias: number
+  asistencias: number
+  /** Todas sus inscripciones vigentes se validaron con el congreso al registrarse. */
+  validada: boolean
+  /** Último comunicado enviado (ISO) o `null`. */
+  avisadoEn: string | null
+  situacion: SituacionCongreso
+  congreso: InscripcionCongresoResumen | null
+  /** Acceso libre o congreso con el pago aprobado. */
+  puede: boolean
+}
+
+export interface TotalesResumen {
+  personas: number
+  inscripciones: number
+  pueden: number
+  noPueden: number
+  porSituacion: Record<SituacionCongreso, number>
+  sinValidar: number
+  avisadas: number
+}
+
+export interface MetaResumen {
+  page: number
+  pageSize: number
+  total: number
+  accesoLibre: boolean
+  /** Totales de todo el evento (no dependen de los filtros). */
+  resumen: TotalesResumen
+}
+
+export const SITUACIONES_CONGRESO: ReadonlyArray<{ valor: SituacionCongreso, etiqueta: string, tono: 'ok' | 'warn' | 'error' | 'neutral', detalle: string }> = [
+  { valor: 'NO_INSCRITO', etiqueta: 'No inscrito al congreso', tono: 'error', detalle: 'No tiene inscripción al congreso con ese documento.' },
+  { valor: 'RECHAZADO', etiqueta: 'Rechazado o cancelado', tono: 'error', detalle: 'Su inscripción al congreso fue rechazada o cancelada.' },
+  { valor: 'PAGO_PENDIENTE', etiqueta: 'Pago en revisión', tono: 'warn', detalle: 'Está inscrito al congreso pero el pago aún no se aprueba.' },
+  { valor: 'APROBADO', etiqueta: 'Pago aprobado', tono: 'ok', detalle: 'Inscrito al congreso con el pago aprobado.' },
+]
+
+export function situacionDeResumen(situacion: string): (typeof SITUACIONES_CONGRESO)[number] {
+  return SITUACIONES_CONGRESO.find((s) => s.valor === situacion) ?? { valor: 'NO_INSCRITO', etiqueta: situacion, tono: 'neutral', detalle: '' }
+}
+
+/** Una persona con acceso libre «puede» aunque no esté en el congreso: se dice para no confundir. */
+export function textoPuede(persona: Pick<PersonaResumen, 'puede' | 'situacion'>): string {
+  if (!persona.puede) return 'No puede'
+  return persona.situacion === 'APROBADO' ? 'Puede' : 'Puede (acceso libre)'
+}
+
+export interface FiltrosResumen {
+  situacion: string
+  /** `si`: puede asistir; `no`: no puede. */
+  puede: string
+  /** `si`: validada con el congreso; `no`: sin validar. */
+  validacion: string
+  /** Modo con el que entró al congreso. */
+  modo: string
+  /** `si`: ya recibió el comunicado; `no`: aún no. */
+  aviso: string
+  q: string
+  page: number
+}
+
+export const FILTROS_RESUMEN_VACIOS: Readonly<FiltrosResumen> = Object.freeze({
+  situacion: '', puede: '', validacion: '', modo: '', aviso: '', q: '', page: 1,
+})
+
+const CLAVES_RESUMEN = ['situacion', 'puede', 'validacion', 'modo', 'aviso', 'q'] as const
+
+/** Lee los filtros desde la query de la ruta (valores inválidos se ignoran). */
+export function filtrosResumenDesdeQuery(query: Record<string, unknown>): FiltrosResumen {
+  const texto = (valor: unknown) => (typeof valor === 'string' ? valor : '')
+  const opcion = (valor: unknown, permitidos: readonly string[]) => (permitidos.includes(texto(valor)) ? texto(valor) : '')
+  const page = Number(texto(query.page))
+  return {
+    situacion: opcion(query.situacion, SITUACIONES_CONGRESO.map((s) => s.valor)),
+    puede: opcion(query.puede, ['si', 'no']),
+    validacion: opcion(query.validacion, ['si', 'no']),
+    modo: opcion(query.modo, ['PRESENCIAL', 'VIRTUAL']),
+    aviso: opcion(query.aviso, ['si', 'no']),
+    q: texto(query.q).slice(0, 100),
+    page: Number.isSafeInteger(page) && page > 0 ? page : 1,
+  }
+}
+
+/** Parámetros no vacíos para la API, la descarga o la URL. */
+export function parametrosResumen(filtros: FiltrosResumen, incluirPagina = true): Record<string, string> {
+  const params: Record<string, string> = {}
+  for (const clave of CLAVES_RESUMEN) {
+    const valor = filtros[clave].trim()
+    if (valor) params[clave] = valor
+  }
+  if (incluirPagina && filtros.page > 1) params.page = String(filtros.page)
+  return params
+}
+
+export function hayFiltrosResumen(filtros: FiltrosResumen): boolean {
+  return CLAVES_RESUMEN.some((clave) => filtros[clave].trim() !== '')
+}
+
+/** Ruta de la descarga en Excel con los mismos filtros de la pantalla. */
+export function rutaDescargaResumen(eventoId: number, filtros: FiltrosResumen): string {
+  const consulta = new URLSearchParams(parametrosResumen(filtros, false)).toString()
+  return `events/${eventoId}/specialized-talk-attendees/export${consulta ? `?${consulta}` : ''}`
+}
+
+/** Hasta cuántas personas admite una sola cancelación o aviso (tope del backend). */
+export const MAXIMO_POR_ENVIO = 100
+
+/** Solo se cancela o avisa a quien hoy no puede asistir. */
+export function esSeleccionable(persona: Pick<PersonaResumen, 'puede'>): boolean {
+  return !persona.puede
+}
+
+/** Marca o desmarca a las personas en la selección (por `asistenteId`) sin tocar a las demás. Solo se marca a quien es seleccionable. */
+export function alternarSeleccion(seleccion: Readonly<Record<number, PersonaResumen>>, personas: readonly PersonaResumen[], marcada: boolean): Record<number, PersonaResumen> {
+  const ids = new Set(personas.map((p) => p.asistenteId))
+  const resto = Object.fromEntries(Object.entries(seleccion).filter(([id]) => !ids.has(Number(id))))
+  if (!marcada) return resto
+  return { ...resto, ...Object.fromEntries(personas.filter(esSeleccionable).map((p) => [p.asistenteId, p])) }
+}
+
+export function conCorreo(persona: Pick<PersonaResumen, 'asistente'>): boolean {
+  return Boolean(persona.asistente.correo?.trim())
+}
+
+export type ModoComunicado = 'cancelar' | 'avisar'
+
+export interface Comunicado {
+  asunto: string
+  mensaje: string
+}
+
+/**
+ * Texto propuesto del comunicado (el staff lo edita). `{nombre}` se reemplaza en el servidor por el primer nombre
+ * de cada persona; las líneas en blanco separan párrafos.
+ */
+export function comunicadoPropuesto(modo: ModoComunicado, evento: string | null | undefined): Comunicado {
+  const nombre = evento?.trim() || 'el congreso'
+  if (modo === 'cancelar') {
+    return {
+      asunto: 'Tu inscripción a las ponencias especializadas fue cancelada',
+      mensaje: [
+        'Hola {nombre},',
+        `Las ponencias especializadas de ${nombre} son solo para quienes tienen su inscripción al congreso con el pago aprobado. No encontramos una inscripción aprobada a tu nombre, por eso cancelamos tu inscripción a las ponencias especializadas.`,
+        'Si ya te inscribiste al congreso y pagaste, o crees que se trata de un error, responde este correo con tu DNI y tu constancia de pago para revisarlo. Cuando tu pago esté aprobado podrás volver a inscribirte a las ponencias.',
+        'Gracias por tu interés.',
+      ].join('\n\n'),
+    }
+  }
+  return {
+    asunto: 'Para asistir a las ponencias especializadas necesitas tu inscripción al congreso',
+    mensaje: [
+      'Hola {nombre},',
+      `Las ponencias especializadas de ${nombre} son solo para quienes tienen su inscripción al congreso con el pago aprobado. No encontramos una inscripción aprobada a tu nombre, por lo que no podrás asistir a las ponencias en que te inscribiste.`,
+      'Si ya pagaste el congreso o crees que se trata de un error, responde este correo con tu DNI y tu constancia de pago para revisarlo. Si aún no te inscribes al congreso, hazlo en la página del evento.',
+      'Gracias por tu interés.',
+    ].join('\n\n'),
+  }
+}
+
+export interface FormComunicado extends Comunicado {
+  /** Solo al cancelar: enviar o no el comunicado por correo. */
+  notificar: boolean
+}
+
+export function validarComunicado(form: FormComunicado, modo: ModoComunicado): Record<string, string> {
+  const errores: Record<string, string> = {}
+  if (modo === 'avisar' || form.notificar) {
+    if (!form.asunto.trim()) errores.asunto = 'Escribe el asunto del correo.'
+    else if (form.asunto.trim().length > 150) errores.asunto = 'El asunto admite hasta 150 caracteres.'
+    if (!form.mensaje.trim()) errores.mensaje = 'Escribe el mensaje del comunicado.'
+    else if (form.mensaje.trim().length > 3000) errores.mensaje = 'El mensaje admite hasta 3000 caracteres.'
+  }
+  return errores
+}
+
+/** Cuerpo de `POST …/specialized-talk-attendees/cancel` o `/notify`. */
+export function cuerpoComunicado(modo: ModoComunicado, ids: readonly number[], form: FormComunicado): Record<string, unknown> {
+  const comunicado = { asunto: form.asunto.trim(), mensaje: form.mensaje.trim() }
+  if (modo === 'avisar') return { asistenteIds: [...ids], ...comunicado }
+  return form.notificar ? { asistenteIds: [...ids], notificar: true, ...comunicado } : { asistenteIds: [...ids], notificar: false }
+}
+
+export interface AvisosEnviados {
+  enviados: number
+  sinCorreo: number
+  fallidos: number
+  sinCredencial: boolean
+}
+
+export interface OmitidaDelResumen {
+  asistenteId: number
+  motivo: 'NO_ENCONTRADA' | 'PUEDE_ASISTIR' | 'YA_ASISTIO'
+}
+
+/** Respuesta de `cancel` y `notify` (`inscripciones` solo viene al cancelar). */
+export interface ResultadoComunicado {
+  personas: number
+  inscripciones?: number
+  omitidas: OmitidaDelResumen[]
+  avisos: AvisosEnviados | null
+}
+
+const MOTIVOS_OMITIDA: Readonly<Record<OmitidaDelResumen['motivo'], string>> = {
+  NO_ENCONTRADA: 'ya no tiene inscripciones vigentes',
+  PUEDE_ASISTIR: 'ahora sí puede asistir (su pago ya está aprobado)',
+  YA_ASISTIO: 'ya asistió a una ponencia',
+}
+
+/** Líneas para mostrar el resultado: qué se hizo, a cuántos se les avisó y a quién se omitió y por qué. */
+export function resumenDeResultado(modo: ModoComunicado, resultado: ResultadoComunicado): Array<{ tono: 'ok' | 'warn' | 'error', texto: string }> {
+  const lineas: Array<{ tono: 'ok' | 'warn' | 'error', texto: string }> = []
+  const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`
+  if (modo === 'cancelar') {
+    const inscripciones = resultado.inscripciones ?? 0
+    const verbo = inscripciones === 1 ? 'Se canceló' : 'Se cancelaron'
+    lineas.push(resultado.personas
+      ? { tono: 'ok', texto: `${verbo} ${plural(inscripciones, 'inscripción', 'inscripciones')} de ${plural(resultado.personas, 'persona', 'personas')}.` }
+      : { tono: 'warn', texto: 'No se canceló ninguna inscripción.' })
+  }
+  const avisos = resultado.avisos
+  if (avisos) {
+    if (avisos.sinCredencial) lineas.push({ tono: 'error', texto: 'No hay una credencial de correo activa: no se envió ningún correo. Configúrala en Correo o copia el texto y avísales por otro medio.' })
+    else if (avisos.enviados) lineas.push({ tono: 'ok', texto: `Correo enviado a ${plural(avisos.enviados, 'persona', 'personas')}.` })
+    if (avisos.sinCorreo) lineas.push({ tono: 'warn', texto: `${plural(avisos.sinCorreo, 'persona no tiene', 'personas no tienen')} correo registrado: avísales por otro medio.` })
+    if (avisos.fallidos) lineas.push({ tono: 'error', texto: `No se pudo enviar el correo a ${plural(avisos.fallidos, 'persona', 'personas')}. La cancelación sí se guardó; puedes reintentar con «Solo avisar».` })
+  }
+  for (const motivo of Object.keys(MOTIVOS_OMITIDA) as Array<OmitidaDelResumen['motivo']>) {
+    const cuantas = resultado.omitidas.filter((o) => o.motivo === motivo).length
+    if (cuantas) lineas.push({ tono: 'warn', texto: `Se omitió a ${plural(cuantas, 'persona', 'personas')}: ${MOTIVOS_OMITIDA[motivo]}.` })
+  }
+  return lineas
+}
+
+/** Nombres para el aviso previo: los primeros y «y N más». */
+export function listaDeNombres(nombres: readonly string[], maximo = 5): string {
+  if (nombres.length <= maximo) return nombres.join(', ')
+  return `${nombres.slice(0, maximo).join(', ')} y ${nombres.length - maximo} más`
 }
