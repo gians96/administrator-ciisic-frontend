@@ -1,8 +1,9 @@
-import type { AlumnoDocente, FiltroSituacionSeguimiento, SituacionSeguimiento } from '~/types/api'
+import type { AlumnoCiclo, FiltroSituacionSeguimiento, SituacionSeguimiento } from '~/types/api'
 
 /**
- * Filtros de la vista pública del docente (spec 017). Un docente atiende como mucho unas decenas de
- * estudiantes, así que el backend envía todos y la búsqueda y los filtros se hacen aquí, sin más consultas.
+ * Filtros de las vistas públicas del docente (spec 017) y del ciclo (spec 018). Un docente atiende como mucho
+ * unas decenas de estudiantes y un ciclo, un centenar o poco más, así que el backend envía todos y la búsqueda y
+ * los filtros se hacen aquí, sin más consultas. Sirven a ambas vistas: solo usan lo que las dos tienen en común.
  */
 
 export interface FiltrosDocente {
@@ -22,7 +23,7 @@ export function textoParaBuscar(valor: unknown): string {
 }
 
 /** Estudiantes que cumplen la sección, la situación (`NO_PAGADO` = todo menos «Pagó») y la búsqueda (todas las palabras). */
-export function filtrarAlumnosDocente(alumnos: readonly AlumnoDocente[], filtros: FiltrosDocente): AlumnoDocente[] {
+export function filtrarAlumnosDocente<T extends AlumnoCiclo>(alumnos: readonly T[], filtros: FiltrosDocente): T[] {
   const palabras = textoParaBuscar(filtros.q).split(' ').filter(Boolean)
   return alumnos.filter((alumno) => {
     if (filtros.seccion && claveDeSeccion(alumno.ciclo, alumno.seccion) !== filtros.seccion) return false
@@ -41,7 +42,7 @@ export interface ConteosDocente {
 }
 
 /** Cuántos estudiantes hay en cada situación (para los contadores de los filtros). */
-export function conteosDocente(alumnos: readonly AlumnoDocente[]): ConteosDocente {
+export function conteosDocente(alumnos: readonly AlumnoCiclo[]): ConteosDocente {
   const porSituacion: Record<SituacionSeguimiento, number> = { PAGADO: 0, EN_REVISION: 0, RECHAZADO: 0, SIN_INSCRIPCION: 0 }
   for (const alumno of alumnos) porSituacion[alumno.situacion] += 1
   return { todos: alumnos.length, noPagado: alumnos.length - porSituacion.PAGADO, porSituacion }

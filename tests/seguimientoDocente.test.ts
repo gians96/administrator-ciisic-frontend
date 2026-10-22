@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { AlumnoDocente } from '~/types/api'
+import type { AlumnoCiclo, AlumnoDocente } from '~/types/api'
 import { FILTROS_DOCENTE_VACIOS, claveDeSeccion, conteosDocente, filtrarAlumnosDocente, textoParaBuscar } from '~/utils/seguimientoDocente'
 
 const alumno = (codigo: string, nombre: string, situacion: AlumnoDocente['situacion'], ciclo = 'I', seccion = 'A'): AlumnoDocente =>
@@ -43,6 +43,20 @@ describe('vista del docente: filtros', () => {
   it('normaliza el texto para buscar', () => {
     expect(textoParaBuscar('  MUÑOZ   Cárdenas ')).toBe('munoz cardenas')
     expect(textoParaBuscar(null)).toBe('')
+  })
+})
+
+describe('vista del ciclo: los mismos filtros sin celular', () => {
+  const delCiclo = ALUMNOS.map(({ celular: _celular, ...resto }): AlumnoCiclo => resto)
+
+  it('filtra y cuenta a los estudiantes que no traen celular', () => {
+    expect(filtrarAlumnosDocente(delCiclo, { ...FILTROS_DOCENTE_VACIOS, seccion: claveDeSeccion('II', 'B'), situacion: 'NO_PAGADO' }).map((a) => a.codigo.slice(-1))).toEqual(['3', '4'])
+    expect(conteosDocente(delCiclo).noPagado).toBe(3)
+  })
+
+  it('devuelve el mismo tipo que recibe (no agrega el celular)', () => {
+    const [primero] = filtrarAlumnosDocente(delCiclo, FILTROS_DOCENTE_VACIOS)
+    expect('celular' in primero).toBe(false)
   })
 })
 

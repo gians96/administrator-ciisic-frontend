@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { AlumnoSeguimiento, AsesorRef, ConteosSituacion, EnlaceAsesor, Meta, Respuesta, ResumenSeguimiento } from '~/types/api'
-import { estadoDelEnlace, haceCuanto, urlEnlaceDocente, urlWhatsapp } from '~/utils/enlacesDocentes'
+import type { AlumnoSeguimiento, AsesorRef, ConteosSituacion, EnlaceAsesor, EnlaceCiclo, Meta, Respuesta, ResumenSeguimiento } from '~/types/api'
+import { estadoDelEnlace, haceCuanto, urlEnlaceCiclo, urlEnlaceDocente, urlWhatsapp } from '~/utils/enlacesDocentes'
 import { fechaDia, fechaHoraLima, numero, soles } from '~/utils/formato'
 import { mensajeError } from '~/utils/errores'
 import {
@@ -44,14 +44,15 @@ const resumen = ref<ResumenSeguimiento | null>(null)
 const alumnos = ref<AlumnoSeguimiento[]>([])
 const meta = ref<Meta | null>(null)
 const enlaces = ref<EnlaceAsesor[]>([])
+const enlacesCiclo = ref<EnlaceCiclo[]>([])
 const cargandoResumen = ref(false)
 const cargandoAlumnos = ref(false)
 /** Mensaje si no se pudo leer el resumen y no hay datos previos que mostrar. */
 const errorCarga = ref<string | null>(null)
 const descargando = ref<string | null>(null)
-const trabajandoEnlace = ref<number | null>(null)
+const trabajandoEnlace = ref<number | string | null>(null)
 const importando = ref(false)
-const verEnlaces = ref(false)
+const verEnlaces = ref<'docentes' | 'ciclos' | null>(null)
 const origen = ref('')
 /** El listado de alumnos quedó viejo mientras se miraba otra pestaña: se vuelve a pedir al volver. */
 let alumnosVencidos = true
@@ -68,6 +69,13 @@ const secciones = computed(() => seccionesDelCiclo(opciones.value, filtros.ciclo
 const hayFiltros = computed(() => filtrosActivos(filtros) > 0)
 const asesorElegido = computed(() => opciones.value?.asesores.find((asesor) => String(asesor.id) === filtros.asesorId) ?? null)
 const enlacePorAsesor = computed(() => new Map(enlaces.value.map((enlace) => [enlace.asesorId, enlace])))
+const enlacePorCiclo = computed(() => new Map(enlacesCiclo.value.map((enlace) => [enlace.ciclo.toUpperCase(), enlace])))
+/** Secciones de cada ciclo, para mostrarlas en la fila del ciclo. */
+const seccionesPorCiclo = computed(() => {
+  const mapa = new Map<string, string[]>()
+  for (const fila of resumen.value?.porSeccion ?? []) mapa.set(fila.ciclo.toUpperCase(), [...(mapa.get(fila.ciclo.toUpperCase()) ?? []), fila.seccion])
+  return mapa
+})
 
 /** Filtros puestos, como etiquetas que se pueden quitar de a una. */
 const chips = computed(() => {
@@ -95,7 +103,8 @@ const COLOR_AVANCE = { ok: 'text-emerald-300', warn: 'text-amber-300', error: 't
 const colorAvance = computed(() => COLOR_AVANCE[tonoAvance(totales.value?.avance ?? 0, totales.value?.alumnos ?? 0)])
 
 const PESTANAS = computed(() => [
-  { id: 'secciones', label: `Por ciclo y sección${resumen.value ? ` (${resumen.value.porSeccion.length})` : ''}`, icon: 'heroicons:squares-2x2' },
+  { id: 'secciones', label: `Por sección${resumen.value ? ` (${resumen.value.porSeccion.length})` : ''}`, icon: 'heroicons:squares-2x2' },
+  { id: 'ciclos', label: `Por ciclo${resumen.value ? ` (${resumen.value.porCiclo.length})` : ''}`, icon: 'heroicons:rectangle-stack' },
   { id: 'asesores', label: `Por asesor${resumen.value ? ` (${resumen.value.porAsesor.length})` : ''}`, icon: 'heroicons:user-group' },
   { id: 'alumnos', label: `Alumnos${meta.value ? ` (${numero(meta.value.total)})` : ''}`, icon: 'heroicons:list-bullet' },
 ])
@@ -160,13 +169,17 @@ async function cargarEnlaces() {
   const eventoId = eventos.seleccionadoId
   if (!eventoId || !puedeGestionar.value || !hayPadron.value) {
     enlaces.value = []
+    enlacesCiclo.value = []
     return
   }
-  try {
-    enlaces.value = (await api<Respuesta<EnlaceAsesor[]>>(`events/${eventoId}/advisory/links`)).data
-  } catch {
-    enlaces.value = []
-  }
+  const [docentes, ciclos] = await Promise.all([
+    api<Respuesta<EnlaceAsesor[]>>(`events/${eventoId}/advisory/links`).then((r) => r.data, () => [] as EnlaceAsesor[]),
+    api<Respuesta<EnlaceCiclo[]>>(`events/${eventoId}/advisory/cycle-links`).then((r) => r.data, () => [] as EnlaceCiclo[]),
+  ])
+  // Si el evento cambió mientras se leía, estas listas ya no son las de la pantalla
+  if (eventoId !== eventos.seleccionadoId) return
+  enlaces.value = docentes
+  enlacesCiclo.value = ciclos
 }
 
 function sincronizarUrl() {
@@ -218,6 +231,7 @@ watch(() => eventos.seleccionadoId, (id, anterior) => {
   alumnos.value = []
   meta.value = null
   enlaces.value = []
+  enlacesCiclo.value = []
   alumnosVencidos = true
   if (id && anterior) {
     Object.assign(filtros, FILTROS_REPORTE_VACIOS)
@@ -252,14 +266,14 @@ function verAlumnos(cambios: Partial<FiltrosReporte>) {
   vista.value = 'alumnos'
 }
 
-async function bajar(formato: FormatoReporte, asesor?: AsesorRef) {
+async function bajar(formato: FormatoReporte, asesor?: AsesorRef, ciclo?: string) {
   const eventoId = eventos.seleccionadoId
   if (!eventoId) return
-  descargando.value = `${asesor?.id ?? 'general'}:${formato}`
+  descargando.value = `${ciclo ? `ciclo-${ciclo}` : (asesor?.id ?? 'general')}:${formato}`
   try {
-    // El reporte de un asesor es siempre el suyo completo; el general respeta los filtros puestos
-    const aplicados: FiltrosReporte = asesor ? { ...FILTROS_REPORTE_VACIOS, asesorId: String(asesor.id) } : filtros
-    await descargar(rutaDeDescarga(eventoId, formato, aplicados), nombreDeRespaldo(formato, asesor?.nombre ?? asesorElegido.value?.nombre))
+    // El reporte de un asesor o de un ciclo es siempre el suyo completo; el general respeta los filtros puestos
+    const aplicados: FiltrosReporte = ciclo ? { ...FILTROS_REPORTE_VACIOS, ciclo } : asesor ? { ...FILTROS_REPORTE_VACIOS, asesorId: String(asesor.id) } : filtros
+    await descargar(rutaDeDescarga(eventoId, formato, aplicados), nombreDeRespaldo(formato, ciclo ? `Seguimiento ciclo ${ciclo}` : (asesor?.nombre ?? asesorElegido.value?.nombre)))
   } catch (error) {
     toast.error(mensajeError(error))
   } finally {
@@ -280,7 +294,28 @@ async function copiarEnlaceDe(asesor: { id: number, nombre: string }) {
     }
     if (!enlace?.token) throw new Error('No se pudo crear el enlace')
     if (await copiar(urlEnlaceDocente(origen.value, enlace.token))) toast.exito(`Enlace de ${asesor.nombre} copiado.`)
-    else toast.error('Tu navegador no permitió copiar. Abre «Enlaces de los docentes» y cópialo desde ahí.')
+    else toast.error('Tu navegador no permitió copiar. Abre «Enlaces públicos» y cópialo desde ahí.')
+  } catch (error) {
+    toast.error(mensajeError(error))
+  } finally {
+    trabajandoEnlace.value = null
+  }
+}
+
+/** Copia el enlace del ciclo; si aún no tiene, lo crea primero (un solo clic). */
+async function copiarEnlaceDeCiclo(ciclo: string) {
+  const eventoId = eventos.seleccionadoId
+  if (!eventoId || trabajandoEnlace.value !== null) return
+  trabajandoEnlace.value = `ciclo-${ciclo}`
+  try {
+    let enlace = enlacePorCiclo.value.get(ciclo.toUpperCase())
+    if (!enlace?.token) {
+      enlacesCiclo.value = (await api<Respuesta<EnlaceCiclo[]>>(`events/${eventoId}/advisory/cycle-links`, { method: 'POST', body: { ciclos: [ciclo] } })).data
+      enlace = enlacePorCiclo.value.get(ciclo.toUpperCase())
+    }
+    if (!enlace?.token) throw new Error('No se pudo crear el enlace')
+    if (await copiar(urlEnlaceCiclo(origen.value, enlace.token))) toast.exito(`Enlace del ciclo ${ciclo} copiado.`)
+    else toast.error('Tu navegador no permitió copiar. Abre «Enlaces públicos» y cópialo desde ahí.')
   } catch (error) {
     toast.error(mensajeError(error))
   } finally {
@@ -296,7 +331,7 @@ function alImportar() {
   actualizar()
 }
 
-const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token).length)
+const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token).length + enlacesCiclo.value.filter((enlace) => !enlace.token && enlace.alumnos > 0).length)
 </script>
 
 <template>
@@ -321,8 +356,8 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
           <AppMenuItem icon="heroicons:document-text" :disabled="descargando !== null" @click="bajar('pdf')">PDF</AppMenuItem>
         </AppMenu>
         <AppMenu v-if="puedeGestionar" etiqueta="Padrón y enlaces" icon="heroicons:cog-6-tooth">
-          <AppMenuItem v-if="hayPadron" icon="heroicons:link" @click="verEnlaces = true">
-            Enlaces de los docentes
+          <AppMenuItem v-if="hayPadron" icon="heroicons:link" @click="verEnlaces = 'docentes'">
+            Enlaces públicos
             <span v-if="sinEnlaces" class="ml-auto rounded-full bg-amber-400/20 px-1.5 text-xs text-amber-200 tabular-nums">{{ sinEnlaces }} sin enlace</span>
           </AppMenuItem>
           <AppMenuItem icon="heroicons:arrow-up-tray" @click="importando = true">{{ hayPadron ? 'Actualizar padrón' : 'Cargar padrón' }}</AppMenuItem>
@@ -456,7 +491,7 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
             <table class="table-base">
               <thead>
                 <tr>
-                  <th>Ciclo · sección</th>
+                  <th>Sección</th>
                   <th>Asesores</th>
                   <CabeceraContadores :con-pago="conPagos" />
                   <th><span class="sr-only">Acciones</span></th>
@@ -481,6 +516,61 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
             </table>
           </div>
           <AppEmpty v-if="!resumen.porSeccion.length" titulo="No hay secciones con estos filtros" icon="heroicons:squares-2x2" />
+        </section>
+
+        <!-- Por ciclo -->
+        <section v-else-if="vista === 'ciclos'" id="panel-ciclos" role="tabpanel" aria-labelledby="tab-ciclos" class="card overflow-hidden">
+          <div class="relative overflow-x-auto">
+            <table class="table-base">
+              <thead>
+                <tr>
+                  <th>Ciclo</th>
+                  <CabeceraContadores :con-pago="conPagos" />
+                  <th><span class="sr-only">Acciones</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="fila in resumen.porCiclo" :key="fila.ciclo">
+                  <td class="min-w-40">
+                    <p class="font-semibold text-white">Ciclo {{ fila.ciclo }}</p>
+                    <p class="text-xs text-slate-400">{{ (seccionesPorCiclo.get(fila.ciclo.toUpperCase()) ?? []).join(', ') }}</p>
+                    <p v-if="puedeGestionar && enlacesCiclo.length" class="mt-0.5 text-xs text-slate-400">
+                      <template v-if="estadoDelEnlace(enlacePorCiclo.get(fila.ciclo.toUpperCase())) === 'SIN_ENLACE'">Sin enlace</template>
+                      <template v-else-if="estadoDelEnlace(enlacePorCiclo.get(fila.ciclo.toUpperCase())) === 'SIN_ABRIR'">Enlace creado · aún no se abre</template>
+                      <template v-else>Se abrió su enlace {{ haceCuanto(enlacePorCiclo.get(fila.ciclo.toUpperCase())?.ultimoAcceso) }}</template>
+                    </p>
+                  </td>
+                  <CeldasContadores :contadores="fila" :con-pago="conPagos" />
+                  <td class="text-right whitespace-nowrap">
+                    <div class="flex justify-end gap-2">
+                      <AppButton size="sm" variant="secondary" icon="heroicons:eye" @click="verAlumnos({ ciclo: fila.ciclo, seccion: '', situacion: '' })">Alumnos</AppButton>
+                      <AppButton
+                        v-if="puedeGestionar"
+                        size="sm"
+                        variant="secondary"
+                        icon="heroicons:link"
+                        :loading="trabajandoEnlace === `ciclo-${fila.ciclo}`"
+                        :disabled="trabajandoEnlace !== null"
+                        :aria-label="`${enlacePorCiclo.get(fila.ciclo.toUpperCase())?.token ? 'Copiar' : 'Crear y copiar'} el enlace del ciclo ${fila.ciclo}`"
+                        @click="copiarEnlaceDeCiclo(fila.ciclo)"
+                      >
+                        {{ enlacePorCiclo.get(fila.ciclo.toUpperCase())?.token ? 'Enlace' : 'Crear enlace' }}
+                      </AppButton>
+                      <AppMenu v-if="puedeExportar" etiqueta="Descargar" size="sm" :loading="descargando?.startsWith(`ciclo-${fila.ciclo}:`) ?? false" :aria-label="`Descargar el reporte del ciclo ${fila.ciclo}`">
+                        <AppMenuItem icon="heroicons:table-cells" :disabled="descargando !== null" @click="bajar('xlsx', undefined, fila.ciclo)">Excel (.xlsx)</AppMenuItem>
+                        <AppMenuItem icon="heroicons:document-text" :disabled="descargando !== null" @click="bajar('pdf', undefined, fila.ciclo)">PDF</AppMenuItem>
+                      </AppMenu>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <AppEmpty v-if="!resumen.porCiclo.length" titulo="No hay ciclos con estos filtros" icon="heroicons:rectangle-stack" />
+          <p class="border-t border-white/10 px-4 py-3 text-xs text-slate-400">
+            La descarga de un ciclo es su reporte completo (todas sus secciones), sin importar los filtros.
+            <template v-if="puedeGestionar"> «Enlace» copia el enlace público del ciclo (lo crea si aún no tiene): con él se ve el avance de todo el ciclo sin iniciar sesión.</template>
+          </p>
         </section>
 
         <!-- Por asesor -->
@@ -635,13 +725,16 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
     </template>
 
     <PadronImportar :abierto="importando" :evento-id="eventos.seleccionadoId" :hay-padron="hayPadron" @cerrar="importando = false" @importado="alImportar" />
-    <EnlacesDocentes
-      :abierto="verEnlaces"
+    <EnlacesPublicos
+      :abierto="verEnlaces !== null"
+      :inicial="verEnlaces ?? 'docentes'"
       :evento-id="eventos.seleccionadoId"
-      :enlaces="enlaces"
+      :docentes="enlaces"
+      :ciclos="enlacesCiclo"
       :evento-nombre="eventos.seleccionado?.nombreCorto"
-      @cerrar="verEnlaces = false"
-      @actualizado="enlaces = $event"
+      @cerrar="verEnlaces = null"
+      @docentes-actualizados="enlaces = $event"
+      @ciclos-actualizados="enlacesCiclo = $event"
     />
   </div>
 </template>

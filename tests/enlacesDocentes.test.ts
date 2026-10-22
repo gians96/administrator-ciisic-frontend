@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   estadoDelEnlace,
   haceCuanto,
+  mensajeParaCiclo,
   mensajeParaDocente,
+  tipoDeSeguimiento,
   tokenDelHash,
+  urlEnlaceCiclo,
   urlEnlaceDocente,
   urlWhatsapp,
 } from '~/utils/enlacesDocentes'
@@ -27,6 +30,37 @@ describe('enlaces de docentes: URL y token', () => {
     expect(tokenDelHash(`#${'ñ'.repeat(43)}`)).toBeNull()
     expect(tokenDelHash(null)).toBeNull()
     expect(tokenDelHash(undefined)).toBeNull()
+  })
+})
+
+describe('enlaces de ciclos: URL, ruta y mensaje', () => {
+  it('el enlace del ciclo tiene su propia ruta y también lleva el token tras el #', () => {
+    expect(urlEnlaceCiclo('https://panel.ejemplo.pe', TOKEN)).toBe(`https://panel.ejemplo.pe/seguimiento/ciclo#${TOKEN}`)
+    expect(urlEnlaceCiclo('https://panel.ejemplo.pe///', TOKEN)).toBe(`https://panel.ejemplo.pe/seguimiento/ciclo#${TOKEN}`)
+    expect(new URL(urlEnlaceCiclo('https://panel.ejemplo.pe', TOKEN)).search).toBe('')
+    // El del docente no cambia: los ya entregados siguen valiendo
+    expect(urlEnlaceDocente('https://panel.ejemplo.pe', TOKEN)).toBe(`https://panel.ejemplo.pe/seguimiento#${TOKEN}`)
+  })
+
+  it('la página decide qué vista abrir por la ruta', () => {
+    expect(tipoDeSeguimiento('/seguimiento')).toBe('asesor')
+    expect(tipoDeSeguimiento('/seguimiento/')).toBe('asesor')
+    expect(tipoDeSeguimiento('/seguimiento/ciclo')).toBe('ciclo')
+    expect(tipoDeSeguimiento('/seguimiento/ciclo/')).toBe('ciclo')
+    expect(tipoDeSeguimiento('/seguimiento/ciclos')).toBe('asesor')
+  })
+
+  it('el estado del enlace sirve igual para un ciclo', () => {
+    expect(estadoDelEnlace({ token: null, ultimoAcceso: null })).toBe('SIN_ENLACE')
+    expect(estadoDelEnlace({ token: TOKEN, ultimoAcceso: '2026-10-22T10:00:00.000Z' })).toBe('ABIERTO')
+  })
+
+  it('el mensaje trae el ciclo, el enlace y pide no compartirlo', () => {
+    const mensaje = mensajeParaCiclo(' VI ', `https://panel.ejemplo.pe/seguimiento/ciclo#${TOKEN}`, 'VIII CIISIC 2026')
+    expect(mensaje).toContain('del ciclo VI del VIII CIISIC 2026')
+    expect(mensaje).toContain(`https://panel.ejemplo.pe/seguimiento/ciclo#${TOKEN}`)
+    expect(mensaje).toMatch(/no lo comparta/)
+    expect(mensajeParaCiclo('II', 'https://a.pe/seguimiento/ciclo#t')).not.toMatch(/ del CIISIC| del undefined/)
   })
 })
 

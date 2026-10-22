@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ENLACE_NO_VALIDO, RESPALDO_ENLACE, formatoDeDescarga, jsonDeBytes, tokenDeCuerpo } from '../server/utils/enlace-publico'
+import { ENLACE_NO_VALIDO, RESPALDO_ENLACE, RUTA_BACKEND, formatoDeDescarga, jsonDeBytes, tipoDeCuerpo, tokenDeCuerpo } from '../server/utils/enlace-publico'
 import { errorPropagado } from '../server/utils/respuestas-auth'
 
 const TOKEN = 'A'.repeat(43)
@@ -17,6 +17,14 @@ describe('BFF de los enlaces públicos', () => {
     expect(formatoDeDescarga(' xlsx ')).toBe('xlsx')
     expect(formatoDeDescarga('csv')).toBeNull()
     expect(formatoDeDescarga(5)).toBeNull()
+  })
+
+  it('la vista es la del docente por defecto o la del ciclo, y cada una va a su ruta del backend', () => {
+    expect(tipoDeCuerpo(undefined)).toBe('asesor')
+    expect(tipoDeCuerpo('asesor')).toBe('asesor')
+    expect(tipoDeCuerpo('ciclo')).toBe('ciclo')
+    for (const invalido of [null, '', 'Ciclo', 'cycle', 'advisor', 7, ['ciclo'], { tipo: 'ciclo' }]) expect(tipoDeCuerpo(invalido)).toBeNull()
+    expect(RUTA_BACKEND).toEqual({ asesor: 'public/advisor', ciclo: 'public/cycle' })
   })
 
   it('un enlace no válido responde 404 sin pistas de por qué', () => {

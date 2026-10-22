@@ -840,5 +840,36 @@ export interface VistaDocente {
   alumnos: AlumnoDocente[]
 }
 
+// ─── Enlaces públicos por ciclo (spec 027 del backend, spec 018 del panel) ───
+
+/** Enlace público de un ciclo. `token` es la credencial: solo lo recibe quien tiene `reportes.gestionar`. */
+export interface EnlaceCiclo {
+  ciclo: string
+  /** Estudiantes del ciclo en el padrón (0 si el ciclo ya no está en el padrón cargado). */
+  alumnos: number
+  /** `null`: el ciclo no tiene enlace. */
+  token: string | null
+  creadoEn: string | null
+  ultimoAcceso: string | null
+}
+
+/** Un estudiante en la vista del ciclo: como el del docente pero sin celular (la ve más gente). */
+export type AlumnoCiclo = Omit<AlumnoDocente, 'celular'>
+
+/** Lo que se ve con el enlace de un ciclo (`POST /api/publico/seguimiento` con `tipo: 'ciclo'`). */
+export interface VistaCiclo {
+  ciclo: string
+  evento: { nombre: string, nombreCorto: string }
+  semestre: string | null
+  generadoEn: string
+  totales: ContadoresPublicos
+  /** Cada sección con el nombre de sus asesores. */
+  secciones: Array<ContadoresPublicos & { ciclo: string, seccion: string, turnos: string[], asesores: string[] }>
+  alumnos: AlumnoCiclo[]
+}
+
+/** Quién abre un enlace público: el docente (`/seguimiento`) o un ciclo (`/seguimiento/ciclo`). */
+export type TipoSeguimiento = 'asesor' | 'ciclo'
+
 /** Cuántos estudiantes hay en cada situación (contadores del filtro de situación). */
 export type ConteosSituacion = Record<'todos' | 'NO_PAGADO' | SituacionSeguimiento, number>

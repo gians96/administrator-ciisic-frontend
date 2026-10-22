@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { ConteosSituacion, VistaDocente } from '~/types/api'
+import type { AlumnoCiclo, ConteosSituacion, ContadoresPublicos, VistaCiclo, VistaDocente } from '~/types/api'
 import { guardarArchivo, leerCuerpoDeError, nombreDeArchivo } from '~/utils/descargas'
 import { aErrorApi } from '~/utils/errores'
-import { tokenDelHash, urlWhatsapp } from '~/utils/enlacesDocentes'
+import { tipoDeSeguimiento, tokenDelHash, urlWhatsapp } from '~/utils/enlacesDocentes'
 import { fechaHoraLima, numero } from '~/utils/formato'
 import { etiquetaSeccion, etiquetaTurno, nombreSituacion, porcentaje, tonoSituacion } from '~/utils/reportes'
 import {
@@ -14,13 +14,19 @@ import {
 } from '~/utils/seguimientoDocente'
 
 /**
- * Vista pública del docente (spec 017; backend 026): con su enlace personal ve, sin iniciar sesión, cómo van las
- * inscripciones y pagos de sus estudiantes. El token va tras el `#` de la URL (el navegador no lo envía a ningún
- * servidor) y se pide por POST al BFF. No hay DNI, correo ni montos: solo lo necesario para dar seguimiento.
+ * Vista pública del docente (spec 017; backend 026) y del ciclo (spec 018; backend 027): con su enlace, sin iniciar
+ * sesión, se ve cómo van las inscripciones y pagos de los estudiantes del docente (`/seguimiento`) o de todo un
+ * ciclo (`/seguimiento/ciclo`). El token va tras el `#` de la URL (el navegador no lo envía a ningún servidor) y se
+ * pide por POST al BFF. No hay DNI, correo ni montos: solo lo necesario para dar seguimiento (y en el ciclo, tampoco
+ * celular).
  */
-definePageMeta({ layout: 'blank', publica: true })
+definePageMeta({ layout: 'blank', publica: true, alias: ['/seguimiento/ciclo'] })
+
+const tipo = tipoDeSeguimiento(useRoute().path)
+const esCiclo = tipo === 'ciclo'
+
 useHead({
-  title: 'Seguimiento de tus estudiantes · CIISIC',
+  title: esCiclo ? 'Seguimiento del ciclo · CIISIC' : 'Seguimiento de tus estudiantes · CIISIC',
   meta: [
     { name: 'robots', content: 'noindex, nofollow' },
     // La URL lleva el acceso: ningún enlace saliente debe conocerla
@@ -35,7 +41,11 @@ const REFRESCO_MS = 60_000
 const REFRESCO_AL_VOLVER_MS = 30_000
 
 const estado = ref<Estado>('cargando')
-const vista = ref<VistaDocente | null>(null)
+/** Un estudiante de cualquiera de las dos vistas: el celular solo llega en la del docente. */
+type AlumnoVista = AlumnoCiclo & { celular?: string | null }
+type SeccionVista = ContadoresPublicos & { ciclo: string, seccion: string, turnos: string[], asesores?: string[] }
+
+const vista = ref<VistaDocente | VistaCiclo | null>(null)
 const aviso = ref('')
 const actualizando = ref(false)
 const descargando = ref<'xlsx' | 'pdf' | null>(null)
@@ -54,7 +64,7 @@ async function cargar(silencioso = false) {
   }
   actualizando.value = true
   try {
-    const respuesta = await $fetch<{ data: VistaDocente }>('/api/publico/seguimiento', { method: 'POST', body: { token }, retry: 0 })
+    const respuesta = await $fetch<{ data: VistaDocente | VistaCiclo }>('/api/publico/seguimiento', { method: 'POST', body: { token, tipo }, retry: 0 })
     vista.value = respuesta.data
     estado.value = 'listo'
     aviso.value = ''
@@ -109,12 +119,18 @@ watch(busqueda, (valor) => {
   retardoBusqueda = setTimeout(() => { filtros.q = valor }, 200)
 })
 
+const todosLosAlumnos = computed<AlumnoVista[]>(() => vista.value?.alumnos ?? [])
+const secciones = computed<SeccionVista[]>(() => vista.value?.secciones ?? [])
+/** Quién es: el nombre del docente o el ciclo. */
+const quien = computed(() => (!vista.value ? '' : 'asesor' in vista.value ? vista.value.asesor.nombre : `Ciclo ${vista.value.ciclo}`))
+const textoSecciones = computed(() => `${numero(secciones.value.length)} ${secciones.value.length === 1 ? 'sección' : 'secciones'}`)
+
 // Los indicadores y los contadores siguen a la sección elegida; la situación y la búsqueda solo recortan la lista
-const alumnosDeLaSeccion = computed(() => filtrarAlumnosDocente(vista.value?.alumnos ?? [], { ...FILTROS_DOCENTE_VACIOS, seccion: filtros.seccion }))
+const alumnosDeLaSeccion = computed(() => filtrarAlumnosDocente(todosLosAlumnos.value, { ...FILTROS_DOCENTE_VACIOS, seccion: filtros.seccion }))
 const base = computed(() => conteosDocente(alumnosDeLaSeccion.value))
 const avance = computed(() => (base.value.todos ? base.value.porSituacion.PAGADO / base.value.todos : 0))
 const conteos = computed<ConteosSituacion>(() => ({ todos: base.value.todos, NO_PAGADO: base.value.noPagado, ...base.value.porSituacion }))
-const visibles = computed(() => filtrarAlumnosDocente(vista.value?.alumnos ?? [], filtros))
+const visibles = computed(() => filtrarAlumnosDocente(todosLosAlumnos.value, filtros))
 const hayFiltros = computed(() => Boolean(filtros.seccion || filtros.situacion || filtros.q))
 
 const COLORES_BARRA = { PAGADO: 'bg-emerald-400', EN_REVISION: 'bg-amber-400', RECHAZADO: 'bg-red-400', SIN_INSCRIPCION: 'bg-slate-600' } as const
@@ -131,10 +147,10 @@ async function bajar(formato: 'xlsx' | 'pdf') {
   if (!token || descargando.value) return
   descargando.value = formato
   try {
-    const respuesta = await $fetch.raw<Blob>('/api/publico/seguimiento/export', { method: 'POST', body: { token, formato }, responseType: 'blob', retry: 0 })
+    const respuesta = await $fetch.raw<Blob>('/api/publico/seguimiento/export', { method: 'POST', body: { token, tipo, formato }, responseType: 'blob', retry: 0 })
     const archivo: unknown = respuesta._data
     if (!(archivo instanceof Blob)) throw new Error('Respuesta sin archivo')
-    guardarArchivo(archivo, nombreDeArchivo(respuesta.headers.get('content-disposition'), `Seguimiento.${formato}`))
+    guardarArchivo(archivo, nombreDeArchivo(respuesta.headers.get('content-disposition'), `${esCiclo ? 'Seguimiento del ciclo' : 'Seguimiento'}.${formato}`))
   } catch (error) {
     await leerCuerpoDeError(error)
     aviso.value = aErrorApi(error).message
@@ -176,8 +192,8 @@ async function bajar(formato: 'xlsx' | 'pdf') {
       <header class="flex flex-wrap items-start justify-between gap-4">
         <div class="min-w-0">
           <p class="kicker">{{ vista.evento.nombreCorto }}</p>
-          <h1 class="mt-1 text-2xl leading-tight font-extrabold sm:text-3xl">Seguimiento de tus estudiantes</h1>
-          <p class="mt-1.5 text-base font-medium text-white">{{ vista.asesor.nombre }}</p>
+          <h1 class="mt-1 text-2xl leading-tight font-extrabold sm:text-3xl">{{ esCiclo ? 'Seguimiento del ciclo' : 'Seguimiento de tus estudiantes' }}</h1>
+          <p class="mt-1.5 text-base font-medium text-white">{{ quien }}<span v-if="esCiclo" class="font-normal text-slate-300"> · {{ textoSecciones }}</span></p>
           <p class="mt-0.5 text-sm text-slate-400">
             <span v-if="vista.semestre">Semestre {{ vista.semestre }} · </span>Actualizado: {{ fechaHoraLima(vista.generadoEn) }}
             <span class="hidden sm:inline"> · se actualiza solo cada minuto</span>
@@ -216,7 +232,34 @@ async function bajar(formato: 'xlsx' | 'pdf') {
 
       <!-- Filtros -->
       <section class="mt-4 space-y-3" aria-label="Filtros">
-        <div v-if="vista.secciones.length > 1" role="group" aria-label="Filtrar por ciclo y sección" class="flex flex-wrap gap-2">
+        <div v-if="esCiclo" role="group" aria-label="Secciones del ciclo" class="space-y-2">
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="text-sm font-semibold text-slate-200">Secciones <span class="font-normal text-slate-400">(pulsa una para ver solo sus estudiantes)</span></h2>
+            <button v-if="filtros.seccion" type="button" class="inline-flex items-center gap-1 text-sm text-brand-300 hover:text-brand-200" @click="filtros.seccion = ''">
+              <Icon name="heroicons:x-mark" class="size-4" aria-hidden="true" /> Ver todo el ciclo
+            </button>
+          </div>
+          <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <button
+              v-for="seccion in secciones"
+              :key="claveDeSeccion(seccion.ciclo, seccion.seccion)"
+              type="button"
+              :aria-pressed="filtros.seccion === claveDeSeccion(seccion.ciclo, seccion.seccion)"
+              class="rounded-2xl p-3.5 text-left ring-1 transition ring-inset"
+              :class="filtros.seccion === claveDeSeccion(seccion.ciclo, seccion.seccion) ? 'bg-brand-500/15 ring-brand-400/50' : 'bg-white/5 ring-white/10 hover:bg-white/10'"
+              @click="filtros.seccion = filtros.seccion === claveDeSeccion(seccion.ciclo, seccion.seccion) ? '' : claveDeSeccion(seccion.ciclo, seccion.seccion)"
+            >
+              <span class="flex items-baseline justify-between gap-2">
+                <span class="font-semibold text-white">{{ etiquetaSeccion(seccion.ciclo, seccion.seccion) }} <span v-if="seccion.turnos.length" class="text-xs font-normal text-slate-400">{{ seccion.turnos.map(etiquetaTurno).join(', ') }}</span></span>
+                <span class="text-sm font-semibold text-white tabular-nums">{{ porcentaje(seccion.avance) }}</span>
+              </span>
+              <span class="mt-0.5 block text-xs text-slate-400">{{ seccion.asesores?.length ? seccion.asesores.join(' · ') : 'Sin asesor asignado' }}</span>
+              <BarraAvance :contadores="seccion" class="mt-2.5" />
+              <span class="mt-1.5 block text-xs text-slate-400"><strong class="font-semibold text-slate-200 tabular-nums">{{ numero(seccion.pagaron) }}</strong> de <span class="tabular-nums">{{ numero(seccion.alumnos) }}</span> pagaron</span>
+            </button>
+          </div>
+        </div>
+        <div v-else-if="vista.secciones.length > 1" role="group" aria-label="Filtrar por ciclo y sección" class="flex flex-wrap gap-2">
           <button
             type="button"
             :aria-pressed="filtros.seccion === ''"
@@ -253,13 +296,13 @@ async function bajar(formato: 'xlsx' | 'pdf') {
       <!-- Lista -->
       <section class="mt-4" aria-label="Estudiantes" aria-live="polite">
         <div class="mb-2 flex items-center justify-between gap-3 text-sm text-slate-400">
-          <p><strong class="text-white tabular-nums">{{ numero(visibles.length) }}</strong> de <span class="tabular-nums">{{ numero(vista.alumnos.length) }}</span> estudiantes</p>
+          <p><strong class="text-white tabular-nums">{{ numero(visibles.length) }}</strong> de <span class="tabular-nums">{{ numero(todosLosAlumnos.length) }}</span> estudiantes</p>
           <button v-if="hayFiltros" type="button" class="inline-flex items-center gap-1 text-brand-300 hover:text-brand-200" @click="limpiar">
             <Icon name="heroicons:x-mark" class="size-4" aria-hidden="true" /> Quitar filtros
           </button>
         </div>
 
-        <AppEmpty v-if="!visibles.length" class="card" titulo="No hay estudiantes con estos filtros" descripcion="Prueba con otra sección o quita la búsqueda." icon="heroicons:magnifying-glass" />
+        <AppEmpty v-if="!visibles.length" class="card" titulo="No hay estudiantes con estos filtros" descripcion="Prueba con otra sección o situación, o quita la búsqueda." icon="heroicons:magnifying-glass" />
 
         <template v-else>
           <!-- Escritorio -->
@@ -269,7 +312,7 @@ async function bajar(formato: 'xlsx' | 'pdf') {
                 <tr>
                   <th>Estudiante</th>
                   <th>Sección</th>
-                  <th>Celular</th>
+                  <th v-if="!esCiclo">Celular</th>
                   <th>Situación</th>
                 </tr>
               </thead>
@@ -283,7 +326,7 @@ async function bajar(formato: 'xlsx' | 'pdf') {
                     <p class="font-semibold text-white">{{ etiquetaSeccion(alumno.ciclo, alumno.seccion) }}</p>
                     <p class="text-xs text-slate-400">{{ etiquetaTurno(alumno.turno) }}</p>
                   </td>
-                  <td class="whitespace-nowrap">
+                  <td v-if="!esCiclo" class="whitespace-nowrap">
                     <a v-if="urlWhatsapp(alumno.celular)" :href="urlWhatsapp(alumno.celular) ?? undefined" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 text-emerald-300 hover:text-emerald-200" :aria-label="`Escribir por WhatsApp a ${alumno.nombre}`">
                       <Icon name="heroicons:chat-bubble-left-ellipsis" class="size-4" aria-hidden="true" /> <span class="tabular-nums">{{ alumno.celular }}</span>
                     </a>
@@ -312,7 +355,8 @@ async function bajar(formato: 'xlsx' | 'pdf') {
       </section>
 
       <footer class="mt-8 border-t border-white/10 pt-4 text-xs leading-relaxed text-slate-500">
-        <p>Información confidencial de tus estudiantes. Este enlace es personal: no lo compartas. Si crees que otra persona lo tiene, pide uno nuevo a la organización del congreso.</p>
+        <p v-if="esCiclo">Información confidencial de los estudiantes del ciclo. Este enlace es de uso restringido: no lo compartas ni publiques la lista. Si crees que otra persona lo tiene, pide uno nuevo a la organización del congreso.</p>
+        <p v-else>Información confidencial de tus estudiantes. Este enlace es personal: no lo compartas. Si crees que otra persona lo tiene, pide uno nuevo a la organización del congreso.</p>
       </footer>
     </template>
   </main>

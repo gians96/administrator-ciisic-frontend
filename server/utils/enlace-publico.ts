@@ -1,8 +1,8 @@
 import type { ErrorPropagado, RespaldoError } from './respuestas-auth'
 
 /**
- * Enlaces públicos por docente (spec 017; backend 026): validaciones y errores de las rutas
- * `/api/publico/seguimiento*`, que no llevan sesión. El token llega en el cuerpo (el navegador lo lee del `#`
+ * Enlaces públicos por docente (spec 017; backend 026) y por ciclo (spec 018; backend 027): validaciones y errores de las
+ * rutas `/api/publico/seguimiento*`, que no llevan sesión. El token llega en el cuerpo (el navegador lo lee del `#`
  * de la URL) y se reenvía al backend en el encabezado `X-Link-Token`: nunca va en una URL.
  */
 
@@ -13,6 +13,17 @@ export function tokenDeCuerpo(valor: unknown): string | null {
   const token = typeof valor === 'string' ? valor.trim() : ''
   return TOKEN_ENLACE.test(token) ? token : null
 }
+
+export type TipoEnlace = 'asesor' | 'ciclo'
+
+/** Vista que se pide: la del docente (por defecto) o la de un ciclo; cualquier otro valor no es válido. */
+export function tipoDeCuerpo(valor: unknown): TipoEnlace | null {
+  if (valor === undefined) return 'asesor'
+  return valor === 'asesor' || valor === 'ciclo' ? valor : null
+}
+
+/** Ruta del backend que atiende cada vista (sin el prefijo `/api/v1`). */
+export const RUTA_BACKEND: Readonly<Record<TipoEnlace, string>> = { asesor: 'public/advisor', ciclo: 'public/cycle' }
 
 export type FormatoDescarga = 'xlsx' | 'pdf'
 
