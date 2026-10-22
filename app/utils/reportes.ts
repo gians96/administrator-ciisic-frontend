@@ -166,3 +166,11 @@ export function resumenDeFiltros(filtros: FiltrosReporte, opciones: OpcionesSegu
     filtros.q ? `«${filtros.q}»` : '',
   ].filter(Boolean).join(' · ')
 }
+
+const TURNOS: Readonly<Record<string, string>> = { M: 'Mañana', T: 'Tarde', N: 'Noche' }
+
+/** `M` → «Mañana», `T` → «Tarde», `N` → «Noche»; otro valor se muestra tal cual y vacío es «—». */
+export function etiquetaTurno(turno: string | null | undefined): string {
+  const valor = (turno ?? '').trim().toUpperCase()
+  return valor ? (TURNOS[valor] ?? valor) : '—'
+}

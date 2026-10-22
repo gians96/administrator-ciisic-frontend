@@ -7,6 +7,9 @@ import { destinoTrasLogin, redireccionPara, rutaLoginTrasCierre } from '~/utils/
  * (la cookie se conserva y la siguiente navegación lo vuelve a intentar).
  */
 export default defineNuxtRouteMiddleware(async (to) => {
+  // Páginas sin sesión (enlace de un docente): ni se pide ni se carga la sesión; las protege su token
+  if (to.meta.publica) return
+
   const auth = useAuthStore()
   if (!auth.verificado) await auth.cargarSesion()
 

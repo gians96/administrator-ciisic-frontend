@@ -161,6 +161,14 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   es siempre el suyo completo, sin importar los filtros. Sin `pagos.ver` llegan `monto`, `fechaPago` y `recaudado` en `null` (`conPago`
   `false`): sin esas columnas. Excel y PDF: `reportes.exportar`; cargar el padrón (siempre «Revisar archivo» antes de confirmar, que
   **reemplaza** el padrón): `reportes.gestionar`, solo Owner y Administrador. **Backend 025 primero.**
+- **Enlace público por docente** (spec 017; backend 026): `/seguimiento` es la **única página sin sesión** del panel (`definePageMeta({ layout: 'blank', publica: true })`;
+  el middleware global no pide ni carga la sesión). El enlace es `<origen del panel>/seguimiento#<token>`: **el token va tras el `#`** (no se envía a ningún
+  servidor ni a `Referer`), la página lo manda por `POST /api/publico/seguimiento` (y `/export`) al BFF (`server/api/publico`, `server/utils/enlace-publico.ts`) y este
+  lo reenvía al backend en `X-Link-Token` con la IP real (`ipCliente`). **Nunca pongas el token en una URL, un log, un `console` ni un `useHead` que lo
+  repita.** La vista del docente muestra solo nombre, código, ciclo, sección, turno, celular y situación (el backend no envía DNI, correo ni montos) y filtra
+  en el navegador (`app/utils/seguimientoDocente.ts`). Crear, copiar, renovar y desactivar enlaces es `reportes.gestionar`
+  (`components/reportes/EnlacesDocentes.vue`; helpers en `app/utils/enlacesDocentes.ts`). Los menús usan `AppMenu` (API `popover`: no los recortan las tablas ni los
+  diálogos). Las tablas con desplazamiento llevan `relative overflow-x-auto`: sin `relative` los `sr-only` ensanchan la página. **Backend 026 primero.**
 - Ponencias especializadas (spec 012; **no** son los papers de `/ponencias`): sus tres pantallas están en
   `app/pages/ponencias-especializadas/` y su lógica pura en `app/utils/ponenciasEspecializadas.ts`. El programa se
   edita solo con `especializadas.gestionar`; inscribir y corregir, con `especializadas.inscribir`; la puerta
@@ -225,17 +233,17 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–016
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–017
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
 escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de
-asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable, reportes de seguimiento por asesor). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
+asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable, reportes de seguimiento por asesor, enlace público por docente). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
 `backend-ciisic/specs/013-roles-permisos/contracts/`; código por correo, portal, fotocheck,
 asistencia por QR, alta de participantes y cortesías en
 `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`; modalidad virtual en
 `backend-ciisic/specs/018-modalidad-virtual/contracts/`; tipos que no admiten estudiantes UNDC en
 `backend-ciisic/specs/020-virtual-sin-estudiantes-undc/contracts/`; delegaciones con convenio en
-`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y su tarifa en `backend-ciisic/specs/024-tarifa-delegaciones/contracts/`; reportes por asesor en `backend-ciisic/specs/025-reportes-asesores/contracts/`.
+`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y su tarifa en `backend-ciisic/specs/024-tarifa-delegaciones/contracts/`; reportes por asesor en `backend-ciisic/specs/025-reportes-asesores/contracts/` y los enlaces de los docentes en `backend-ciisic/specs/026-enlaces-docentes/contracts/`.
 
 ## Antes de dar por terminado
 

@@ -12,6 +12,11 @@ declare module '#app' {
      * páginas `participante`; el staff que abre una de ellas vuelve a su inicio.
      */
     perfil?: 'admin' | 'participante'
+    /**
+     * Página sin sesión (enlace público de un docente, spec 017): el middleware no pide ni carga la sesión.
+     * Su acceso lo da un token en el `#` de la URL, que el navegador no envía a ningún servidor.
+     */
+    publica?: boolean
   }
 }
 

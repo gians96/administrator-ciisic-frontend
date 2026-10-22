@@ -795,3 +795,50 @@ export interface ResultadoImportacionPadron {
   /** `false` en la simulación: no se guardó nada. */
   aplicado: boolean
 }
+
+// ─── Enlaces públicos por docente (spec 026 del backend, spec 017 del panel) ───
+
+/** Enlace público de un asesor. `token` es la credencial: solo lo recibe quien tiene `reportes.gestionar`. */
+export interface EnlaceAsesor {
+  asesorId: number
+  nombre: string
+  /** `null`: el docente no tiene enlace. */
+  token: string | null
+  creadoEn: string | null
+  ultimoAcceso: string | null
+}
+
+export interface ContadoresPublicos {
+  alumnos: number
+  pagaron: number
+  enRevision: number
+  rechazados: number
+  sinInscripcion: number
+  noPagaron: number
+  avance: number
+}
+
+/** Un estudiante en la vista del docente: sin DNI, correo ni montos. */
+export interface AlumnoDocente {
+  nombre: string
+  codigo: string
+  ciclo: string
+  seccion: string
+  turno: string | null
+  celular: string | null
+  situacion: SituacionSeguimiento
+}
+
+/** Lo que ve el docente con su enlace (`POST /api/publico/seguimiento`). */
+export interface VistaDocente {
+  asesor: { nombre: string }
+  evento: { nombre: string, nombreCorto: string }
+  semestre: string | null
+  generadoEn: string
+  totales: ContadoresPublicos
+  secciones: Array<ContadoresPublicos & { ciclo: string, seccion: string, turnos: string[] }>
+  alumnos: AlumnoDocente[]
+}
+
+/** Cuántos estudiantes hay en cada situación (contadores del filtro de situación). */
+export type ConteosSituacion = Record<'todos' | 'NO_PAGADO' | SituacionSeguimiento, number>
