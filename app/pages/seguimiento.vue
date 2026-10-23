@@ -5,13 +5,14 @@ import { aErrorApi } from '~/utils/errores'
 import { dniDelDocente, soloDigitosDni } from '~/utils/docentes'
 import { tipoDeSeguimiento, tokenDelHash, urlWhatsapp } from '~/utils/enlacesDocentes'
 import { fechaHoraLima, numero } from '~/utils/formato'
-import { etiquetaSeccion, etiquetaTurno, nombreSituacion, porcentaje, tonoSituacion } from '~/utils/reportes'
+import { etiquetaSeccion, etiquetaTurno, nombreSituacion, otrasSecciones, porcentaje, tonoSituacion } from '~/utils/reportes'
 import {
   FILTROS_DOCENTE_VACIOS,
   ciclosDe,
   claveDeSeccion,
   conteosDocente,
   filtrarAlumnosDocente,
+  seccionesDelAlumnoDocente,
   type FiltrosDocente,
 } from '~/utils/seguimientoDocente'
 
@@ -93,7 +94,7 @@ async function cargar(silencioso = false) {
     aviso.value = ''
     ultimaLectura = Date.now()
     // El ciclo o la sección elegidos pueden dejar de existir si cambió la designación del docente
-    if (filtros.ciclo && !respuesta.data.alumnos.some((a) => a.ciclo === filtros.ciclo)) filtros.ciclo = ''
+    if (filtros.ciclo && !respuesta.data.alumnos.some((a) => seccionesDelAlumnoDocente(a).some((s) => s.ciclo === filtros.ciclo))) filtros.ciclo = ''
     if (filtros.seccion && !respuesta.data.secciones.some((s) => claveDeSeccion(s.ciclo, s.seccion) === filtros.seccion)) filtros.seccion = ''
   } catch (error) {
     const e = aErrorApi(error)
@@ -440,6 +441,7 @@ async function bajar(formato: 'xlsx' | 'pdf') {
                   <td class="whitespace-nowrap">
                     <p class="font-semibold text-white">{{ etiquetaSeccion(alumno.ciclo, alumno.seccion) }}</p>
                     <p class="text-xs text-slate-400">{{ etiquetaTurno(alumno.turno) }}</p>
+                    <p v-if="otrasSecciones(alumno).length" class="text-xs text-slate-400">También: {{ otrasSecciones(alumno).join(', ') }}</p>
                   </td>
                   <td v-if="!esCiclo" class="whitespace-nowrap">
                     <a v-if="urlWhatsapp(alumno.celular)" :href="urlWhatsapp(alumno.celular) ?? undefined" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 text-emerald-300 hover:text-emerald-200" :aria-label="`Escribir por WhatsApp a ${alumno.nombre}`">
@@ -459,6 +461,7 @@ async function bajar(formato: 'xlsx' | 'pdf') {
               <div class="min-w-0">
                 <p class="font-medium text-white">{{ alumno.nombre }}</p>
                 <p class="mt-0.5 text-xs text-slate-400"><span class="tabular-nums">{{ alumno.codigo }}</span> · {{ etiquetaSeccion(alumno.ciclo, alumno.seccion) }} · {{ etiquetaTurno(alumno.turno) }}</p>
+                <p v-if="otrasSecciones(alumno).length" class="text-xs text-slate-400">También: {{ otrasSecciones(alumno).join(', ') }}</p>
                 <a v-if="urlWhatsapp(alumno.celular)" :href="urlWhatsapp(alumno.celular) ?? undefined" target="_blank" rel="noopener noreferrer" class="mt-2 inline-flex items-center gap-1.5 text-sm text-emerald-300" :aria-label="`Escribir por WhatsApp a ${alumno.nombre}`">
                   <Icon name="heroicons:chat-bubble-left-ellipsis" class="size-4" aria-hidden="true" /> <span class="tabular-nums">{{ alumno.celular }}</span>
                 </a>

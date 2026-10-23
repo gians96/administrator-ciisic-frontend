@@ -773,6 +773,13 @@ export interface ResumenSeguimiento {
   alumnosSinAsesor: number
 }
 
+/** Una sección en que cursa un alumno (spec 024 del panel, 033 del backend): con cuántos cursos lleva ahí y sus asesores. */
+export interface SeccionAlumno extends SeccionRef {
+  turno: string | null
+  cursos: number
+  asesores: AsesorRef[]
+}
+
 export interface AlumnoSeguimiento {
   id: number
   codigo: string
@@ -781,9 +788,12 @@ export interface AlumnoSeguimiento {
   correo: string | null
   celular: string | null
   carrera: string
+  /** Ciclo, turno y sección principales; con filtros, la primera dentro del alcance. */
   ciclo: string
   turno: string | null
   seccion: string
+  /** Todas sus secciones (la principal primero). Ausente en un backend anterior a la spec 033. */
+  secciones?: SeccionAlumno[]
   asesores: AsesorRef[]
   situacion: SituacionSeguimiento
   estadoInscripcion: CodigoEstado | null
@@ -834,6 +844,8 @@ export interface AlumnoDocente {
   ciclo: string
   seccion: string
   turno: string | null
+  /** Etiquetas («VI-A1») de sus secciones dentro del alcance de quien mira, la primera es `ciclo`-`seccion`. Ausente en un backend anterior a la spec 033. */
+  secciones?: string[]
   celular: string | null
   situacion: SituacionSeguimiento
 }

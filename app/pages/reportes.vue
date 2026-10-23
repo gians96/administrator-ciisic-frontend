@@ -13,6 +13,7 @@ import {
   filtrosVigentes,
   nombreDeRespaldo,
   nombreSituacion,
+  otrasSecciones,
   porcentaje,
   rutaDeDescarga,
   seccionesDelCiclo,
@@ -708,6 +709,7 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
                         <td class="whitespace-nowrap">
                           <p class="font-semibold text-white">{{ etiquetaSeccion(alumno.ciclo, alumno.seccion) }}</p>
                           <p class="text-xs text-slate-400">{{ etiquetaTurno(alumno.turno) }}</p>
+                          <p v-if="otrasSecciones(alumno).length" class="text-xs text-slate-400">También: {{ otrasSecciones(alumno).join(', ') }}</p>
                         </td>
                         <td class="text-xs">
                           <a v-if="urlWhatsapp(alumno.celular)" :href="urlWhatsapp(alumno.celular) ?? undefined" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 text-emerald-300 hover:text-emerald-200" :aria-label="`Escribir por WhatsApp a ${alumno.nombre}`">
@@ -740,6 +742,7 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
                       <div class="min-w-0">
                         <p class="font-medium text-white">{{ alumno.nombre }}</p>
                         <p class="mt-0.5 text-xs text-slate-400"><span class="tabular-nums">{{ alumno.codigo }}</span> · {{ etiquetaSeccion(alumno.ciclo, alumno.seccion) }} · {{ etiquetaTurno(alumno.turno) }}</p>
+                        <p v-if="otrasSecciones(alumno).length" class="text-xs text-slate-400">También: {{ otrasSecciones(alumno).join(', ') }}</p>
                       </div>
                       <AppBadge :tono="tonoSituacion(alumno.situacion)">{{ nombreSituacion(alumno.situacion) }}</AppBadge>
                     </div>

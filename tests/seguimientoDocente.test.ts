@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AlumnoCiclo, AlumnoDocente } from '~/types/api'
-import { FILTROS_DOCENTE_VACIOS, ciclosDe, claveDeSeccion, conteosDocente, filtrarAlumnosDocente, textoParaBuscar } from '~/utils/seguimientoDocente'
+import { FILTROS_DOCENTE_VACIOS, ciclosDe, claveDeSeccion, conteosDocente, filtrarAlumnosDocente, seccionesDelAlumnoDocente, textoParaBuscar } from '~/utils/seguimientoDocente'
 
 const alumno = (codigo: string, nombre: string, situacion: AlumnoDocente['situacion'], ciclo = 'I', seccion = 'A'): AlumnoDocente =>
   ({ nombre, codigo, ciclo, seccion, turno: 'M', celular: null, situacion })
@@ -76,5 +76,32 @@ describe('vista del docente: conteos', () => {
   it('cuenta cada situación y los que no pagaron', () => {
     expect(conteosDocente(ALUMNOS)).toEqual({ todos: 4, noPagado: 3, porSituacion: { PAGADO: 1, EN_REVISION: 1, RECHAZADO: 1, SIN_INSCRIPCION: 1 } })
     expect(conteosDocente([])).toEqual({ todos: 0, noPagado: 0, porSituacion: { PAGADO: 0, EN_REVISION: 0, RECHAZADO: 0, SIN_INSCRIPCION: 0 } })
+  })
+})
+
+describe('vista del docente: alumnos que cursan en más de una sección (spec 024)', () => {
+  // El 1 cursa en I-A y también en II-B; el 3 solo en II-B
+  const conVarias: AlumnoDocente[] = [
+    { ...alumno('2621010001', 'ÁLVAREZ PÉREZ ANA', 'PAGADO'), secciones: ['I-A', 'II-B'] },
+    alumno('2621010002', 'BRAVO LUNA CARLOS', 'EN_REVISION'),
+    { ...alumno('2621010003', 'CÁRDENAS RÍOS DIEGO', 'SIN_INSCRIPCION', 'II', 'B'), secciones: ['II-B'] },
+  ]
+
+  it('lee las secciones de las etiquetas y, sin ellas (backend anterior), usa la que muestra el alumno', () => {
+    expect(seccionesDelAlumnoDocente(conVarias[0])).toEqual([{ ciclo: 'I', seccion: 'A' }, { ciclo: 'II', seccion: 'B' }])
+    expect(seccionesDelAlumnoDocente(conVarias[1])).toEqual([{ ciclo: 'I', seccion: 'A' }])
+    expect(seccionesDelAlumnoDocente({ ciclo: 'VI', seccion: 'A1', secciones: [] })).toEqual([{ ciclo: 'VI', seccion: 'A1' }])
+  })
+
+  it('filtra por ciclo y por sección en cualquiera de las secciones del alumno', () => {
+    expect(ids(filtrarAlumnosDocente(conVarias, { ...FILTROS_DOCENTE_VACIOS, ciclo: 'II' }))).toEqual(['1', '3'])
+    expect(ids(filtrarAlumnosDocente(conVarias, { ...FILTROS_DOCENTE_VACIOS, seccion: claveDeSeccion('I', 'A') }))).toEqual(['1', '2'])
+    expect(ids(filtrarAlumnosDocente(conVarias, { ...FILTROS_DOCENTE_VACIOS, ciclo: 'II', seccion: claveDeSeccion('II', 'B') }))).toEqual(['1', '3'])
+  })
+
+  it('cuenta al alumno en cada ciclo en que cursa, en orden académico y una vez por ciclo', () => {
+    expect(ciclosDe(conVarias)).toEqual([{ ciclo: 'I', alumnos: 2 }, { ciclo: 'II', alumnos: 2 }])
+    const repetidor: AlumnoDocente[] = [{ ...alumno('2621010009', 'EL REPETIDOR', 'PAGADO', 'VI', 'A1'), secciones: ['VI-A1', 'VI-A2', 'II-A'] }]
+    expect(ciclosDe(repetidor)).toEqual([{ ciclo: 'II', alumnos: 1 }, { ciclo: 'VI', alumnos: 1 }])
   })
 })

@@ -9,6 +9,7 @@ import {
   filtrosVigentes,
   nombreDeRespaldo,
   nombreSituacion,
+  otrasSecciones,
   partesDeBarra,
   porcentaje,
   resumenDeFiltros,
@@ -141,5 +142,19 @@ describe('reportes: permisos, menú y errores', () => {
     expect(error('PADRON_SEMESTER_REQUIRED').message).toMatch(/AAAA-1/)
     expect(error('PADRON_COLUMNS_MISSING').message).toMatch(/DNI/)
     expect(error('ADVISOR_NOT_FOUND').message).toMatch(/asesor/)
+  })
+})
+
+describe('reportes: alumnos en más de una sección (spec 024)', () => {
+  it('«otrasSecciones» da las demás, además de la que ya se muestra, de la fila del panel y de la vista pública', () => {
+    const fila = { secciones: [{ ciclo: 'VI', seccion: 'A1' }, { ciclo: 'II', seccion: 'B' }, { ciclo: 'IV', seccion: 'B' }] }
+    expect(otrasSecciones(fila)).toEqual(['II-B', 'IV-B'])
+    expect(otrasSecciones({ secciones: ['VI-A1', 'II-B'] })).toEqual(['II-B'])
+  })
+
+  it('cursar en una sola sección, o un backend sin la spec 033, no muestra nada', () => {
+    expect(otrasSecciones({ secciones: [{ ciclo: 'I', seccion: 'A' }] })).toEqual([])
+    expect(otrasSecciones({ secciones: [] })).toEqual([])
+    expect(otrasSecciones({})).toEqual([])
   })
 })

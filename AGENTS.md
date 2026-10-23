@@ -173,6 +173,7 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   Un DNI inválido o desconocido es el mismo aviso; el tope de intentos fallidos es del backend. El filtro de **ciclo y sección** (`seguimientoDocente.ts`) sirve a `/seguimiento` y `/docentes`. En Reportes → Por asesor, `AsesorEditar.vue` agrega, edita (nombre, DNI,
   ciclos y secciones) y elimina docentes (`reportes.gestionar`: el DNI es dato personal y el resumen de `reportes.ver` no lo trae; sale de `GET …/advisory/advisors`). `PadronImportar` pregunta si se **conservan** (por defecto) o se reemplazan los docentes al recargar el padrón.
   Los nombres de `app/utils/docentes.ts` llevan «Docente» (`dniDelDocente`) porque `utils/delegaciones.ts` ya tiene `normalizarDni`. Al enviar un formulario con `api()`, **usa `.value` de los `computed`** en el cuerpo (un ref no se serializa: llega como «No se pudo conectar»). **Backend 028 primero.**
+- **Alumnos en varias secciones** (spec 024; backend 033): la sección va ligada al curso, así que cada alumno puede traer `secciones` (opcional: un backend anterior no la envía). En Reportes sale como «También: II-B, IV-B» (`otrasSecciones`, `app/utils/reportes.ts`); en las vistas públicas `secciones` son etiquetas **dentro del alcance de quien mira** (nunca las de otro docente) y el filtro de ciclo y sección de `seguimientoDocente.ts` se cumple en cualquiera de ellas (`seccionesDelAlumnoDocente`). Totales, tablas y descargas las calcula el backend (un alumno cuenta una vez en el total y en cada ciclo y sección en que cursa): el panel no recalcula. **Backend 033 primero.**
 - Ponencias especializadas (spec 012; **no** son los papers de `/ponencias`): sus tres pantallas están en
   `app/pages/ponencias-especializadas/` y su lógica pura en `app/utils/ponenciasEspecializadas.ts`. El programa se
   edita solo con `especializadas.gestionar`; inscribir y corregir, con `especializadas.inscribir`; la puerta
@@ -257,7 +258,7 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–023
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–024
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
 escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de
@@ -267,7 +268,7 @@ asistencia por QR, alta de participantes y cortesías en
 `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`; modalidad virtual en
 `backend-ciisic/specs/018-modalidad-virtual/contracts/`; tipos que no admiten estudiantes UNDC en
 `backend-ciisic/specs/020-virtual-sin-estudiantes-undc/contracts/`; delegaciones con convenio en
-`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y, con planes y tarifa propios, en `backend-ciisic/specs/029-delegaciones-planes/contracts/`; reportes por asesor en `backend-ciisic/specs/025-reportes-asesores/contracts/`, los enlaces de los docentes en `backend-ciisic/specs/026-enlaces-docentes/contracts/` y los de los ciclos en `backend-ciisic/specs/027-enlaces-ciclo/contracts/` y los docentes con DNI en `backend-ciisic/specs/028-docentes-dni/contracts/` y el resumen de ponencias en `backend-ciisic/specs/031-ponencias-resumen-personas/contracts/`.
+`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y, con planes y tarifa propios, en `backend-ciisic/specs/029-delegaciones-planes/contracts/`; reportes por asesor en `backend-ciisic/specs/025-reportes-asesores/contracts/`, los enlaces de los docentes en `backend-ciisic/specs/026-enlaces-docentes/contracts/` y los de los ciclos en `backend-ciisic/specs/027-enlaces-ciclo/contracts/` y los docentes con DNI en `backend-ciisic/specs/028-docentes-dni/contracts/` y el resumen de ponencias en `backend-ciisic/specs/031-ponencias-resumen-personas/contracts/` y las secciones por curso en `backend-ciisic/specs/033-padron-secciones-jp/contracts/`.
 
 ## Antes de dar por terminado
 

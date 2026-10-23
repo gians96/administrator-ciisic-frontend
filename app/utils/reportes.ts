@@ -117,6 +117,14 @@ export function etiquetaSeccion(ciclo: string, seccion: string): string {
   return `${ciclo}-${seccion}`
 }
 
+/**
+ * Las demás secciones del alumno, además de la que ya se muestra (la primera): «II-B», «IV-B». Un alumno que cursa en una sola, o un
+ * backend anterior a la spec 033 que no envía `secciones`, da una lista vacía. Sirve a la fila del panel (objetos) y a la vista pública (etiquetas).
+ */
+export function otrasSecciones(alumno: { secciones?: ReadonlyArray<string | { ciclo: string, seccion: string }> }): string[] {
+  return (alumno.secciones ?? []).slice(1).map((s) => (typeof s === 'string' ? s : etiquetaSeccion(s.ciclo, s.seccion)))
+}
+
 const formatoPorcentaje = new Intl.NumberFormat('es-PE', { style: 'percent', minimumFractionDigits: 0, maximumFractionDigits: 1 })
 
 /** `0.2719` → «27,2 %». */

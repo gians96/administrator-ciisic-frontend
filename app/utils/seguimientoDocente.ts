@@ -24,12 +24,25 @@ export function textoParaBuscar(valor: unknown): string {
   return String(valor ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
-/** Estudiantes que cumplen la sección, la situación (`NO_PAGADO` = todo menos «Pagó») y la búsqueda (todas las palabras). */
+/**
+ * Ciclo y sección de cada sección en que cursa el alumno dentro del alcance de quien mira (spec 024): un alumno puede cursar en varias.
+ * Un backend anterior que no envía `secciones` da solo la que muestran `ciclo` y `seccion`.
+ */
+export function seccionesDelAlumnoDocente(alumno: Pick<AlumnoCiclo, 'ciclo' | 'seccion' | 'secciones'>): Array<{ ciclo: string, seccion: string }> {
+  const propias = (alumno.secciones ?? []).flatMap((etiqueta) => {
+    const corte = etiqueta.indexOf('-')
+    return corte > 0 ? [{ ciclo: etiqueta.slice(0, corte), seccion: etiqueta.slice(corte + 1) }] : []
+  })
+  return propias.length ? propias : [{ ciclo: alumno.ciclo, seccion: alumno.seccion }]
+}
+
+/** Estudiantes que cumplen la sección (en cualquiera de las suyas), la situación (`NO_PAGADO` = todo menos «Pagó») y la búsqueda (todas las palabras). */
 export function filtrarAlumnosDocente<T extends AlumnoCiclo>(alumnos: readonly T[], filtros: FiltrosDocente): T[] {
   const palabras = textoParaBuscar(filtros.q).split(' ').filter(Boolean)
   return alumnos.filter((alumno) => {
-    if (filtros.ciclo && alumno.ciclo !== filtros.ciclo) return false
-    if (filtros.seccion && claveDeSeccion(alumno.ciclo, alumno.seccion) !== filtros.seccion) return false
+    const secciones = seccionesDelAlumnoDocente(alumno)
+    if (filtros.ciclo && !secciones.some((s) => s.ciclo === filtros.ciclo)) return false
+    if (filtros.seccion && !secciones.some((s) => claveDeSeccion(s.ciclo, s.seccion) === filtros.seccion)) return false
     if (filtros.situacion === 'NO_PAGADO' && alumno.situacion === 'PAGADO') return false
     if (filtros.situacion && filtros.situacion !== 'NO_PAGADO' && alumno.situacion !== filtros.situacion) return false
     if (!palabras.length) return true
@@ -38,11 +51,21 @@ export function filtrarAlumnosDocente<T extends AlumnoCiclo>(alumnos: readonly T
   })
 }
 
-/** Los ciclos de la lista, con su cantidad de estudiantes, en el orden en que llegan (el servidor ya los ordena). */
+const ORDEN_CICLOS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
+const rangoDelCiclo = (ciclo: string) => {
+  const indice = ORDEN_CICLOS.indexOf(ciclo.toUpperCase())
+  return indice === -1 ? ORDEN_CICLOS.length : indice
+}
+
+/** Los ciclos de la lista en orden académico, con su cantidad de estudiantes: uno cuenta en cada ciclo en que cursa, una vez por ciclo. */
 export function ciclosDe(alumnos: readonly AlumnoCiclo[]): Array<{ ciclo: string, alumnos: number }> {
   const cuenta = new Map<string, number>()
-  for (const alumno of alumnos) cuenta.set(alumno.ciclo, (cuenta.get(alumno.ciclo) ?? 0) + 1)
-  return [...cuenta].map(([ciclo, cantidad]) => ({ ciclo, alumnos: cantidad }))
+  for (const alumno of alumnos) {
+    for (const ciclo of new Set(seccionesDelAlumnoDocente(alumno).map((s) => s.ciclo))) cuenta.set(ciclo, (cuenta.get(ciclo) ?? 0) + 1)
+  }
+  return [...cuenta]
+    .map(([ciclo, cantidad]) => ({ ciclo, alumnos: cantidad }))
+    .sort((a, b) => rangoDelCiclo(a.ciclo) - rangoDelCiclo(b.ciclo) || a.ciclo.localeCompare(b.ciclo, 'es'))
 }
 
 export interface ConteosDocente {
