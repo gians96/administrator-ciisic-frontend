@@ -1,4 +1,5 @@
 import type { FiltroSituacionSeguimiento, OpcionesSeguimiento, SituacionSeguimiento } from '~/types/api'
+import { textoParaBuscar } from '~/utils/seguimientoDocente'
 
 /**
  * Seguimiento de estudiantes por asesor (spec 016 del panel; backend 025). Lógica pura de la pantalla
@@ -37,6 +38,8 @@ function esFiltroSituacion(valor: string): valor is FiltroSituacionSeguimiento {
 
 export interface FiltrosReporte {
   asesorId: string
+  /** Un curso de SIVIRENO (`''` = todos): sus matriculados (spec 025). */
+  cursoId: string
   ciclo: string
   seccion: string
   turno: string
@@ -45,7 +48,7 @@ export interface FiltrosReporte {
   page: number
 }
 
-export const FILTROS_REPORTE_VACIOS: Readonly<FiltrosReporte> = Object.freeze({ asesorId: '', ciclo: '', seccion: '', turno: '', situacion: '', q: '', page: 1 })
+export const FILTROS_REPORTE_VACIOS: Readonly<FiltrosReporte> = Object.freeze({ asesorId: '', cursoId: '', ciclo: '', seccion: '', turno: '', situacion: '', q: '', page: 1 })
 
 function primero(valor: unknown): string {
   const dato = Array.isArray(valor) ? valor[0] : valor
@@ -58,6 +61,7 @@ export function filtrosReporteDesdeQuery(query: Record<string, unknown>): Filtro
   const pagina = Number(primero(query.page))
   return {
     asesorId: /^\d{1,9}$/.test(primero(query.asesorId)) ? primero(query.asesorId) : '',
+    cursoId: /^\d{1,9}$/.test(primero(query.cursoId)) ? primero(query.cursoId) : '',
     ciclo: primero(query.ciclo).toUpperCase().slice(0, 10),
     seccion: primero(query.seccion).toUpperCase().slice(0, 10),
     turno: primero(query.turno).toUpperCase().slice(0, 5),
@@ -78,6 +82,7 @@ interface OpcionesParametros {
 export function aParametrosReporte(filtros: FiltrosReporte, { pagina = true, soloAlcance = false }: OpcionesParametros = {}): Record<string, string> {
   const parametros: Record<string, string> = {}
   if (filtros.asesorId) parametros.asesorId = filtros.asesorId
+  if (filtros.cursoId) parametros.cursoId = filtros.cursoId
   if (filtros.ciclo) parametros.ciclo = filtros.ciclo
   if (filtros.seccion) parametros.seccion = filtros.seccion
   if (filtros.turno) parametros.turno = filtros.turno
@@ -91,7 +96,7 @@ export function aParametrosReporte(filtros: FiltrosReporte, { pagina = true, sol
 
 /** Cuántos filtros hay puestos (sin contar la página). */
 export function filtrosActivos(filtros: FiltrosReporte): number {
-  return [filtros.asesorId, filtros.ciclo, filtros.seccion, filtros.turno, filtros.situacion, filtros.q].filter(Boolean).length
+  return [filtros.asesorId, filtros.cursoId, filtros.ciclo, filtros.seccion, filtros.turno, filtros.situacion, filtros.q].filter(Boolean).length
 }
 
 /** Quita los filtros que ya no existen en el padrón (p. ej. tras cargar uno nuevo). */
@@ -99,6 +104,7 @@ export function filtrosVigentes(filtros: FiltrosReporte, opciones: OpcionesSegui
   return {
     ...filtros,
     asesorId: filtros.asesorId && !opciones.asesores.some((asesor) => String(asesor.id) === filtros.asesorId) ? '' : filtros.asesorId,
+    cursoId: filtros.cursoId && !(opciones.cursos ?? []).some((curso) => String(curso.id) === filtros.cursoId) ? '' : filtros.cursoId,
     ciclo: filtros.ciclo && !opciones.ciclos.includes(filtros.ciclo) ? '' : filtros.ciclo,
     seccion: filtros.seccion && !opciones.secciones.some((s) => s.seccion === filtros.seccion && (!filtros.ciclo || s.ciclo === filtros.ciclo)) ? '' : filtros.seccion,
     turno: filtros.turno && !opciones.turnos.includes(filtros.turno) ? '' : filtros.turno,
@@ -115,6 +121,22 @@ export function seccionesDelCiclo(opciones: OpcionesSeguimiento | null | undefin
 
 export function etiquetaSeccion(ciclo: string, seccion: string): string {
   return `${ciclo}-${seccion}`
+}
+
+/** «PROGRAMACIÓN WEB (VI-A1)»: un curso de SIVIRENO con su ciclo y sección. */
+export function etiquetaCurso(curso: { nombre: string, ciclo: string, seccion: string }): string {
+  return `${curso.nombre} (${etiquetaSeccion(curso.ciclo, curso.seccion)})`
+}
+
+/** Cursos que coinciden con lo escrito (nombre, código, ciclo-sección o docente; sin acentos ni mayúsculas y con todas las palabras); sin texto, todos. Sirve a la pestaña «Por curso». */
+export function buscarCursos<T extends { nombre: string, codigo: string, ciclo: string, seccion: string, docente?: { nombre: string } | string | null }>(cursos: readonly T[], texto: string): T[] {
+  const palabras = textoParaBuscar(texto).split(' ').filter(Boolean)
+  if (!palabras.length) return [...cursos]
+  return cursos.filter((curso) => {
+    const docente = typeof curso.docente === 'string' ? curso.docente : (curso.docente?.nombre ?? '')
+    const contenido = textoParaBuscar(`${curso.nombre} ${curso.codigo} ${etiquetaSeccion(curso.ciclo, curso.seccion)} ${docente}`)
+    return palabras.every((palabra) => contenido.includes(palabra))
+  })
 }
 
 /**
@@ -165,8 +187,10 @@ export function nombreDeRespaldo(formato: FormatoReporte, asesor?: string | null
 /** Filtros puestos, redactados para mostrarlos («Ciclo VI · Sección A»); vacío si no hay ninguno. */
 export function resumenDeFiltros(filtros: FiltrosReporte, opciones: OpcionesSeguimiento | null | undefined): string {
   const asesor = opciones?.asesores.find((a) => String(a.id) === filtros.asesorId)
+  const curso = (opciones?.cursos ?? []).find((c) => String(c.id) === filtros.cursoId)
   return [
     asesor ? asesor.nombre : filtros.asesorId ? 'Asesor' : '',
+    curso ? etiquetaCurso(curso) : filtros.cursoId ? 'Curso' : '',
     filtros.ciclo ? `Ciclo ${filtros.ciclo}` : '',
     filtros.seccion ? `Sección ${filtros.seccion}` : '',
     filtros.turno ? `Turno ${filtros.turno}` : '',

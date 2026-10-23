@@ -11,11 +11,13 @@ export interface FiltrosDocente {
   ciclo: string
   /** `''` = todas; si no, `<ciclo>|<sección>` (ver `claveDeSeccion`). */
   seccion: string
+  /** `''` o ausente = todos los cursos; si no, el id del curso de SIVIRENO (spec 025). */
+  cursoId?: string
   situacion: '' | FiltroSituacionSeguimiento
   q: string
 }
 
-export const FILTROS_DOCENTE_VACIOS: Readonly<FiltrosDocente> = Object.freeze({ ciclo: '', seccion: '', situacion: '', q: '' })
+export const FILTROS_DOCENTE_VACIOS: Readonly<FiltrosDocente> = Object.freeze({ ciclo: '', seccion: '', cursoId: '', situacion: '', q: '' })
 
 export const claveDeSeccion = (ciclo: string, seccion: string): string => `${ciclo}|${seccion}`
 
@@ -43,6 +45,7 @@ export function filtrarAlumnosDocente<T extends AlumnoCiclo>(alumnos: readonly T
     const secciones = seccionesDelAlumnoDocente(alumno)
     if (filtros.ciclo && !secciones.some((s) => s.ciclo === filtros.ciclo)) return false
     if (filtros.seccion && !secciones.some((s) => claveDeSeccion(s.ciclo, s.seccion) === filtros.seccion)) return false
+    if (filtros.cursoId && !(alumno.cursos ?? []).some((curso) => String(curso.id) === filtros.cursoId)) return false
     if (filtros.situacion === 'NO_PAGADO' && alumno.situacion === 'PAGADO') return false
     if (filtros.situacion && filtros.situacion !== 'NO_PAGADO' && alumno.situacion !== filtros.situacion) return false
     if (!palabras.length) return true

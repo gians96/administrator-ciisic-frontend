@@ -43,12 +43,13 @@ const grupos = computed(() => seccionesPorCiclo(asignables.value))
 const secciones = computed(() => asignables.value.filter((seccion) => elegidas.value.has(claveDeSeccionDocente(seccion))))
 const cambios = computed(() => cambiosDeSecciones(props.docente?.secciones ?? [], secciones.value))
 const esNuevo = computed(() => props.docente === null)
+/** Un docente de SIVIRENO (spec 025): sus secciones salen de sus cursos, así que solo se editan su nombre y su DNI. */
+const esSivireno = computed(() => props.docente?.desdeSivireno === true)
 
 const sinCambios = computed(() => !esNuevo.value
   && nombre.value.trim() === props.docente?.nombre
   && (dniDelDocente(documento.value) ?? '') === (props.docente?.documento ?? '')
-  && !cambios.value.agregadas.length
-  && !cambios.value.quitadas.length)
+  && (esSivireno.value || (!cambios.value.agregadas.length && !cambios.value.quitadas.length)))
 
 function alternar(seccion: SeccionRef) {
   const clave = claveDeSeccionDocente(seccion)
@@ -79,7 +80,8 @@ function validar(): boolean {
 async function guardar() {
   if (!props.eventoId || trabajando.value || !validar()) return
   trabajando.value = 'guardar'
-  const cuerpo = { nombre: nombre.value.trim(), documento: dniDelDocente(documento.value), secciones: secciones.value }
+  // De un docente de SIVIRENO se mandan sus secciones tal cual (el servidor las ignora: salen de sus cursos)
+  const cuerpo = { nombre: nombre.value.trim(), documento: dniDelDocente(documento.value), secciones: esSivireno.value ? (props.docente?.secciones ?? []) : secciones.value }
   try {
     const ruta = `events/${props.eventoId}/advisory/advisors`
     const respuesta = esNuevo.value
@@ -103,7 +105,9 @@ async function eliminar() {
   if (!props.eventoId || !props.docente || trabajando.value) return
   const seguro = await confirmar({
     titulo: 'Eliminar al docente',
-    mensaje: `${props.docente.nombre} dejará de ser asesor de sus secciones y perderá su enlace y su acceso con el DNI. Sus estudiantes quedarán sin asesor en esas secciones.`,
+    mensaje: esSivireno.value
+      ? `${props.docente.nombre} perderá su enlace y su acceso con el DNI, y sus cursos de SIVIRENO quedarán sin docente hasta la próxima carga desde SIVIRENO.`
+      : `${props.docente.nombre} dejará de ser asesor de sus secciones y perderá su enlace y su acceso con el DNI. Sus estudiantes quedarán sin asesor en esas secciones.`,
     textoConfirmar: 'Eliminar docente',
     peligro: true,
   })
@@ -150,7 +154,17 @@ async function eliminar() {
         </AppField>
       </div>
 
-      <fieldset class="space-y-3">
+      <div v-if="esSivireno" class="rounded-xl bg-white/5 p-4 ring-1 ring-white/10 ring-inset">
+        <p class="field-label">Sus cursos vienen de SIVIRENO</p>
+        <p class="mt-1 text-sm text-slate-300">
+          Dicta {{ docente?.cursos ?? 0 }} {{ docente?.cursos === 1 ? 'curso' : 'cursos' }}; sus alumnos son los matriculados en ellos y se actualizan al recargar desde SIVIRENO. Aquí solo se cambian su nombre y su DNI.
+        </p>
+        <p v-if="docente?.secciones.length" class="mt-2 flex flex-wrap gap-1.5">
+          <span v-for="seccion in docente.secciones" :key="claveDeSeccionDocente(seccion)" class="rounded-full bg-white/10 px-2.5 py-1 text-xs text-slate-200">{{ etiquetaSeccion(seccion.ciclo, seccion.seccion) }}</span>
+        </p>
+      </div>
+
+      <fieldset v-else class="space-y-3">
         <legend class="field-label">Ciclos y secciones que atiende</legend>
         <p v-if="errores.secciones" class="field-error" role="alert">{{ errores.secciones }}</p>
         <p v-if="!asignables.length" class="rounded-xl bg-amber-400/10 px-4 py-3 text-sm text-amber-200 ring-1 ring-amber-400/30 ring-inset">

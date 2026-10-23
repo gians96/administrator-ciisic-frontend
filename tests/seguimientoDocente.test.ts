@@ -105,3 +105,24 @@ describe('vista del docente: alumnos que cursan en más de una sección (spec 02
     expect(ciclosDe(repetidor)).toEqual([{ ciclo: 'II', alumnos: 1 }, { ciclo: 'VI', alumnos: 1 }])
   })
 })
+
+describe('vista del docente: filtro por curso (spec 025)', () => {
+  const curso = (id: number, nombre: string) => ({ id, codigo: `ISES${id}`, nombre, ciclo: 'VI', seccion: 'A1', turno: 'M' })
+  const conCursos: AlumnoDocente[] = [
+    { ...alumno('2621010001', 'ÁLVAREZ PÉREZ ANA', 'PAGADO'), cursos: [curso(1, 'REDES'), curso(2, 'DATOS')] },
+    { ...alumno('2621010002', 'BRAVO LUNA CARLOS', 'EN_REVISION'), cursos: [curso(2, 'DATOS')] },
+    alumno('2621010003', 'CÁRDENAS RÍOS DIEGO', 'SIN_INSCRIPCION'),
+  ]
+
+  it('deja a los matriculados en ese curso; sin curso elegido, a todos', () => {
+    expect(ids(filtrarAlumnosDocente(conCursos, { ...FILTROS_DOCENTE_VACIOS, cursoId: '1' }))).toEqual(['1'])
+    expect(ids(filtrarAlumnosDocente(conCursos, { ...FILTROS_DOCENTE_VACIOS, cursoId: '2' }))).toEqual(['1', '2'])
+    expect(ids(filtrarAlumnosDocente(conCursos, { ...FILTROS_DOCENTE_VACIOS, cursoId: '' }))).toEqual(['1', '2', '3'])
+    expect(filtrarAlumnosDocente(conCursos, { ...FILTROS_DOCENTE_VACIOS, cursoId: '99' })).toEqual([])
+  })
+
+  it('se combina con la situación y la búsqueda', () => {
+    expect(ids(filtrarAlumnosDocente(conCursos, { ...FILTROS_DOCENTE_VACIOS, cursoId: '2', situacion: 'NO_PAGADO' }))).toEqual(['2'])
+    expect(ids(filtrarAlumnosDocente(conCursos, { ...FILTROS_DOCENTE_VACIOS, cursoId: '2', q: 'alvarez' }))).toEqual(['1'])
+  })
+})

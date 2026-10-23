@@ -751,11 +751,25 @@ export interface ResumenAsesor extends ContadoresSeguimiento {
   secciones: SeccionRef[]
 }
 
+/** Un curso de SIVIRENO (programación académica) con su docente (spec 025 del panel, 034 del backend). */
+export interface CursoSeguimiento extends SeccionRef {
+  id: number
+  codigo: string
+  nombre: string
+  turno: string | null
+  docente: AsesorRef | null
+}
+
+/** Un curso con cuántos de sus matriculados pagaron. */
+export interface ResumenCurso extends ContadoresSeguimiento, CursoSeguimiento {}
+
 export interface OpcionesSeguimiento {
   ciclos: string[]
   secciones: SeccionRef[]
   turnos: string[]
   asesores: AsesorRef[]
+  /** Los cursos de SIVIRENO del padrón. Ausente en un backend anterior a la spec 034. */
+  cursos?: CursoSeguimiento[]
 }
 
 export interface ResumenSeguimiento {
@@ -770,6 +784,8 @@ export interface ResumenSeguimiento {
   porCiclo: ResumenCiclo[]
   porSeccion: ResumenSeccion[]
   porAsesor: ResumenAsesor[]
+  /** Los cursos de SIVIRENO con sus matriculados; vacío o ausente si el padrón viene del Excel o el backend es anterior a la spec 034. */
+  porCurso?: ResumenCurso[]
   alumnosSinAsesor: number
 }
 
@@ -794,6 +810,8 @@ export interface AlumnoSeguimiento {
   seccion: string
   /** Todas sus secciones (la principal primero). Ausente en un backend anterior a la spec 033. */
   secciones?: SeccionAlumno[]
+  /** Sus cursos de SIVIRENO, cada uno con su docente; con filtros, solo los del alcance. Ausente en un backend anterior a la spec 034. */
+  cursos?: CursoSeguimiento[]
   asesores: AsesorRef[]
   situacion: SituacionSeguimiento
   estadoInscripcion: CodigoEstado | null
@@ -837,6 +855,17 @@ export interface ContadoresPublicos {
   avance: number
 }
 
+/** Un curso de SIVIRENO tal como lo ve quien consulta (spec 025 del panel, 034 del backend); en la vista del ciclo trae el docente. */
+export interface CursoPublico {
+  id: number
+  codigo: string
+  nombre: string
+  ciclo: string
+  seccion: string
+  turno: string | null
+  docente?: string | null
+}
+
 /** Un estudiante en la vista del docente: sin DNI, correo ni montos. */
 export interface AlumnoDocente {
   nombre: string
@@ -846,6 +875,8 @@ export interface AlumnoDocente {
   turno: string | null
   /** Etiquetas («VI-A1») de sus secciones dentro del alcance de quien mira, la primera es `ciclo`-`seccion`. Ausente en un backend anterior a la spec 033. */
   secciones?: string[]
+  /** Sus cursos de SIVIRENO dentro del alcance de quien mira. Ausente en un backend anterior a la spec 034. */
+  cursos?: CursoPublico[]
   celular: string | null
   situacion: SituacionSeguimiento
 }
@@ -858,6 +889,8 @@ export interface VistaDocente {
   generadoEn: string
   totales: ContadoresPublicos
   secciones: Array<ContadoresPublicos & { ciclo: string, seccion: string, turnos: string[] }>
+  /** Sus cursos de SIVIRENO con cuántos de sus matriculados pagaron. Ausente o vacío si el padrón no tiene cursos. */
+  cursos?: Array<ContadoresPublicos & CursoPublico>
   alumnos: AlumnoDocente[]
 }
 
@@ -886,6 +919,8 @@ export interface VistaCiclo {
   totales: ContadoresPublicos
   /** Cada sección con el nombre de sus asesores. */
   secciones: Array<ContadoresPublicos & { ciclo: string, seccion: string, turnos: string[], asesores: string[] }>
+  /** Los cursos del ciclo con su docente y cuántos de sus matriculados pagaron. Ausente o vacío si el padrón no tiene cursos. */
+  cursos?: Array<ContadoresPublicos & CursoPublico>
   alumnos: AlumnoCiclo[]
 }
 
@@ -901,6 +936,10 @@ export interface DocenteAdmin {
   /** DNI de 8 dígitos; `null` si no se registró (sin él no puede usar la página común). */
   documento: string | null
   secciones: SeccionRef[]
+  /** `true` si es un docente de SIVIRENO: sus secciones salen de sus cursos (solo se editan nombre y DNI). Ausente en un backend anterior a la spec 034. */
+  desdeSivireno?: boolean
+  /** Cursos de SIVIRENO que dicta. */
+  cursos?: number
 }
 
 export interface ListaDocentes {

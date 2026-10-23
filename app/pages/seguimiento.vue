@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { AlumnoCiclo, ConteosSituacion, ContadoresPublicos, VistaCiclo, VistaDocente } from '~/types/api'
+import type { AlumnoCiclo, ConteosSituacion, ContadoresPublicos, CursoPublico, VistaCiclo, VistaDocente } from '~/types/api'
 import { guardarArchivo, leerCuerpoDeError, nombreDeArchivo } from '~/utils/descargas'
 import { aErrorApi } from '~/utils/errores'
 import { dniDelDocente, soloDigitosDni } from '~/utils/docentes'
 import { tipoDeSeguimiento, tokenDelHash, urlWhatsapp } from '~/utils/enlacesDocentes'
 import { fechaHoraLima, numero } from '~/utils/formato'
-import { etiquetaSeccion, etiquetaTurno, nombreSituacion, otrasSecciones, porcentaje, tonoSituacion } from '~/utils/reportes'
+import { etiquetaCurso, etiquetaSeccion, etiquetaTurno, nombreSituacion, otrasSecciones, porcentaje, tonoSituacion } from '~/utils/reportes'
 import {
   FILTROS_DOCENTE_VACIOS,
   ciclosDe,
@@ -49,6 +49,8 @@ const estado = ref<Estado>(esDocumento ? 'identificar' : 'cargando')
 /** Un estudiante de cualquiera de las dos vistas: el celular solo llega en la del docente. */
 type AlumnoVista = AlumnoCiclo & { celular?: string | null }
 type SeccionVista = ContadoresPublicos & { ciclo: string, seccion: string, turnos: string[], asesores?: string[] }
+/** Un curso de SIVIRENO con sus contadores (en la vista del ciclo trae el docente). */
+type CursoVista = ContadoresPublicos & CursoPublico
 
 const vista = ref<VistaDocente | VistaCiclo | null>(null)
 const aviso = ref('')
@@ -96,6 +98,7 @@ async function cargar(silencioso = false) {
     // El ciclo o la sección elegidos pueden dejar de existir si cambió la designación del docente
     if (filtros.ciclo && !respuesta.data.alumnos.some((a) => seccionesDelAlumnoDocente(a).some((s) => s.ciclo === filtros.ciclo))) filtros.ciclo = ''
     if (filtros.seccion && !respuesta.data.secciones.some((s) => claveDeSeccion(s.ciclo, s.seccion) === filtros.seccion)) filtros.seccion = ''
+    if (filtros.cursoId && !(respuesta.data.cursos ?? []).some((c) => String(c.id) === filtros.cursoId)) filtros.cursoId = ''
   } catch (error) {
     const e = aErrorApi(error)
     if (esDocumento && (e.status === 404 || e.code === 'ADVISOR_DOCUMENT_NOT_FOUND')) {
@@ -168,6 +171,11 @@ watch(busqueda, (valor) => {
 
 const todosLosAlumnos = computed<AlumnoVista[]>(() => vista.value?.alumnos ?? [])
 const secciones = computed<SeccionVista[]>(() => vista.value?.secciones ?? [])
+/** Cursos de SIVIRENO (spec 025): con ellos la vista se ordena por curso; sin ellos (backend anterior o padrón del Excel) sigue por sección. */
+const cursos = computed<CursoVista[]>(() => vista.value?.cursos ?? [])
+const hayCursos = computed(() => cursos.value.length > 0)
+const cursosDelFiltro = computed(() => cursos.value.filter((c) => !filtros.ciclo || c.ciclo === filtros.ciclo))
+const elegirCurso = (curso: CursoVista) => { filtros.cursoId = filtros.cursoId === String(curso.id) ? '' : String(curso.id) }
 /** Quién es: el nombre del docente o el ciclo. */
 const quien = computed(() => (!vista.value ? '' : 'asesor' in vista.value ? vista.value.asesor.nombre : `Ciclo ${vista.value.ciclo}`))
 const textoSecciones = computed(() => `${numero(secciones.value.length)} ${secciones.value.length === 1 ? 'sección' : 'secciones'}`)
@@ -179,15 +187,16 @@ const seccionesDelFiltro = computed(() => secciones.value.filter((s) => !filtros
 watch(() => filtros.ciclo, (ciclo) => {
   // Al cambiar de ciclo, la sección elegida deja de valer si es de otro
   if (ciclo && filtros.seccion && !filtros.seccion.startsWith(`${ciclo}|`)) filtros.seccion = ''
+  if (ciclo && filtros.cursoId && !cursos.value.some((c) => String(c.id) === filtros.cursoId && c.ciclo === ciclo)) filtros.cursoId = ''
 })
 
-// Los indicadores y los contadores siguen al ciclo y la sección elegidos; la situación y la búsqueda solo recortan la lista
-const alumnosDeLaSeccion = computed(() => filtrarAlumnosDocente(todosLosAlumnos.value, { ...FILTROS_DOCENTE_VACIOS, ciclo: filtros.ciclo, seccion: filtros.seccion }))
+// Los indicadores y los contadores siguen al ciclo, la sección y el curso elegidos; la situación y la búsqueda solo recortan la lista
+const alumnosDeLaSeccion = computed(() => filtrarAlumnosDocente(todosLosAlumnos.value, { ...FILTROS_DOCENTE_VACIOS, ciclo: filtros.ciclo, seccion: filtros.seccion, cursoId: filtros.cursoId }))
 const base = computed(() => conteosDocente(alumnosDeLaSeccion.value))
 const avance = computed(() => (base.value.todos ? base.value.porSituacion.PAGADO / base.value.todos : 0))
 const conteos = computed<ConteosSituacion>(() => ({ todos: base.value.todos, NO_PAGADO: base.value.noPagado, ...base.value.porSituacion }))
 const visibles = computed(() => filtrarAlumnosDocente(todosLosAlumnos.value, filtros))
-const hayFiltros = computed(() => Boolean(filtros.ciclo || filtros.seccion || filtros.situacion || filtros.q))
+const hayFiltros = computed(() => Boolean(filtros.ciclo || filtros.seccion || filtros.cursoId || filtros.situacion || filtros.q))
 
 const COLORES_BARRA = { PAGADO: 'bg-emerald-400', EN_REVISION: 'bg-amber-400', RECHAZADO: 'bg-red-400', SIN_INSCRIPCION: 'bg-slate-600' } as const
 const partes = computed(() => (['PAGADO', 'EN_REVISION', 'RECHAZADO', 'SIN_INSCRIPCION'] as const)
@@ -310,7 +319,7 @@ async function bajar(formato: 'xlsx' | 'pdf') {
           </p>
           <p class="text-sm text-slate-300">
             <strong class="text-white tabular-nums">{{ numero(base.porSituacion.PAGADO) }}</strong> de <span class="tabular-nums">{{ numero(base.todos) }}</span> estudiantes
-            <span v-if="filtros.ciclo || filtros.seccion" class="text-slate-400">({{ filtros.seccion ? 'sección elegida' : 'ciclo elegido' }})</span>
+            <span v-if="filtros.ciclo || filtros.seccion || filtros.cursoId" class="text-slate-400">({{ filtros.cursoId ? 'curso elegido' : filtros.seccion ? 'sección elegida' : 'ciclo elegido' }})</span>
           </p>
         </div>
         <div class="mt-4 flex h-3 w-full overflow-hidden rounded-full bg-white/10" role="img" :aria-label="`${porcentaje(avance)} de los estudiantes pagó`">
@@ -321,6 +330,34 @@ async function bajar(formato: 'xlsx' | 'pdf') {
 
       <!-- Filtros -->
       <section class="mt-4 space-y-3" aria-label="Filtros">
+        <!-- Cursos de SIVIRENO (spec 025): de dónde sale cada estudiante de la lista -->
+        <div v-if="hayCursos" role="group" :aria-label="esCiclo ? 'Cursos del ciclo' : 'Tus cursos'" class="space-y-2">
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="text-sm font-semibold text-slate-200">{{ esCiclo ? 'Cursos del ciclo' : 'Tus cursos' }} <span class="font-normal text-slate-400">(pulsa uno para ver solo sus estudiantes)</span></h2>
+            <button v-if="filtros.cursoId" type="button" class="inline-flex items-center gap-1 text-sm text-brand-300 hover:text-brand-200" @click="filtros.cursoId = ''">
+              <Icon name="heroicons:x-mark" class="size-4" aria-hidden="true" /> Ver todos
+            </button>
+          </div>
+          <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <button
+              v-for="curso in cursosDelFiltro"
+              :key="curso.id"
+              type="button"
+              :aria-pressed="filtros.cursoId === String(curso.id)"
+              class="rounded-2xl p-3.5 text-left ring-1 transition ring-inset"
+              :class="filtros.cursoId === String(curso.id) ? 'bg-brand-500/15 ring-brand-400/50' : 'bg-white/5 ring-white/10 hover:bg-white/10'"
+              @click="elegirCurso(curso)"
+            >
+              <span class="flex items-baseline justify-between gap-2">
+                <span class="font-semibold text-white">{{ curso.nombre }}</span>
+                <span class="text-sm font-semibold text-white tabular-nums">{{ porcentaje(curso.avance) }}</span>
+              </span>
+              <span class="mt-0.5 block text-xs text-slate-400">{{ etiquetaSeccion(curso.ciclo, curso.seccion) }} · {{ etiquetaTurno(curso.turno) }}<template v-if="curso.docente"> · {{ curso.docente }}</template></span>
+              <BarraAvance :contadores="curso" class="mt-2.5" />
+              <span class="mt-1.5 block text-xs text-slate-400"><strong class="font-semibold text-slate-200 tabular-nums">{{ numero(curso.pagaron) }}</strong> de <span class="tabular-nums">{{ numero(curso.alumnos) }}</span> pagaron</span>
+            </button>
+          </div>
+        </div>
         <div v-if="esCiclo" role="group" aria-label="Secciones del ciclo" class="space-y-2">
           <div class="flex items-center justify-between gap-3">
             <h2 class="text-sm font-semibold text-slate-200">Secciones <span class="font-normal text-slate-400">(pulsa una para ver solo sus estudiantes)</span></h2>
@@ -373,7 +410,7 @@ async function bajar(formato: 'xlsx' | 'pdf') {
               <span class="rounded-full bg-white/10 px-1.5 text-xs text-slate-200 tabular-nums">{{ ciclo.alumnos }}</span>
             </button>
           </div>
-          <div v-if="seccionesDelFiltro.length > 1" role="group" aria-label="Filtrar por sección" class="flex flex-wrap items-center gap-2">
+          <div v-if="!hayCursos && seccionesDelFiltro.length > 1" role="group" aria-label="Filtrar por sección" class="flex flex-wrap items-center gap-2">
             <span v-if="mostrarCiclos" class="text-xs font-semibold tracking-wide text-slate-400 uppercase">Sección</span>
             <button
               type="button"
@@ -428,6 +465,7 @@ async function bajar(formato: 'xlsx' | 'pdf') {
                 <tr>
                   <th>Estudiante</th>
                   <th>Sección</th>
+                  <th v-if="hayCursos">{{ esCiclo ? 'Cursos del ciclo' : 'En tus cursos' }}</th>
                   <th v-if="!esCiclo">Celular</th>
                   <th>Situación</th>
                 </tr>
@@ -441,7 +479,13 @@ async function bajar(formato: 'xlsx' | 'pdf') {
                   <td class="whitespace-nowrap">
                     <p class="font-semibold text-white">{{ etiquetaSeccion(alumno.ciclo, alumno.seccion) }}</p>
                     <p class="text-xs text-slate-400">{{ etiquetaTurno(alumno.turno) }}</p>
-                    <p v-if="otrasSecciones(alumno).length" class="text-xs text-slate-400">También: {{ otrasSecciones(alumno).join(', ') }}</p>
+                    <p v-if="!hayCursos && otrasSecciones(alumno).length" class="text-xs text-slate-400">También: {{ otrasSecciones(alumno).join(', ') }}</p>
+                  </td>
+                  <td v-if="hayCursos" class="text-xs text-slate-300">
+                    <ul v-if="alumno.cursos?.length" class="space-y-0.5">
+                      <li v-for="curso in alumno.cursos" :key="curso.id">{{ etiquetaCurso(curso) }}<span v-if="esCiclo && curso.docente" class="text-slate-500"> · {{ curso.docente }}</span></li>
+                    </ul>
+                    <span v-else class="text-slate-500">—</span>
                   </td>
                   <td v-if="!esCiclo" class="whitespace-nowrap">
                     <a v-if="urlWhatsapp(alumno.celular)" :href="urlWhatsapp(alumno.celular) ?? undefined" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 text-emerald-300 hover:text-emerald-200" :aria-label="`Escribir por WhatsApp a ${alumno.nombre}`">
@@ -461,7 +505,10 @@ async function bajar(formato: 'xlsx' | 'pdf') {
               <div class="min-w-0">
                 <p class="font-medium text-white">{{ alumno.nombre }}</p>
                 <p class="mt-0.5 text-xs text-slate-400"><span class="tabular-nums">{{ alumno.codigo }}</span> · {{ etiquetaSeccion(alumno.ciclo, alumno.seccion) }} · {{ etiquetaTurno(alumno.turno) }}</p>
-                <p v-if="otrasSecciones(alumno).length" class="text-xs text-slate-400">También: {{ otrasSecciones(alumno).join(', ') }}</p>
+                <p v-if="!hayCursos && otrasSecciones(alumno).length" class="text-xs text-slate-400">También: {{ otrasSecciones(alumno).join(', ') }}</p>
+                <ul v-if="hayCursos && alumno.cursos?.length" class="mt-1 space-y-0.5 text-xs text-slate-300">
+                  <li v-for="curso in alumno.cursos" :key="curso.id">{{ etiquetaCurso(curso) }}</li>
+                </ul>
                 <a v-if="urlWhatsapp(alumno.celular)" :href="urlWhatsapp(alumno.celular) ?? undefined" target="_blank" rel="noopener noreferrer" class="mt-2 inline-flex items-center gap-1.5 text-sm text-emerald-300" :aria-label="`Escribir por WhatsApp a ${alumno.nombre}`">
                   <Icon name="heroicons:chat-bubble-left-ellipsis" class="size-4" aria-hidden="true" /> <span class="tabular-nums">{{ alumno.celular }}</span>
                 </a>

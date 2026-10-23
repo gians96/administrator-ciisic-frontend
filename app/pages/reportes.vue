@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import type { AlumnoSeguimiento, AsesorRef, ConteosSituacion, DocenteAdmin, EnlaceAsesor, EnlaceCiclo, ListaDocentes, Meta, Respuesta, ResumenSeguimiento, SeccionRef } from '~/types/api'
+import type { AlumnoSeguimiento, AsesorRef, ConteosSituacion, CursoSeguimiento, DocenteAdmin, EnlaceAsesor, EnlaceCiclo, ListaDocentes, Meta, Respuesta, ResumenSeguimiento, SeccionRef } from '~/types/api'
 import { estadoDelEnlace, haceCuanto, urlEnlaceCiclo, urlEnlaceDocente, urlWhatsapp } from '~/utils/enlacesDocentes'
 import { fechaDia, fechaHoraLima, numero, soles } from '~/utils/formato'
 import { mensajeError } from '~/utils/errores'
 import {
   FILTROS_REPORTE_VACIOS,
   aParametrosReporte,
+  buscarCursos,
+  etiquetaCurso,
   etiquetaSeccion,
   etiquetaTurno,
   filtrosActivos,
@@ -38,8 +40,12 @@ const route = useRoute()
 const router = useRouter()
 
 const filtros = reactive<FiltrosReporte>(filtrosReporteDesdeQuery(route.query))
-const vista = ref<string>(filtros.situacion || filtros.q || filtros.page > 1 ? 'alumnos' : 'secciones')
+const vista = ref<string>(filtros.situacion || filtros.q || filtros.cursoId || filtros.page > 1 ? 'alumnos' : 'secciones')
 const busqueda = ref(filtros.q)
+/** Texto de la pestaña «Por curso» (cursos, no alumnos): se filtra aquí, sin pedir nada al servidor. */
+const busquedaCursos = ref('')
+/** La primera vez que llega el resumen, si hay cursos de SIVIRENO se abre «Por curso» (salvo que la URL ya pida otra cosa). */
+let vistaInicial = vista.value === 'secciones'
 
 const resumen = ref<ResumenSeguimiento | null>(null)
 const alumnos = ref<AlumnoSeguimiento[]>([])
@@ -74,6 +80,11 @@ const opciones = computed(() => resumen.value?.opciones ?? null)
 const secciones = computed(() => seccionesDelCiclo(opciones.value, filtros.ciclo))
 const hayFiltros = computed(() => filtrosActivos(filtros) > 0)
 const asesorElegido = computed(() => opciones.value?.asesores.find((asesor) => String(asesor.id) === filtros.asesorId) ?? null)
+/** Cursos de SIVIRENO (spec 025); un backend anterior o un padrón del Excel no los trae y las pantallas siguen por sección. */
+const cursosDelPadron = computed<CursoSeguimiento[]>(() => opciones.value?.cursos ?? [])
+const hayCursos = computed(() => cursosDelPadron.value.length > 0)
+const cursoElegido = computed(() => cursosDelPadron.value.find((curso) => String(curso.id) === filtros.cursoId) ?? null)
+const cursosVisibles = computed(() => buscarCursos(resumen.value?.porCurso ?? [], busquedaCursos.value))
 const enlacePorAsesor = computed(() => new Map(enlaces.value.map((enlace) => [enlace.asesorId, enlace])))
 const docentePorId = computed(() => new Map(docentes.value.map((docente) => [docente.id, docente])))
 const enlacePorCiclo = computed(() => new Map(enlacesCiclo.value.map((enlace) => [enlace.ciclo.toUpperCase(), enlace])))
@@ -88,6 +99,7 @@ const seccionesPorCiclo = computed(() => {
 const chips = computed(() => {
   const lista: Array<{ clave: keyof FiltrosReporte, texto: string }> = []
   if (filtros.asesorId) lista.push({ clave: 'asesorId', texto: asesorElegido.value?.nombre ?? 'Asesor' })
+  if (filtros.cursoId) lista.push({ clave: 'cursoId', texto: cursoElegido.value ? etiquetaCurso(cursoElegido.value) : 'Curso' })
   if (filtros.ciclo) lista.push({ clave: 'ciclo', texto: `Ciclo ${filtros.ciclo}` })
   if (filtros.seccion) lista.push({ clave: 'seccion', texto: `Sección ${filtros.seccion}` })
   if (filtros.turno) lista.push({ clave: 'turno', texto: `Turno ${etiquetaTurno(filtros.turno)}` })
@@ -110,10 +122,11 @@ const COLOR_AVANCE = { ok: 'text-emerald-300', warn: 'text-amber-300', error: 't
 const colorAvance = computed(() => COLOR_AVANCE[tonoAvance(totales.value?.avance ?? 0, totales.value?.alumnos ?? 0)])
 
 const PESTANAS = computed(() => [
+  ...(hayCursos.value ? [{ id: 'cursos', label: `Por curso${resumen.value ? ` (${(resumen.value.porCurso ?? []).length})` : ''}`, icon: 'heroicons:book-open' }] : []),
   { id: 'secciones', label: `Por sección${resumen.value ? ` (${resumen.value.porSeccion.length})` : ''}`, icon: 'heroicons:squares-2x2' },
   { id: 'ciclos', label: `Por ciclo${resumen.value ? ` (${resumen.value.porCiclo.length})` : ''}`, icon: 'heroicons:rectangle-stack' },
-  { id: 'asesores', label: `Por asesor${resumen.value ? ` (${resumen.value.porAsesor.length})` : ''}`, icon: 'heroicons:user-group' },
-  { id: 'alumnos', label: `Alumnos${meta.value ? ` (${numero(meta.value.total)})` : ''}`, icon: 'heroicons:list-bullet' },
+  { id: 'asesores', label: `Por ${hayCursos.value ? 'docente' : 'asesor'}${resumen.value ? ` (${resumen.value.porAsesor.length})` : ''}`, icon: 'heroicons:user-group' },
+  { id: 'alumnos', label: `${hayCursos.value ? 'Listado completo' : 'Alumnos'}${meta.value ? ` (${numero(meta.value.total)})` : ''}`, icon: 'heroicons:list-bullet' },
 ])
 
 /** Respuestas que llegan tarde (otro evento u otros filtros) se descartan. */
@@ -134,6 +147,10 @@ async function cargarResumen() {
     if (consulta !== consultaResumen) return
     resumen.value = respuesta.data
     errorCarga.value = null
+    if (vistaInicial) {
+      vistaInicial = false
+      if (vista.value === 'secciones' && (respuesta.data.opciones.cursos ?? []).length) vista.value = 'cursos'
+    }
     // Tras cargar otro padrón, un filtro de la URL puede apuntar a algo que ya no existe
     const vigentes = filtrosVigentes(filtros, respuesta.data.opciones)
     if (JSON.stringify(vigentes) !== JSON.stringify({ ...filtros })) Object.assign(filtros, vigentes)
@@ -207,7 +224,7 @@ async function actualizar(conResumen = true) {
   await Promise.all(pedidos)
 }
 
-watch(() => [filtros.asesorId, filtros.ciclo, filtros.seccion, filtros.turno], (nuevos, anteriores) => {
+watch(() => [filtros.asesorId, filtros.ciclo, filtros.seccion, filtros.turno, filtros.cursoId], (nuevos, anteriores) => {
   // Al cambiar de ciclo, la sección elegida deja de valer si no existe en el ciclo nuevo
   if (nuevos[1] !== anteriores[1] && filtros.seccion && !secciones.value.includes(filtros.seccion)) filtros.seccion = ''
   filtros.page = 1
@@ -280,14 +297,16 @@ function verAlumnos(cambios: Partial<FiltrosReporte>) {
   vista.value = 'alumnos'
 }
 
-async function bajar(formato: FormatoReporte, asesor?: AsesorRef, ciclo?: string) {
+async function bajar(formato: FormatoReporte, asesor?: AsesorRef, ciclo?: string, curso?: CursoSeguimiento) {
   const eventoId = eventos.seleccionadoId
   if (!eventoId) return
-  descargando.value = `${ciclo ? `ciclo-${ciclo}` : (asesor?.id ?? 'general')}:${formato}`
+  descargando.value = `${curso ? `curso-${curso.id}` : ciclo ? `ciclo-${ciclo}` : (asesor?.id ?? 'general')}:${formato}`
   try {
-    // El reporte de un asesor o de un ciclo es siempre el suyo completo; el general respeta los filtros puestos
-    const aplicados: FiltrosReporte = ciclo ? { ...FILTROS_REPORTE_VACIOS, ciclo } : asesor ? { ...FILTROS_REPORTE_VACIOS, asesorId: String(asesor.id) } : filtros
-    await descargar(rutaDeDescarga(eventoId, formato, aplicados), nombreDeRespaldo(formato, ciclo ? `Seguimiento ciclo ${ciclo}` : (asesor?.nombre ?? asesorElegido.value?.nombre)))
+    // El reporte de un curso, un asesor o un ciclo es siempre el suyo completo; el general respeta los filtros puestos
+    const aplicados: FiltrosReporte = curso
+      ? { ...FILTROS_REPORTE_VACIOS, cursoId: String(curso.id) }
+      : ciclo ? { ...FILTROS_REPORTE_VACIOS, ciclo } : asesor ? { ...FILTROS_REPORTE_VACIOS, asesorId: String(asesor.id) } : filtros
+    await descargar(rutaDeDescarga(eventoId, formato, aplicados), nombreDeRespaldo(formato, curso ? etiquetaCurso(curso) : ciclo ? `Seguimiento ciclo ${ciclo}` : (asesor?.nombre ?? asesorElegido.value?.nombre)))
   } catch (error) {
     toast.error(mensajeError(error))
   } finally {
@@ -371,14 +390,14 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
           <AppBadge v-if="resumen?.semestre" tono="brand">Semestre {{ resumen.semestre }}</AppBadge>
         </div>
         <p class="mt-1 text-sm text-slate-400">
-          Cómo van los estudiantes de cada asesor, con las inscripciones de este momento.
+          Cómo van los estudiantes de cada {{ hayCursos ? 'curso y docente' : 'asesor' }}, con las inscripciones de este momento.
           <span v-if="resumen" class="whitespace-nowrap">Actualizado: {{ fechaHoraLima(resumen.generadoEn) }}</span>
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <AppButton variant="secondary" icon="heroicons:arrow-path" :loading="cargandoResumen" @click="actualizar()">Actualizar</AppButton>
         <AppMenu v-if="puedeExportar && hayPadron" etiqueta="Descargar" icon="heroicons:arrow-down-tray" :loading="descargando?.startsWith('general') ?? false">
-          <AppMenuItem icon="heroicons:table-cells" :disabled="descargando !== null" @click="bajar('xlsx')">Excel (.xlsx)</AppMenuItem>
+          <AppMenuItem icon="heroicons:table-cells" :disabled="descargando !== null" @click="bajar('xlsx')">Excel (.xlsx){{ hayCursos ? ' con listado completo' : '' }}</AppMenuItem>
           <AppMenuItem icon="heroicons:document-text" :disabled="descargando !== null" @click="bajar('pdf')">PDF</AppMenuItem>
         </AppMenu>
         <AppMenu v-if="puedeGestionar" etiqueta="Padrón y enlaces" icon="heroicons:cog-6-tooth">
@@ -430,12 +449,19 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
       <template v-else>
         <!-- Filtros -->
         <section class="card p-4" aria-label="Filtros">
-          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1fr]">
+          <div class="grid gap-3 sm:grid-cols-2" :class="hayCursos ? 'xl:grid-cols-[2fr_2fr_1fr_1fr_1fr]' : 'xl:grid-cols-[2fr_1fr_1fr_1fr]'">
             <div>
-              <label for="f-asesor" class="sr-only">Asesor</label>
+              <label for="f-asesor" class="sr-only">{{ hayCursos ? 'Docente' : 'Asesor' }}</label>
               <select id="f-asesor" v-model="filtros.asesorId" class="field-control">
-                <option value="">Todos los asesores</option>
+                <option value="">{{ hayCursos ? 'Todos los docentes' : 'Todos los asesores' }}</option>
                 <option v-for="asesor in opciones?.asesores" :key="asesor.id" :value="String(asesor.id)">{{ asesor.nombre }}</option>
+              </select>
+            </div>
+            <div v-if="hayCursos">
+              <label for="f-curso" class="sr-only">Curso</label>
+              <select id="f-curso" v-model="filtros.cursoId" class="field-control">
+                <option value="">Todos los cursos</option>
+                <option v-for="curso in cursosDelPadron" :key="curso.id" :value="String(curso.id)">{{ etiquetaCurso(curso) }}</option>
               </select>
             </div>
             <div>
@@ -486,7 +512,7 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
               <p class="mt-2 text-sm text-slate-300">
                 <strong class="text-white tabular-nums">{{ numero(totales.pagaron) }}</strong> de <span class="tabular-nums">{{ numero(totales.alumnos) }}</span> alumnos pagaron
               </p>
-              <p v-if="resumen.alumnosSinAsesor" class="mt-1 text-xs text-amber-300">{{ numero(resumen.alumnosSinAsesor) }} sin asesor asignado</p>
+              <p v-if="resumen.alumnosSinAsesor" class="mt-1 text-xs text-amber-300">{{ numero(resumen.alumnosSinAsesor) }} sin {{ hayCursos ? 'docente' : 'asesor' }} asignado</p>
             </div>
             <div>
               <BarraAvance :contadores="totales" class="h-3!" />
@@ -511,8 +537,62 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
 
         <AppTabs v-model="vista" :tabs="PESTANAS" />
 
+        <!-- Por curso (SIVIRENO, spec 025): quién pagó en cada curso y su listado de alumnos -->
+        <section v-if="vista === 'cursos'" id="panel-cursos" role="tabpanel" aria-labelledby="tab-cursos" class="card overflow-hidden">
+          <div class="border-b border-white/10 p-4">
+            <label for="buscar-curso" class="sr-only">Buscar curso</label>
+            <div class="relative">
+              <Icon name="heroicons:magnifying-glass" class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" aria-hidden="true" />
+              <input id="buscar-curso" v-model="busquedaCursos" type="search" class="field-control pl-9" placeholder="Buscar curso, código, sección o docente">
+            </div>
+          </div>
+          <div class="relative overflow-x-auto">
+            <table class="table-base">
+              <thead>
+                <tr>
+                  <th>Curso</th>
+                  <th>Sección</th>
+                  <th>Docente</th>
+                  <CabeceraContadores :con-pago="conPagos" />
+                  <th><span class="sr-only">Acciones</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="fila in cursosVisibles" :key="fila.id">
+                  <td class="min-w-56">
+                    <p class="font-semibold text-white">{{ fila.nombre }}</p>
+                    <p class="text-xs text-slate-400 tabular-nums">{{ fila.codigo }}</p>
+                  </td>
+                  <td class="whitespace-nowrap">
+                    <p class="font-semibold text-white">{{ etiquetaSeccion(fila.ciclo, fila.seccion) }}</p>
+                    <p class="text-xs text-slate-400">{{ etiquetaTurno(fila.turno) }}</p>
+                  </td>
+                  <td class="min-w-48 text-xs">
+                    <p v-if="fila.docente" class="text-slate-300">{{ fila.docente.nombre }}</p>
+                    <p v-else class="text-amber-300">Sin docente</p>
+                  </td>
+                  <CeldasContadores :contadores="fila" :con-pago="conPagos" />
+                  <td class="text-right whitespace-nowrap">
+                    <div class="flex justify-end gap-2">
+                      <AppButton size="sm" variant="secondary" icon="heroicons:eye" :aria-label="`Ver los alumnos de ${etiquetaCurso(fila)}`" @click="verAlumnos({ cursoId: String(fila.id), situacion: '' })">Alumnos</AppButton>
+                      <AppMenu v-if="puedeExportar" etiqueta="Descargar" size="sm" :loading="descargando?.startsWith(`curso-${fila.id}:`) ?? false" :aria-label="`Descargar el reporte de ${etiquetaCurso(fila)}`">
+                        <AppMenuItem icon="heroicons:table-cells" :disabled="descargando !== null" @click="bajar('xlsx', undefined, undefined, fila)">Excel (.xlsx)</AppMenuItem>
+                        <AppMenuItem icon="heroicons:document-text" :disabled="descargando !== null" @click="bajar('pdf', undefined, undefined, fila)">PDF</AppMenuItem>
+                      </AppMenu>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <AppEmpty v-if="!cursosVisibles.length" titulo="No hay cursos con estos filtros" descripcion="Prueba con otro texto o quita los filtros." icon="heroicons:book-open" />
+          <p class="border-t border-white/10 px-4 py-3 text-xs text-slate-400">
+            Cada curso es una carga lectiva de SIVIRENO (asignatura, ciclo, sección y docente). Un alumno cuenta una vez en cada curso que lleva y una sola vez en los totales. «Alumnos» muestra su listado con quién pagó; la descarga de un curso es la suya completa, sin importar los filtros.
+          </p>
+        </section>
+
         <!-- Por ciclo y sección -->
-        <section v-if="vista === 'secciones'" id="panel-secciones" role="tabpanel" aria-labelledby="tab-secciones" class="card overflow-hidden">
+        <section v-else-if="vista === 'secciones'" id="panel-secciones" role="tabpanel" aria-labelledby="tab-secciones" class="card overflow-hidden">
           <div class="relative overflow-x-auto">
             <table class="table-base">
               <thead>
@@ -612,7 +692,7 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
             <table class="table-base">
               <thead>
                 <tr>
-                  <th>Asesor</th>
+                  <th>{{ hayCursos ? 'Docente' : 'Asesor' }}</th>
                   <th>Ciclos y secciones</th>
                   <CabeceraContadores :con-pago="conPagos" />
                   <th><span class="sr-only">Acciones</span></th>
@@ -662,7 +742,8 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
           </div>
           <AppEmpty v-if="!resumen.porAsesor.length" titulo="No hay asesores con estos filtros" icon="heroicons:user-group" />
           <p class="border-t border-white/10 px-4 py-3 text-xs text-slate-400">
-            Un alumno cuenta una vez por cada uno de sus asesores. La descarga de un docente es su reporte completo (todas sus secciones), sin importar los filtros.
+            <template v-if="hayCursos">Un alumno cuenta una vez por cada docente de sus cursos. La descarga de un docente es su reporte completo (todos sus cursos), sin importar los filtros.</template>
+            <template v-else>Un alumno cuenta una vez por cada uno de sus asesores. La descarga de un docente es su reporte completo (todas sus secciones), sin importar los filtros.</template>
             <template v-if="puedeGestionar"> «Enlace» copia el enlace personal del docente (lo crea si aún no tiene).</template>
           </p>
         </section>
@@ -694,8 +775,9 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
                       <tr>
                         <th>Alumno</th>
                         <th>Sección</th>
+                        <th v-if="hayCursos">Cursos y docentes</th>
                         <th>Contacto</th>
-                        <th>Asesores</th>
+                        <th v-if="!hayCursos">Asesores</th>
                         <th>Situación</th>
                         <th v-if="conPagos" class="text-right">Monto</th>
                       </tr>
@@ -709,7 +791,15 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
                         <td class="whitespace-nowrap">
                           <p class="font-semibold text-white">{{ etiquetaSeccion(alumno.ciclo, alumno.seccion) }}</p>
                           <p class="text-xs text-slate-400">{{ etiquetaTurno(alumno.turno) }}</p>
-                          <p v-if="otrasSecciones(alumno).length" class="text-xs text-slate-400">También: {{ otrasSecciones(alumno).join(', ') }}</p>
+                          <p v-if="!hayCursos && otrasSecciones(alumno).length" class="text-xs text-slate-400">También: {{ otrasSecciones(alumno).join(', ') }}</p>
+                        </td>
+                        <td v-if="hayCursos" class="min-w-64 text-xs">
+                          <ul v-if="alumno.cursos?.length" class="space-y-0.5">
+                            <li v-for="curso in alumno.cursos" :key="curso.id" class="text-slate-300">
+                              {{ etiquetaCurso(curso) }}<span class="text-slate-500"> · {{ curso.docente?.nombre ?? 'Sin docente' }}</span>
+                            </li>
+                          </ul>
+                          <p v-else class="text-amber-300">Sin curso en SIVIRENO</p>
                         </td>
                         <td class="text-xs">
                           <a v-if="urlWhatsapp(alumno.celular)" :href="urlWhatsapp(alumno.celular) ?? undefined" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 text-emerald-300 hover:text-emerald-200" :aria-label="`Escribir por WhatsApp a ${alumno.nombre}`">
@@ -718,7 +808,7 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
                           <p v-else class="text-slate-300 tabular-nums">{{ alumno.celular ?? '—' }}</p>
                           <p class="mt-0.5 text-slate-400">{{ alumno.correo ?? '—' }}</p>
                         </td>
-                        <td class="min-w-48 text-xs text-slate-300">
+                        <td v-if="!hayCursos" class="min-w-48 text-xs text-slate-300">
                           <p v-for="asesor in alumno.asesores" :key="asesor.id">{{ asesor.nombre }}</p>
                           <p v-if="!alumno.asesores.length" class="text-amber-300">Sin asesor</p>
                         </td>
@@ -742,7 +832,7 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
                       <div class="min-w-0">
                         <p class="font-medium text-white">{{ alumno.nombre }}</p>
                         <p class="mt-0.5 text-xs text-slate-400"><span class="tabular-nums">{{ alumno.codigo }}</span> · {{ etiquetaSeccion(alumno.ciclo, alumno.seccion) }} · {{ etiquetaTurno(alumno.turno) }}</p>
-                        <p v-if="otrasSecciones(alumno).length" class="text-xs text-slate-400">También: {{ otrasSecciones(alumno).join(', ') }}</p>
+                        <p v-if="!hayCursos && otrasSecciones(alumno).length" class="text-xs text-slate-400">También: {{ otrasSecciones(alumno).join(', ') }}</p>
                       </div>
                       <AppBadge :tono="tonoSituacion(alumno.situacion)">{{ nombreSituacion(alumno.situacion) }}</AppBadge>
                     </div>
@@ -753,7 +843,11 @@ const sinEnlaces = computed(() => enlaces.value.filter((enlace) => !enlace.token
                       <span v-else class="text-slate-400 tabular-nums">{{ alumno.celular ?? 'Sin celular' }}</span>
                       <span v-if="conPagos && alumno.monto !== null" class="font-medium text-white tabular-nums">{{ soles(alumno.monto) }}</span>
                     </div>
-                    <p class="mt-2 text-xs text-slate-400">{{ alumno.asesores.map((a) => a.nombre).join(' · ') || 'Sin asesor' }}</p>
+                    <ul v-if="hayCursos" class="mt-2 space-y-0.5 text-xs text-slate-300">
+                      <li v-for="curso in alumno.cursos ?? []" :key="curso.id">{{ etiquetaCurso(curso) }}<span class="text-slate-500"> · {{ curso.docente?.nombre ?? 'Sin docente' }}</span></li>
+                      <li v-if="!alumno.cursos?.length" class="text-amber-300">Sin curso en SIVIRENO</li>
+                    </ul>
+                    <p v-else class="mt-2 text-xs text-slate-400">{{ alumno.asesores.map((a) => a.nombre).join(' · ') || 'Sin asesor' }}</p>
                   </li>
                 </ul>
                 <div class="card mt-2"><AppPagination :meta="meta" @cambiar="cambiarPagina" /></div>

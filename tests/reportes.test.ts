@@ -9,6 +9,8 @@ import {
   filtrosVigentes,
   nombreDeRespaldo,
   nombreSituacion,
+  buscarCursos,
+  etiquetaCurso,
   otrasSecciones,
   partesDeBarra,
   porcentaje,
@@ -52,7 +54,7 @@ describe('reportes: situaciones', () => {
 describe('reportes: filtros', () => {
   it('lee la URL y descarta lo inválido', () => {
     expect(filtrosReporteDesdeQuery({ asesorId: '7', ciclo: 'vi', seccion: 'a2', turno: 't', situacion: 'no_pagado', q: ' ana ', page: '3' })).toEqual({
-      asesorId: '7', ciclo: 'VI', seccion: 'A2', turno: 'T', situacion: 'NO_PAGADO', q: 'ana', page: 3,
+      asesorId: '7', cursoId: '', ciclo: 'VI', seccion: 'A2', turno: 'T', situacion: 'NO_PAGADO', q: 'ana', page: 3,
     })
     expect(filtrosReporteDesdeQuery({ asesorId: 'abc', situacion: 'PAGO', page: '-2' })).toEqual(FILTROS_REPORTE_VACIOS)
     expect(filtrosReporteDesdeQuery({ asesorId: ['8', '9'], page: '1.5' })).toMatchObject({ asesorId: '8', page: 1 })
@@ -156,5 +158,51 @@ describe('reportes: alumnos en más de una sección (spec 024)', () => {
     expect(otrasSecciones({ secciones: [{ ciclo: 'I', seccion: 'A' }] })).toEqual([])
     expect(otrasSecciones({ secciones: [] })).toEqual([])
     expect(otrasSecciones({})).toEqual([])
+  })
+})
+
+describe('reportes: cursos de SIVIRENO (spec 025)', () => {
+  const opciones: OpcionesSeguimiento = {
+    ciclos: ['II', 'VI'],
+    secciones: [{ ciclo: 'II', seccion: 'B' }, { ciclo: 'VI', seccion: 'A1' }],
+    turnos: ['M', 'T'],
+    asesores: [{ id: 7, nombre: 'DRA. DAGA CHACA MARISOL' }],
+    cursos: [
+      { id: 1, codigo: 'ISES240601', nombre: 'DISEÑO DE REDES DE COMUNICACIONES', ciclo: 'VI', seccion: 'A1', turno: 'M', docente: { id: 7, nombre: 'DRA. DAGA CHACA MARISOL' } },
+      { id: 2, codigo: 'ISES240201', nombre: 'ESTRUCTURA DE DATOS', ciclo: 'II', seccion: 'B', turno: 'T', docente: null },
+    ],
+  }
+
+  it('el curso viaja en la URL, en los parámetros de la API (también en el alcance) y cuenta como filtro', () => {
+    const filtros = filtrosReporteDesdeQuery({ cursoId: '2', ciclo: 'ii' })
+    expect(filtros).toMatchObject({ cursoId: '2', ciclo: 'II' })
+    expect(aParametrosReporte(filtros)).toEqual({ cursoId: '2', ciclo: 'II' })
+    expect(aParametrosReporte(filtros, { soloAlcance: true })).toEqual({ cursoId: '2', ciclo: 'II' })
+    expect(filtrosActivos(filtros)).toBe(2)
+    expect(rutaDeDescarga(2, 'xlsx', { ...FILTROS_REPORTE_VACIOS, cursoId: '2' })).toBe('events/2/advisory/export?formato=xlsx&cursoId=2')
+  })
+
+  it('un curso inválido en la URL se descarta y uno que ya no existe en el padrón se quita', () => {
+    expect(filtrosReporteDesdeQuery({ cursoId: 'abc' }).cursoId).toBe('')
+    expect(filtrosReporteDesdeQuery({ cursoId: '1; DROP' }).cursoId).toBe('')
+    expect(filtrosVigentes({ ...FILTROS_REPORTE_VACIOS, cursoId: '2' }, opciones).cursoId).toBe('2')
+    expect(filtrosVigentes({ ...FILTROS_REPORTE_VACIOS, cursoId: '99' }, opciones).cursoId).toBe('')
+    // Un backend anterior no trae cursos: el filtro no puede valer
+    expect(filtrosVigentes({ ...FILTROS_REPORTE_VACIOS, cursoId: '2' }, { ...opciones, cursos: undefined }).cursoId).toBe('')
+  })
+
+  it('el curso se redacta con su ciclo y sección en los filtros puestos', () => {
+    expect(etiquetaCurso(opciones.cursos![0])).toBe('DISEÑO DE REDES DE COMUNICACIONES (VI-A1)')
+    expect(resumenDeFiltros({ ...FILTROS_REPORTE_VACIOS, cursoId: '2', turno: 'T' }, opciones)).toBe('ESTRUCTURA DE DATOS (II-B) · Turno T')
+  })
+
+  it('busca cursos por nombre, código, sección o docente, sin acentos ni mayúsculas y con todas las palabras', () => {
+    const cursos = opciones.cursos!
+    expect(buscarCursos(cursos, '').map((c) => c.id)).toEqual([1, 2])
+    expect(buscarCursos(cursos, 'diseno redes').map((c) => c.id)).toEqual([1])
+    expect(buscarCursos(cursos, 'ises240201').map((c) => c.id)).toEqual([2])
+    expect(buscarCursos(cursos, 'vi-a1').map((c) => c.id)).toEqual([1])
+    expect(buscarCursos(cursos, 'daga').map((c) => c.id)).toEqual([1])
+    expect(buscarCursos(cursos, 'daga datos')).toEqual([])
   })
 })
