@@ -1,7 +1,17 @@
-import type { CodigoEstado, Permiso } from '~/types/api'
+import type { CodigoEstado, InscripcionDetalle, InscripcionFila, Permiso } from '~/types/api'
 
 /** Consulta de permisos de la cuenta (`auth.puede`). */
 type Puede = (permiso: Permiso) => boolean
+
+/**
+ * El tipo de una fila del listado a partir del detalle (spec 035 del backend): la fila lleva solo el código de la
+ * categoría. Así la fila refleja un cambio de tipo hecho desde el detalle sin recargar la página.
+ */
+export function tipoDeFila(detalle: Pick<InscripcionDetalle, 'tipoInscripcion'>): InscripcionFila['tipoInscripcion'] {
+  const tipo = detalle.tipoInscripcion
+  if (!tipo) return null
+  return { id: tipo.id, nombre: tipo.nombre, etiqueta: tipo.etiqueta, categoria: tipo.categoria.codigo, modalidad: tipo.modalidad }
+}
 
 /** Botones del detalle de una inscripción. */
 export interface AccionesInscripcion {

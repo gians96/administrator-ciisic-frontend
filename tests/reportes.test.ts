@@ -127,7 +127,7 @@ describe('reportes: permisos, menú y errores', () => {
   it('los permisos nuevos están en el catálogo y se implican', () => {
     for (const permiso of ['reportes.ver', 'reportes.exportar', 'reportes.gestionar']) expect(esPermiso(permiso)).toBe(true)
     expect(conDependencias(['reportes.exportar'])).toEqual(expect.arrayContaining(['inscripciones.ver', 'reportes.ver', 'reportes.exportar']))
-    expect(PERMISOS).toHaveLength(39)
+    expect(PERMISOS).toHaveLength(40)
   })
 
   it('Reportes aparece en el menú de quien puede verlo', () => {

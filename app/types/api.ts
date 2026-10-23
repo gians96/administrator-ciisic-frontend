@@ -44,6 +44,7 @@ export type Permiso =
   | 'inscripciones.eliminar'
   | 'inscripciones.cancelar'
   | 'inscripciones.cortesia'
+  | 'inscripciones.cambiar_tipo'
   | 'legacy.usar'
   | 'certificados.gestionar'
   | 'especializadas.gestionar'
@@ -422,6 +423,18 @@ export interface VerificacionDetalle {
   verificadoEn?: string
 }
 
+/** Una corrección del tipo de la inscripción (spec 035 del backend). */
+export interface CambioTipo {
+  id: number
+  creadoEn: string
+  /** Texto del tipo que tenía («Tipo · etiqueta»; «Sin tipo» si no tenía). */
+  anterior: string
+  nuevo: string
+  motivo: string | null
+  /** `null` si la cuenta que lo hizo ya no existe. */
+  realizadoPor: { id: number, nombres: string, apellidos: string } | null
+}
+
 export interface InscripcionDetalle {
   id: number
   eventoId: number
@@ -456,6 +469,14 @@ export interface InscripcionDetalle {
     credencialEnviadaEn: string | null
   }
   credencialEnviada?: boolean | null
+  /**
+   * Correcciones del tipo, de la más reciente a la más antigua (spec 035 del backend). Solo vienen en el
+   * detalle y en la respuesta del cambio, no al cambiar el estado: ahí se conserva el que ya se tenía.
+   * Ausente con un backend anterior.
+   */
+  cambiosTipo?: CambioTipo[]
+  /** Solo en la respuesta de `PATCH …/type`: inscripciones a ponencias especializadas que pasaron al modo del tipo nuevo. */
+  ponenciasActualizadas?: number
 }
 
 /** Una fila de `totales.porModalidad` (spec 018 del backend); `montoAprobado` en `null` sin `pagos.ver`. */

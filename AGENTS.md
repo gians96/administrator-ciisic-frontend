@@ -202,6 +202,12 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   (`PonenciaForm`) tiene el ponente principal y, debajo, «Agregar ponente» (hasta `MAXIMO_COPONENTES` = 3, cada uno con nombre, perfil, foto y «externo»); el Programa lista a todos
   (`ponentesDeLaPonencia`). `cuerpoPonencia` **siempre** envía `coponentes`: el arreglo reemplaza al guardado y `[]` lo vacía (un backend anterior descarta la clave sin error y el
   panel solo ve al principal). Los errores de cada coponente llevan su posición (`coponentes[1].nombre`), como los del backend. **Backend 032 primero.**
+- **Cambiar el tipo de una inscripción** (spec 026; backend 035): «Cambiar tipo» en la tarjeta «Inscripción» del detalle (`CambiarTipoDialogo`; lógica pura en `app/utils/cambioTipo.ts`) solo con
+  `inscripciones.cambiar_tipo` (**solo el Owner**, `PERMISOS_SOLO_OWNER`) y **no** en integrantes de una delegación (`puedeCambiarTipo`: su plan se cambia en Delegaciones). Se elige categoría y tipo
+  (también los inactivos, marcados) y un motivo opcional. **Corrige la clasificación, no el pago**: el monto pagado no cambia y el diálogo avisa si no coincide con el precio del tipo elegido, cómo queda
+  el descuento (`descuentoTrasCambio`, igual que el backend), si cambia la modalidad de asistencia (las ponencias especializadas pendientes de la persona pasan al modo nuevo; a presencial puede fallar
+  por cupo: `TALK_FULL_ON_TYPE_CHANGE`) y que la credencial PDF se actualiza sola pero **no se envía ningún correo**. El historial (`cambiosTipo`) viene solo en `GET inscriptions/:id` y en la respuesta del
+  cambio: al cambiar el estado se conserva el que ya se tenía. El servidor decide y vuelve a comprobar todo. **Backend 035 primero.**
 - Foto del perfil: recodificada con canvas (recorte cuadrado centrado, JPEG de 600 × 600 px, mínimo
   200 px) y con la casilla de consentimiento obligatoria; el multipart lleva solo `file` y
   `consentimiento=true`.
@@ -259,17 +265,17 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–025
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–026
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
 escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de
-asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable (reemplazada por la 021, delegaciones con planes propios), reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo, docentes con DNI y página común, ponencias especializadas solo para congresistas con pago aprobado, resumen por persona de las ponencias con cancelación y comunicado, temas de ponencias con varios ponentes, alumnos en varias secciones, seguimiento por curso y docente de SIVIRENO). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
+asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable (reemplazada por la 021, delegaciones con planes propios), reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo, docentes con DNI y página común, ponencias especializadas solo para congresistas con pago aprobado, resumen por persona de las ponencias con cancelación y comunicado, temas de ponencias con varios ponentes, alumnos en varias secciones, seguimiento por curso y docente de SIVIRENO, cambiar el tipo de una inscripción solo el Owner). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
 `backend-ciisic/specs/013-roles-permisos/contracts/`; código por correo, portal, fotocheck,
 asistencia por QR, alta de participantes y cortesías en
 `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`; modalidad virtual en
 `backend-ciisic/specs/018-modalidad-virtual/contracts/`; tipos que no admiten estudiantes UNDC en
 `backend-ciisic/specs/020-virtual-sin-estudiantes-undc/contracts/`; delegaciones con convenio en
-`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y, con planes y tarifa propios, en `backend-ciisic/specs/029-delegaciones-planes/contracts/`; reportes por asesor en `backend-ciisic/specs/025-reportes-asesores/contracts/`, los enlaces de los docentes en `backend-ciisic/specs/026-enlaces-docentes/contracts/` y los de los ciclos en `backend-ciisic/specs/027-enlaces-ciclo/contracts/` y los docentes con DNI en `backend-ciisic/specs/028-docentes-dni/contracts/` y el resumen de ponencias en `backend-ciisic/specs/031-ponencias-resumen-personas/contracts/` y las secciones por curso en `backend-ciisic/specs/033-padron-secciones-jp/contracts/` y los cursos y docentes de SIVIRENO en `backend-ciisic/specs/034-padron-cursos-sivireno/contracts/`.
+`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y, con planes y tarifa propios, en `backend-ciisic/specs/029-delegaciones-planes/contracts/`; reportes por asesor en `backend-ciisic/specs/025-reportes-asesores/contracts/`, los enlaces de los docentes en `backend-ciisic/specs/026-enlaces-docentes/contracts/` y los de los ciclos en `backend-ciisic/specs/027-enlaces-ciclo/contracts/` y los docentes con DNI en `backend-ciisic/specs/028-docentes-dni/contracts/` y el resumen de ponencias en `backend-ciisic/specs/031-ponencias-resumen-personas/contracts/` y las secciones por curso en `backend-ciisic/specs/033-padron-secciones-jp/contracts/` y los cursos y docentes de SIVIRENO en `backend-ciisic/specs/034-padron-cursos-sivireno/contracts/` y el cambio de tipo de una inscripción en `backend-ciisic/specs/035-cambiar-tipo-inscripcion/contracts/`.
 
 ## Antes de dar por terminado
 

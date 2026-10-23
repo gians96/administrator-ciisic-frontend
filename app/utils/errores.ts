@@ -157,6 +157,8 @@ const RESPALDO_POR_CODIGO: Readonly<Record<string, string>> = {
 
   // Ponencias especializadas: el servidor nombra la ponencia o el ambiente
   TALK_FULL: 'La ponencia ya no tiene cupos disponibles.',
+  // Al cambiar el tipo de una inscripción a presencial (backend spec 035): el servidor nombra la ponencia
+  TALK_FULL_ON_TYPE_CHANGE: 'Una ponencia de la persona ya no tiene cupos presenciales: no se puede pasar a presencial.',
   ROOM_CONFLICT: 'Ese ambiente ya está ocupado a esa hora por otra ponencia presencial.',
   SCHEDULE_CONFLICT: 'Las ponencias se cruzan en horario.',
   // Solo congresistas con el pago aprobado (backend spec 030)
@@ -181,6 +183,11 @@ const RESPALDO_POR_CODIGO: Readonly<Record<string, string>> = {
   ALREADY_REGISTERED: 'La persona ya tiene una inscripción en este evento.',
   REGISTRATION_TYPE_INVALID: 'El tipo de inscripción no existe o no pertenece a este evento.',
   DUPLICATE_RECORD: 'Ya existe un registro con estos datos.',
+
+  // Cambiar el tipo de una inscripción (backend spec 035)
+  TYPE_UNCHANGED: 'La inscripción ya tiene ese tipo. Elige otro.',
+  INSCRIPTION_IN_DELEGATION: 'Esta inscripción es de una delegación: su plan se cambia desde Delegaciones.',
+  INSCRIPTION_CHANGED: 'La inscripción cambió mientras la editabas. Ciérrala, ábrela de nuevo y vuelve a intentarlo.',
 }
 
 function cuerpo(data: unknown): Partial<ErrorApi> {

@@ -3,7 +3,7 @@ import type { Categoria, InscripcionDetalle, InscripcionFila, Meta, Respuesta } 
 import { ESTADOS, fechaDia, fechaHoraLima, modalidadPago, nombreCompleto, soles } from '~/utils/formato'
 import { aParametros, filtrosDesdeQuery, type FiltrosInscripcion } from '~/utils/filtros'
 import { mensajeError } from '~/utils/errores'
-import { descripcionInscripciones, placeholderBusqueda } from '~/utils/inscripciones'
+import { descripcionInscripciones, placeholderBusqueda, tipoDeFila } from '~/utils/inscripciones'
 import { esVirtual, etiquetaDeInsignia, hayTiposVirtuales } from '~/utils/modalidad'
 
 definePageMeta({ permiso: 'inscripciones.ver' })
@@ -128,6 +128,8 @@ function alActualizar(detalle: InscripcionDetalle) {
   if (fila) {
     fila.estado = detalle.estado
     fila.revisadoEn = detalle.revision.revisadoEn
+    // Un cambio de tipo desde el detalle (spec 035 del backend) también se ve en la fila
+    fila.tipoInscripcion = tipoDeFila(detalle)
   }
 }
 

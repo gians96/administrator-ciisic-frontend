@@ -4,6 +4,7 @@ import { fechaDia, fechaHoraLima, modalidadPago, nombreCompleto, soles } from '~
 import { aErrorApi, mensajeError } from '~/utils/errores'
 import { fechaCorreoVerificado, textoCorreoVerificado } from '~/utils/cuentaGoogle'
 import { accionesInscripcion, hayAcciones } from '~/utils/inscripciones'
+import { puedeCambiarTipo } from '~/utils/cambioTipo'
 import { esVirtual, etiquetaModalidad } from '~/utils/modalidad'
 
 const props = defineProps<{ inscripcionId: number | null }>()
@@ -18,11 +19,14 @@ const detalle = ref<InscripcionDetalle | null>(null)
 const cargando = ref(false)
 const procesando = ref<string | null>(null)
 const rechazoAbierto = ref(false)
+const cambiarTipoAbierto = ref(false)
 const motivo = ref('')
 
 /** Sin `pagos.ver` el pago llega con sus claves en `null` y sin voucher: no se muestra. */
 const conPagos = computed(() => auth.puede('pagos.ver'))
 const acciones = computed(() => (detalle.value ? accionesInscripcion(detalle.value.estado.codigo, auth.puede) : null))
+/** Solo el Owner y no en un integrante de una delegación (su plan se cambia en Delegaciones, spec 035 del backend). */
+const cambiaTipo = computed(() => (detalle.value ? puedeCambiarTipo(detalle.value, auth.puede) : false))
 
 const MOTIVOS: Record<string, string> = {
   CORREO_NO_INSTITUCIONAL: 'Correo no institucional',
@@ -49,8 +53,16 @@ async function cargar(id: number) {
 
 watch(() => props.inscripcionId, (id) => {
   detalle.value = null
+  cambiarTipoAbierto.value = false
   if (id) cargar(id)
 }, { immediate: true })
+
+/** Tipo cambiado desde el diálogo: la respuesta ya trae el detalle completo y su historial. */
+function alCambiarTipo(nuevo: InscripcionDetalle) {
+  detalle.value = nuevo
+  cambiarTipoAbierto.value = false
+  emit('actualizada', nuevo)
+}
 
 async function cambiarEstado(estado: CodigoEstado, motivoRechazo?: string) {
   if (!detalle.value) return
@@ -60,7 +72,8 @@ async function cambiarEstado(estado: CodigoEstado, motivoRechazo?: string) {
       method: 'PATCH',
       body: { estado, ...(motivoRechazo ? { motivo: motivoRechazo } : {}) },
     })
-    detalle.value = respuesta.data
+    // Esta respuesta no trae el historial de cambios de tipo: se conserva el que ya se tenía
+    detalle.value = { ...respuesta.data, cambiosTipo: respuesta.data.cambiosTipo ?? detalle.value?.cambiosTipo }
     emit('actualizada', respuesta.data)
     if (estado === 'APROBADO') {
       if (respuesta.data.credencialEnviada === false) toast.error('Inscripción aprobada, pero no se pudo enviar la credencial por correo. Puedes reenviarla.')
@@ -194,7 +207,10 @@ const correoVerificado = computed(() => textoCorreoVerificado(detalle.value?.ver
           </dl>
         </div>
         <div class="rounded-xl bg-white/5 p-4">
-          <p class="kicker">Inscripción</p>
+          <div class="flex items-center justify-between gap-2">
+            <p class="kicker">Inscripción</p>
+            <AppButton v-if="cambiaTipo" size="sm" variant="secondary" icon="heroicons:arrows-right-left" @click="cambiarTipoAbierto = true">Cambiar tipo</AppButton>
+          </div>
           <dl class="mt-3 space-y-1.5 text-sm">
             <div class="flex justify-between gap-3"><dt class="text-slate-400">Tipo</dt><dd class="text-right text-white">{{ detalle.tipoInscripcion?.nombre ?? '—' }} {{ detalle.tipoInscripcion?.etiqueta ? `· ${detalle.tipoInscripcion.etiqueta}` : '' }}</dd></div>
             <div class="flex justify-between gap-3"><dt class="text-slate-400">Categoría</dt><dd class="text-white">{{ detalle.tipoInscripcion?.categoria.nombre ?? '—' }}</dd></div>
@@ -203,6 +219,17 @@ const correoVerificado = computed(() => textoCorreoVerificado(detalle.value?.ver
             <div v-if="conPagos" class="flex justify-between gap-3"><dt class="text-slate-400">Monto</dt><dd class="font-semibold text-white">{{ soles(detalle.pago.monto) }}<span v-if="detalle.pago.descuento" class="ml-1 text-xs text-emerald-300">(−{{ soles(detalle.pago.descuento) }})</span></dd></div>
           </dl>
         </div>
+      </section>
+
+      <section v-if="detalle.cambiosTipo?.length" class="rounded-xl bg-white/5 p-4">
+        <p class="kicker">Cambios de tipo</p>
+        <ul class="mt-3 space-y-3 text-sm">
+          <li v-for="cambio in detalle.cambiosTipo" :key="cambio.id">
+            <p class="text-xs text-slate-400">{{ fechaHoraLima(cambio.creadoEn) }} · {{ cambio.realizadoPor ? nombreCompleto(cambio.realizadoPor) : 'Cuenta eliminada' }}</p>
+            <p class="mt-0.5 text-white"><span class="text-slate-400 line-through">{{ cambio.anterior }}</span> → {{ cambio.nuevo }}</p>
+            <p v-if="cambio.motivo" class="mt-0.5 text-xs text-slate-400">Motivo: {{ cambio.motivo }}</p>
+          </li>
+        </ul>
       </section>
 
       <section v-if="conPagos" class="rounded-xl bg-white/5 p-4">
@@ -294,6 +321,8 @@ const correoVerificado = computed(() => textoCorreoVerificado(detalle.value?.ver
       <AppButton v-if="acciones.aprobar" variant="success" icon="heroicons:check-circle" :loading="procesando === 'APROBADO'" @click="aprobar">Aprobar</AppButton>
     </template>
   </AppModal>
+
+  <CambiarTipoDialogo :abierto="cambiarTipoAbierto && detalle !== null" :detalle="detalle" @cerrar="cambiarTipoAbierto = false" @cambiada="alCambiarTipo" />
 
   <AppModal :abierto="rechazoAbierto" titulo="Rechazar inscripción" descripcion="El motivo queda registrado y visible para el equipo." ancho="sm" @cerrar="rechazoAbierto = false">
     <AppField label="Motivo del rechazo" for="motivo" required hint="Ej.: el monto del voucher no coincide, voucher ilegible, operación duplicada.">
