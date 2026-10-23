@@ -26,6 +26,8 @@ import {
   hayFiltrosResumen,
   horaFinDesde,
   listaDeNombres,
+  MAXIMO_COPONENTES,
+  ponentesDeLaPonencia,
   mensajeDePuerta,
   minutosEntre,
   parametrosPonencia,
@@ -205,10 +207,51 @@ describe('formulario de la ponencia', () => {
   it('arma el cuerpo con la hora de fin calculada, el precio, el cupo y el ponente', () => {
     expect(cuerpoPonencia({ ...valido(), cupo: '20', ponenteBio: ' Bio ', ponenteFoto: ' /images/a.webp ' })).toEqual({
       tema: 'Bases de datos vectoriales', fecha: '2026-10-27', horaInicio: '12:00', horaFin: '12:45', ambiente: 'Laboratorio 2', modalidad: 'PRESENCIAL',
-      precio: 0, cupo: 20, ponente: { nombre: 'Edwin Roque', bio: 'Bio', foto: '/images/a.webp', externo: false }, publicada: true, orden: 0,
+      precio: 0, cupo: 20, ponente: { nombre: 'Edwin Roque', bio: 'Bio', foto: '/images/a.webp', externo: false }, coponentes: [], publicada: true, orden: 0,
     })
     const pago = cuerpoPonencia({ ...valido(), esGratuita: false, precio: '12,5', modalidad: 'VIRTUAL', ponenteBio: '', ponenteFoto: '', orden: '3' })
     expect(pago).toMatchObject({ precio: 12.5, cupo: null, modalidad: 'VIRTUAL', orden: 3, ponente: { bio: null, foto: null } })
+  })
+
+  describe('tema compartido por varios ponentes', () => {
+    const javier = { nombre: 'Dr. Javier Camilo Poma Palacios', bio: 'Ingeniero Electrónico.', foto: '/images/ponentes/2026/especializados/javier-poma.webp', externo: true }
+
+    it('cargar una ponencia con coponentes los pasa al formulario; sin ellos (o con un backend anterior) la lista queda vacía', () => {
+      const form = formularioPonencia(ponencia({ coponentes: [{ ...javier, bio: null, foto: null }] }))
+      expect(form.coponentes).toEqual([{ nombre: 'Dr. Javier Camilo Poma Palacios', bio: '', foto: '', externo: true }])
+      expect(formularioPonencia(ponencia({ coponentes: [] })).coponentes).toEqual([])
+      expect(formularioPonencia(ponencia()).coponentes).toEqual([])
+      expect(formularioPonencia().coponentes).toEqual([])
+    })
+
+    it('ponentesDeLaPonencia pone al principal primero y suma a los demás', () => {
+      expect(ponentesDeLaPonencia(ponencia()).map((p) => p.nombre)).toEqual(['Ph.D. Edwin Roque Tito'])
+      expect(ponentesDeLaPonencia(ponencia({ coponentes: [javier] })).map((p) => p.nombre)).toEqual(['Ph.D. Edwin Roque Tito', 'Dr. Javier Camilo Poma Palacios'])
+    })
+
+    it('valida el nombre y la foto de cada coponente, indicando cuál (misma clave que usa el backend)', () => {
+      const base = { ...formularioPonencia(), tema: 'Tema compartido', fecha: '2026-10-28', ambiente: 'Aula 2', ponenteNombre: 'Ángel Almidón' }
+      expect(validarPonencia({ ...base, coponentes: [{ nombre: 'Javier Poma', bio: '', foto: '/images/ponentes/a.webp', externo: false }] })).toEqual({})
+      const errores = validarPonencia({ ...base, coponentes: [{ nombre: 'Javier Poma', bio: '', foto: '', externo: false }, { nombre: ' ', bio: '', foto: '../x.png', externo: false }] })
+      expect(Object.keys(errores).sort()).toEqual(['coponentes[1].foto', 'coponentes[1].nombre'])
+    })
+
+    it('admite hasta MAXIMO_COPONENTES ponentes adicionales', () => {
+      const base = { ...formularioPonencia(), tema: 'Tema compartido', fecha: '2026-10-28', ambiente: 'Aula 2', ponenteNombre: 'Ángel Almidón' }
+      const otro = (n: number) => ({ nombre: `Ponente ${n}`, bio: '', foto: '', externo: false })
+      expect(MAXIMO_COPONENTES).toBe(3)
+      expect(validarPonencia({ ...base, coponentes: [otro(1), otro(2), otro(3)] })).toEqual({})
+      expect(validarPonencia({ ...base, coponentes: [otro(1), otro(2), otro(3), otro(4)] })).toHaveProperty('coponentes')
+    })
+
+    it('el cuerpo lleva los coponentes recortados y con null en lo que falte; sin ellos envía [] para vaciar la lista', () => {
+      const form = { ...formularioPonencia(), tema: 'Tema compartido', fecha: '2026-10-28', ambiente: 'Aula 2', ponenteNombre: 'Ángel Almidón' }
+      expect(cuerpoPonencia({ ...form, coponentes: [{ nombre: ' Javier Poma ', bio: ' Bio ', foto: ' /images/a.webp ', externo: true }, { nombre: 'Karen Alcos', bio: '', foto: '', externo: false }] }).coponentes).toEqual([
+        { nombre: 'Javier Poma', bio: 'Bio', foto: '/images/a.webp', externo: true },
+        { nombre: 'Karen Alcos', bio: null, foto: null, externo: false },
+      ])
+      expect(cuerpoPonencia(form).coponentes).toEqual([])
+    })
   })
 })
 

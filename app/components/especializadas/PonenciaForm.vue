@@ -6,7 +6,9 @@ import {
   duracionTexto,
   formularioPonencia,
   horaFinDesde,
+  MAXIMO_COPONENTES,
   MODALIDADES,
+  ponenteVacio,
   validarPonencia,
   type PonenciaEspecializada,
 } from '~/utils/ponenciasEspecializadas'
@@ -34,6 +36,16 @@ watch(() => props.abierto, (abierto) => {
   Object.assign(form, formularioPonencia(props.ponencia))
   errores.value = {}
 }, { immediate: true })
+
+function agregarPonente() {
+  if (form.coponentes.length < MAXIMO_COPONENTES) form.coponentes.push(ponenteVacio())
+}
+
+function quitarPonente(indice: number) {
+  form.coponentes.splice(indice, 1)
+  // Los errores se indexan por posición: al quitar uno dejan de corresponder a su campo
+  errores.value = Object.fromEntries(Object.entries(errores.value).filter(([campo]) => !campo.startsWith('coponentes[')))
+}
 
 function enfocarPrimerError() {
   const campo = Object.keys(errores.value)[0]
@@ -137,6 +149,42 @@ async function guardar() {
           <AppSwitch v-model="form.ponenteExterno" label="Ponente externo" descripcion="No pertenece a la comunidad UNDC." class="w-full" />
         </div>
       </fieldset>
+
+      <fieldset
+        v-for="(coponente, i) in form.coponentes"
+        :key="i"
+        class="grid gap-4 rounded-2xl border border-white/10 p-4 sm:col-span-2 sm:grid-cols-2"
+      >
+        <legend class="px-2 text-xs font-semibold tracking-wider text-slate-400 uppercase">Ponente {{ i + 2 }} · comparte el tema</legend>
+        <AppField label="Nombre" :for="idCampo(`coponentes[${i}].nombre`)" required :error="errores[`coponentes[${i}].nombre`]" class="sm:col-span-2">
+          <input :id="idCampo(`coponentes[${i}].nombre`)" v-model="coponente.nombre" class="field-control" maxlength="200" autocomplete="off" :aria-invalid="errores[`coponentes[${i}].nombre`] ? true : undefined">
+        </AppField>
+        <AppField label="Perfil (opcional)" :for="idCampo(`coponentes[${i}].bio`)" :error="errores[`coponentes[${i}].bio`]" class="sm:col-span-2">
+          <textarea :id="idCampo(`coponentes[${i}].bio`)" v-model="coponente.bio" rows="4" maxlength="5000" class="field-control" />
+        </AppField>
+        <AppField
+          label="Foto (opcional)"
+          :for="idCampo(`coponentes[${i}].foto`)"
+          :error="errores[`coponentes[${i}].foto`]"
+          hint="Ruta del sitio (/images/ponentes/…) o URL https."
+        >
+          <input :id="idCampo(`coponentes[${i}].foto`)" v-model="coponente.foto" class="field-control" maxlength="255" placeholder="/images/ponentes/2026/…" autocomplete="off" :aria-invalid="errores[`coponentes[${i}].foto`] ? true : undefined">
+        </AppField>
+        <div class="flex items-end pb-1">
+          <AppSwitch v-model="coponente.externo" label="Ponente externo" descripcion="No pertenece a la comunidad UNDC." class="w-full" />
+        </div>
+        <div class="flex justify-end sm:col-span-2">
+          <AppButton size="sm" variant="ghost" icon="heroicons:trash" @click="quitarPonente(i)">Quitar ponente</AppButton>
+        </div>
+      </fieldset>
+      <div class="flex flex-wrap items-center justify-between gap-3 sm:col-span-2">
+        <p class="text-xs text-slate-400">
+          ¿Lo dictan varias personas a la misma hora y en el mismo ambiente? Suma a los demás ponentes (hasta {{ MAXIMO_COPONENTES }}).
+        </p>
+        <AppButton size="sm" variant="secondary" icon="heroicons:user-plus" :disabled="form.coponentes.length >= MAXIMO_COPONENTES" @click="agregarPonente">
+          Agregar ponente
+        </AppButton>
+      </div>
 
       <AppField label="Orden" :for="idCampo('orden')" :error="errores.orden" hint="Desempata ponencias del mismo horario.">
         <input :id="idCampo('orden')" v-model="form.orden" inputmode="numeric" class="field-control" maxlength="4" :aria-invalid="errores.orden ? true : undefined">

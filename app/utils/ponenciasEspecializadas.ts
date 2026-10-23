@@ -26,6 +26,9 @@ export interface PonenteEspecializado {
   externo: boolean
 }
 
+/** Cuántos ponentes se pueden sumar al principal en un mismo tema (backend spec 032). */
+export const MAXIMO_COPONENTES = 3
+
 export interface PonenciaEspecializada {
   id: number
   eventoId: number
@@ -50,8 +53,15 @@ export interface PonenciaEspecializada {
   asistentes: number
   cuposDisponibles: number | null
   ponente: PonenteEspecializado
+  /** Los demás ponentes de un tema compartido (backend spec 032); un backend anterior no lo envía. */
+  coponentes?: PonenteEspecializado[]
   publicada: boolean
   orden: number
+}
+
+/** Todos los ponentes del tema: el principal y, si lo comparten, los demás. */
+export function ponentesDeLaPonencia(ponencia: Pick<PonenciaEspecializada, 'ponente' | 'coponentes'>): PonenteEspecializado[] {
+  return [ponencia.ponente, ...(ponencia.coponentes ?? [])]
 }
 
 export interface AsistentePonencia {
@@ -239,6 +249,18 @@ export function ponenciaDePuertaInicial(ponencias: readonly PonenciaEspecializad
 
 // ─── Formulario de la ponencia ───
 
+/** Un ponente del formulario (el principal va en los campos `ponente*` de `FormPonencia`; los demás, aquí). */
+export interface FormPonente {
+  nombre: string
+  bio: string
+  foto: string
+  externo: boolean
+}
+
+export function ponenteVacio(): FormPonente {
+  return { nombre: '', bio: '', foto: '', externo: false }
+}
+
 export interface FormPonencia {
   tema: string
   fecha: string
@@ -254,6 +276,8 @@ export interface FormPonencia {
   ponenteBio: string
   ponenteFoto: string
   ponenteExterno: boolean
+  /** Los demás ponentes del tema, hasta `MAXIMO_COPONENTES`; vacío = lo dicta una sola persona. */
+  coponentes: FormPonente[]
   publicada: boolean
   orden: string
 }
@@ -262,7 +286,7 @@ export function formularioPonencia(ponencia?: PonenciaEspecializada | null): For
   if (!ponencia) {
     return {
       tema: '', fecha: '', horaInicio: '12:00', duracionMin: '45', ambiente: '', modalidad: 'PRESENCIAL', esGratuita: true, precio: '', cupo: '',
-      ponenteNombre: '', ponenteBio: '', ponenteFoto: '', ponenteExterno: false, publicada: true, orden: '0',
+      ponenteNombre: '', ponenteBio: '', ponenteFoto: '', ponenteExterno: false, coponentes: [], publicada: true, orden: '0',
     }
   }
   return {
@@ -279,12 +303,18 @@ export function formularioPonencia(ponencia?: PonenciaEspecializada | null): For
     ponenteBio: ponencia.ponente.bio ?? '',
     ponenteFoto: ponencia.ponente.foto ?? '',
     ponenteExterno: ponencia.ponente.externo,
+    coponentes: (ponencia.coponentes ?? []).map((p) => ({ nombre: p.nombre, bio: p.bio ?? '', foto: p.foto ?? '', externo: p.externo })),
     publicada: ponencia.publicada,
     orden: String(ponencia.orden),
   }
 }
 
 const ENTERO = /^\d+$/
+
+/** Ruta del sitio (`/images/…`, sin `..`) o URL https: lo único que el backend acepta como foto. */
+function esFotoDelPonente(foto: string): boolean {
+  return (/^\/(?!\/)[\w./-]+$/.test(foto) && !foto.includes('..')) || /^https:\/\/\S+$/i.test(foto)
+}
 
 /** Errores por campo antes de enviar (vacío = se puede enviar). */
 export function validarPonencia(form: FormPonencia): Record<string, string> {
@@ -307,9 +337,13 @@ export function validarPonencia(form: FormPonencia): Record<string, string> {
   if (cupo && (!ENTERO.test(cupo) || Number(cupo) < 1)) errores.cupo = 'El cupo es un número entero desde 1 (vacío = sin límite).'
   if (form.ponenteNombre.trim().length < 2) errores['ponente.nombre'] = 'Escribe el nombre del ponente.'
   const foto = form.ponenteFoto.trim()
-  if (foto && !(/^\/(?!\/)[\w./-]+$/.test(foto) && !foto.includes('..')) && !/^https:\/\/\S+$/i.test(foto)) {
-    errores['ponente.foto'] = 'Usa una ruta del sitio (/images/…) o una URL https.'
-  }
+  if (foto && !esFotoDelPonente(foto)) errores['ponente.foto'] = 'Usa una ruta del sitio (/images/…) o una URL https.'
+  if (form.coponentes.length > MAXIMO_COPONENTES) errores.coponentes = `Un tema admite hasta ${MAXIMO_COPONENTES} ponentes adicionales.`
+  form.coponentes.forEach((coponente, i) => {
+    if (coponente.nombre.trim().length < 2) errores[`coponentes[${i}].nombre`] = 'Escribe el nombre del ponente.'
+    const fotoCoponente = coponente.foto.trim()
+    if (fotoCoponente && !esFotoDelPonente(fotoCoponente)) errores[`coponentes[${i}].foto`] = 'Usa una ruta del sitio (/images/…) o una URL https.'
+  })
   if (form.orden.trim() && !ENTERO.test(form.orden.trim())) errores.orden = 'El orden es un número entero.'
   return errores
 }
@@ -332,6 +366,8 @@ export function cuerpoPonencia(form: FormPonencia): Record<string, unknown> {
       foto: form.ponenteFoto.trim() || null,
       externo: form.ponenteExterno,
     },
+    // Siempre se envía: la lista reemplaza a la guardada y `[]` deja el tema con un solo ponente
+    coponentes: form.coponentes.map((p) => ({ nombre: p.nombre.trim(), bio: p.bio.trim() || null, foto: p.foto.trim() || null, externo: p.externo })),
     publicada: form.publicada,
     orden: form.orden.trim() ? Number(form.orden) : 0,
   }

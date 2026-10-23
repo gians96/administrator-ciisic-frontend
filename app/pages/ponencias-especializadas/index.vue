@@ -7,6 +7,7 @@ import {
   duracionTexto,
   enlaceInscripciones,
   etiquetaModalidad,
+  ponentesDeLaPonencia,
   presenciales,
   rangoHorario,
   textoCupo,
@@ -148,7 +149,7 @@ async function publicar(ponencia: PonenciaEspecializada) {
             <thead>
               <tr>
                 <th>Horario</th>
-                <th>Tema y ponente</th>
+                <th>Tema y ponentes</th>
                 <th>Ambiente</th>
                 <th>Precio</th>
                 <th>Cupo</th>
@@ -164,9 +165,9 @@ async function publicar(ponencia: PonenciaEspecializada) {
                 </td>
                 <td class="max-w-md">
                   <p class="font-medium text-white">{{ ponencia.tema }}</p>
-                  <p class="text-xs text-slate-400">
-                    {{ ponencia.ponente.nombre }}
-                    <AppBadge v-if="ponencia.ponente.externo" tono="brand" class="ml-1">Externo</AppBadge>
+                  <p v-for="ponente in ponentesDeLaPonencia(ponencia)" :key="ponente.nombre" class="text-xs text-slate-400">
+                    {{ ponente.nombre }}
+                    <AppBadge v-if="ponente.externo" tono="brand" class="ml-1">Externo</AppBadge>
                   </p>
                 </td>
                 <td class="whitespace-nowrap">

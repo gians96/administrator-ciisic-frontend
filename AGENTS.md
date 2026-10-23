@@ -196,6 +196,10 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   copiar para quien no tiene correo, y se exige marcar la confirmación; hasta `MAXIMO_POR_ENVIO` (100) personas por envío. La cancelación se guarda aunque un correo falle (`resumenDeResultado`). Con el
   acceso libre encendido todas pueden y no hay casillas. Las inscripciones canceladas por esto muestran el motivo `SIN_CONGRESO`. Un backend anterior responde 404 y la pantalla dice que aún no está
   disponible. Los nombres de `SITUACIONES_CONGRESO` llevan sufijo porque `utils/reportes.ts` ya exporta `SITUACIONES`. **Backend 031 primero.**
+- **Temas con varios ponentes** (spec 023; backend 032): un tema que dictan varias personas a la misma hora y en el mismo ambiente sigue siendo **una** ponencia: el formulario
+  (`PonenciaForm`) tiene el ponente principal y, debajo, «Agregar ponente» (hasta `MAXIMO_COPONENTES` = 3, cada uno con nombre, perfil, foto y «externo»); el Programa lista a todos
+  (`ponentesDeLaPonencia`). `cuerpoPonencia` **siempre** envía `coponentes`: el arreglo reemplaza al guardado y `[]` lo vacía (un backend anterior descarta la clave sin error y el
+  panel solo ve al principal). Los errores de cada coponente llevan su posición (`coponentes[1].nombre`), como los del backend. **Backend 032 primero.**
 - Foto del perfil: recodificada con canvas (recorte cuadrado centrado, JPEG de 600 × 600 px, mínimo
   200 px) y con la casilla de consentimiento obligatoria; el multipart lleva solo `file` y
   `consentimiento=true`.
@@ -253,11 +257,11 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–022
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–023
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
 escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de
-asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable (reemplazada por la 021, delegaciones con planes propios), reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo, docentes con DNI y página común, ponencias especializadas solo para congresistas con pago aprobado, resumen por persona de las ponencias con cancelación y comunicado). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
+asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable (reemplazada por la 021, delegaciones con planes propios), reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo, docentes con DNI y página común, ponencias especializadas solo para congresistas con pago aprobado, resumen por persona de las ponencias con cancelación y comunicado, temas de ponencias con varios ponentes). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
 `backend-ciisic/specs/013-roles-permisos/contracts/`; código por correo, portal, fotocheck,
 asistencia por QR, alta de participantes y cortesías en
 `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`; modalidad virtual en
