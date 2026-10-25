@@ -71,6 +71,12 @@ export function useApi() {
    * backend en otra pestaña.
    */
   async function descargar(ruta: string, respaldo: string): Promise<void> {
+    const { archivo, cabeceras } = await pedirArchivo(ruta)
+    guardarArchivo(archivo, nombreDeArchivo(cabeceras.get('content-disposition'), respaldo))
+  }
+
+  /** Pide un archivo en blob; un error se relee (su JSON llega como `Blob`) y reacciona como cualquier llamada. */
+  async function pedirArchivo(ruta: string): Promise<{ archivo: Blob, cabeceras: Headers }> {
     const respuesta = await $fetch.raw<Blob>(`/api/backend/${ruta.replace(/^\/+/, '')}`, { responseType: 'blob', retry: 0 }).catch(async (error: unknown) => {
       await leerCuerpoDeError(error)
       await alFallar(error)
@@ -78,7 +84,15 @@ export function useApi() {
     })
     const archivo: unknown = respuesta._data
     if (!(archivo instanceof Blob)) throw Object.assign(new Error('Respuesta sin archivo'), { status: 502 })
-    guardarArchivo(archivo, nombreDeArchivo(respuesta.headers.get('content-disposition'), respaldo))
+    return { archivo, cabeceras: respuesta.headers }
+  }
+
+  /**
+   * Lee un archivo del backend (voucher) para mostrarlo en pantalla sin guardarlo ni abrir otra pestaña. Con
+   * `$fetch` y no con `<img src>` para conocer su tipo real y mostrar el mensaje de un error (`VOUCHER_NOT_FOUND`).
+   */
+  async function leerArchivo(ruta: string): Promise<Blob> {
+    return (await pedirArchivo(ruta)).archivo
   }
 
   /**
@@ -95,5 +109,5 @@ export function useApi() {
     return `/api/backend/${ruta.replace(/^\/+/, '')}`
   }
 
-  return { api, descargar, urlArchivo, releerAcceso }
+  return { api, descargar, leerArchivo, urlArchivo, releerAcceso }
 }

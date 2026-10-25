@@ -8,3 +8,4 @@
 - [x] T006 Mensajes de error nuevos (`utils/errores.ts`) y pruebas Vitest (`tests/delegaciones.test.ts`, `tests/permisos.test.ts`)
 - [x] T007 `AGENTS.md` y `docs/overview.md`
 - [ ] T008 Probar en el navegador contra el backend local (Owner, Administrador, Tesorero y Comisión)
+- [x] T009 Visor del voucher en un modal (`VisorVoucher.vue`, `useApi().leerArchivo`), detalle responsive (tarjetas bajo `md`, `AccionesVoucher.vue`, `AppModal` con paddings móviles) y borrar voucher también con `inscripciones.validar` (Tesorero; backend 029)

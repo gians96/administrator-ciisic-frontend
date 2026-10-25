@@ -142,8 +142,10 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   **del grupo**; el saldo solo informa. El delegado, con su link (`/delegaciones?delegacion=<código>` de la landing; su origen es `ORIGEN_LANDING_CONFIGURADO`), agrega integrantes y vouchers; con el **link
   individual** (`?unirme=<código>`, que se enciende, apaga y regenera en «Links y correo institucional») cada integrante se inscribe solo, con el prefijo del correo del **dominio** de la delegación
   (`dominioCorreo`, sin Google). **Cada botón sigue al permiso de su acción** (`auth.puede`): crear, datos, integrantes, cambio de plan y subir vouchers = `delegaciones.inscribir` (Comisión
-  elegible); planes, precios, dominio, links y borrar voucher = `delegaciones.gestionar` (solo Owner y Administrador); verificar o rechazar vouchers y aprobar al grupo = `inscripciones.validar`
-  (Tesorero); ver el archivo del voucher = `pagos.ver`. Sin `pagos.ver` los importes llegan en `null` (sin totales ni vouchers); una Comisión que crea una delegación no fija precios: sus planes nacen apagados
+  elegible); planes, precios, dominio y links = `delegaciones.gestionar` (solo Owner y Administrador); verificar, rechazar o **borrar** vouchers y aprobar al grupo = `inscripciones.validar`
+  (Tesorero; borrar también lo hace `delegaciones.gestionar`, y un voucher verificado no se borra: primero vuelve a «Pendiente», `puedeEliminarVoucher`); ver el archivo del voucher = `pagos.ver`:
+  «Ver» abre `VisorVoucher` sobre el detalle (no otra pestaña; el archivo se lee con `useApi().leerArchivo` en blob, `tipoDeVoucher`, y Anterior/Siguiente recorre los vouchers). El detalle es
+  responsive: vouchers e integrantes son tablas desde `md` y tarjetas debajo, y `AccionesVoucher` es el grupo de botones de cada voucher. **Backend 029 + el cambio de borrar voucher primero** (sin él el Tesorero recibe `403`). Sin `pagos.ver` los importes llegan en `null` (sin totales ni vouchers); una Comisión que crea una delegación no fija precios: sus planes nacen apagados
   hasta que un Owner o Administrador los configure. El staff puede inscribir con cualquier correo aunque haya dominio (solo se le avisa). Un DNI de 7 dígitos (Excel pierde el cero) se completa a 8
   (`normalizarDni`). **Backend 029 primero** (su migración convierte las delegaciones existentes).
 - **Reportes de seguimiento por asesor** (spec 016; backend 025): `/reportes` (`reportes.ver`) cruza el padrón de la facultad con las

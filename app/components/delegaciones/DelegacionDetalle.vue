@@ -4,15 +4,15 @@ import { aErrorApi, mensajeError } from '~/utils/errores'
 import { fechaDia, nombreCompleto, numero, soles } from '~/utils/formato'
 import {
   BANCOS, BILLETERAS, cambiosDePlanes, cantidadesPorPlan, enlaceInscripcionDelegacion, enlaceInscripcionIndividual, errorDeDominio, errorDeMinimo, estimarGrupo,
-  ETIQUETA_ESTADO_PAGO, ETIQUETA_PLAN, filaVacia, filasParaEnviar, formularioDePlanes, formularioPagos, hoyLima, MAX_VOUCHERS_POR_ENVIO, normalizarDni,
-  normalizarDominio, pagoVacio, planesActivos, planPorDefecto, TONO_ESTADO_PAGO, validarPlanes, VOUCHER_ACCEPT,
+  ETIQUETA_ESTADO_PAGO, ETIQUETA_PLAN, filaVacia, filasParaEnviar, formularioDePlanes, formularioPagos, hoyLima, MAX_VOUCHERS_POR_ENVIO, medioDePago, normalizarDni,
+  normalizarDominio, pagoVacio, planesActivos, planPorDefecto, puedeEliminarVoucher, TONO_ESTADO_PAGO, validarPlanes, VOUCHER_ACCEPT,
   type Cifra, type FilaEditable, type FormularioPlanes, type PagoFormulario,
 } from '~/utils/delegaciones'
 
 const props = defineProps<{ abierto: boolean, delegacionId: number | null }>()
 const emit = defineEmits<{ cerrar: [], cambio: [] }>()
 
-const { api, urlArchivo } = useApi()
+const { api } = useApi()
 const toast = useToast()
 const auth = useAuthStore()
 const { copiar } = useCopiar()
@@ -203,8 +203,11 @@ async function subirPagos() {
   }
 }
 
-const urlVoucher = (pago: PagoDelegacion) => urlArchivo(`delegations/${detalle.value?.id}/payments/${pago.id}/voucher`)
-const medioDe = (pago: PagoDelegacion) => (pago.modalidadPago === 'banco' ? `Banco ${pago.banco ?? ''}${pago.tipoOperacion ? ` · ${pago.tipoOperacion}` : ''}` : `Billetera ${pago.billeteraDigital ?? ''}`).trim()
+// El voucher que se está viendo en el visor (sobre este detalle, sin abrir otra pestaña)
+const viendoId = ref<number | null>(null)
+
+// Quien configura o quien revisa los pagos (Tesorero) borra un voucher que no esté verificado
+const puedeEliminar = (pago: PagoDelegacion) => puedeEliminarVoucher(pago.estado, { gestionar: puedeGestionar.value, validar: puedeValidar.value })
 
 async function marcarPago(pago: PagoDelegacion, estado: 'PENDIENTE' | 'VERIFICADO' | 'RECHAZADO', motivo?: string) {
   if (!detalle.value) return
@@ -402,6 +405,7 @@ async function regenerar(cual: 'delegado' | 'individual') {
 watch(() => [props.abierto, props.delegacionId] as const, ([abierto, id]) => {
   if (!abierto || !id) return
   detalle.value = null
+  viendoId.value = null
   filas.value = [filaVacia()]
   pagos.value = [pagoVacio()]
   erroresIntegrantes.value = {}
@@ -490,38 +494,70 @@ watch(planUnico, (plan) => {
       <!-- Vouchers -->
       <section v-if="detalle.pago" class="space-y-3">
         <h3 class="kicker">Vouchers ({{ detalle.pagos.length }})</h3>
-        <div v-if="detalle.pagos.length" class="overflow-x-auto">
-          <table class="table-base">
-            <thead>
-              <tr><th>Fecha</th><th>Medio</th><th>Operación</th><th class="text-right">Monto</th><th>Estado</th><th class="text-right">Acciones</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="pago in detalle.pagos" :key="pago.id">
-                <td class="whitespace-nowrap">{{ fechaDia(pago.fechaPago) }}</td>
-                <td class="whitespace-nowrap text-xs">{{ medioDe(pago) }}</td>
-                <td class="font-mono text-xs">{{ pago.numeroOperacion }}</td>
-                <td class="text-right tabular-nums">{{ soles(pago.monto) }}</td>
-                <td>
-                  <AppBadge :tono="TONO_ESTADO_PAGO[pago.estado]">{{ ETIQUETA_ESTADO_PAGO[pago.estado] }}</AppBadge>
-                  <p v-if="pago.motivoRechazo" class="mt-1 max-w-48 text-xs text-red-300">{{ pago.motivoRechazo }}</p>
-                </td>
-                <td class="text-right">
-                  <div class="flex flex-wrap justify-end gap-1">
-                    <a v-if="puedeVerVouchers" :href="urlVoucher(pago)" target="_blank" rel="noopener" class="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2.5 py-1.5 text-xs text-white ring-1 ring-white/15 ring-inset hover:bg-white/10">
-                      <Icon name="heroicons:document-arrow-down" class="size-3.5" aria-hidden="true" /> Ver
-                    </a>
-                    <template v-if="puedeValidar">
-                      <AppButton v-if="pago.estado !== 'VERIFICADO'" size="sm" variant="success" @click="marcarPago(pago, 'VERIFICADO')">Verificar</AppButton>
-                      <AppButton v-if="pago.estado !== 'RECHAZADO'" size="sm" variant="danger" @click="rechazando = pago">Rechazar</AppButton>
-                      <AppButton v-if="pago.estado !== 'PENDIENTE'" size="sm" variant="ghost" @click="marcarPago(pago, 'PENDIENTE')">Pendiente</AppButton>
-                    </template>
-                    <AppButton v-if="puedeGestionar && pago.estado !== 'VERIFICADO'" size="sm" variant="ghost" icon="heroicons:trash" aria-label="Eliminar voucher" @click="eliminarPago(pago)" />
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <template v-if="detalle.pagos.length">
+          <div class="relative hidden overflow-x-auto md:block">
+            <table class="table-base">
+              <thead>
+                <tr><th>Fecha</th><th>Medio</th><th>Operación</th><th class="text-right">Monto</th><th>Estado</th><th class="text-right">Acciones</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="pago in detalle.pagos" :key="pago.id">
+                  <td class="whitespace-nowrap">{{ fechaDia(pago.fechaPago) }}</td>
+                  <td class="whitespace-nowrap text-xs">{{ medioDePago(pago) }}</td>
+                  <td class="font-mono text-xs">{{ pago.numeroOperacion }}</td>
+                  <td class="text-right tabular-nums">{{ soles(pago.monto) }}</td>
+                  <td>
+                    <AppBadge :tono="TONO_ESTADO_PAGO[pago.estado]">{{ ETIQUETA_ESTADO_PAGO[pago.estado] }}</AppBadge>
+                    <p v-if="pago.motivoRechazo" class="mt-1 max-w-48 text-xs text-red-300">{{ pago.motivoRechazo }}</p>
+                  </td>
+                  <td>
+                    <AccionesVoucher
+                      class="justify-end"
+                      :pago="pago"
+                      :puede-ver="puedeVerVouchers"
+                      :puede-validar="puedeValidar"
+                      :puede-eliminar="puedeEliminar(pago)"
+                      @ver="viendoId = pago.id"
+                      @verificar="marcarPago(pago, 'VERIFICADO')"
+                      @rechazar="rechazando = pago"
+                      @pendiente="marcarPago(pago, 'PENDIENTE')"
+                      @eliminar="eliminarPago(pago)"
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Móvil: una tarjeta por voucher -->
+          <ul class="space-y-2 md:hidden">
+            <li v-for="pago in detalle.pagos" :key="pago.id" class="rounded-xl bg-white/5 p-3">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="break-all font-mono text-sm text-white">{{ pago.numeroOperacion }}</p>
+                  <p class="mt-0.5 text-xs text-slate-400">{{ fechaDia(pago.fechaPago) }} · {{ medioDePago(pago) }}</p>
+                </div>
+                <p class="shrink-0 font-semibold tabular-nums text-white">{{ soles(pago.monto) }}</p>
+              </div>
+              <div class="mt-2">
+                <AppBadge :tono="TONO_ESTADO_PAGO[pago.estado]">{{ ETIQUETA_ESTADO_PAGO[pago.estado] }}</AppBadge>
+                <p v-if="pago.motivoRechazo" class="mt-1 text-xs text-red-300">{{ pago.motivoRechazo }}</p>
+              </div>
+              <AccionesVoucher
+                class="mt-3"
+                :pago="pago"
+                :puede-ver="puedeVerVouchers"
+                :puede-validar="puedeValidar"
+                :puede-eliminar="puedeEliminar(pago)"
+                @ver="viendoId = pago.id"
+                @verificar="marcarPago(pago, 'VERIFICADO')"
+                @rechazar="rechazando = pago"
+                @pendiente="marcarPago(pago, 'PENDIENTE')"
+                @eliminar="eliminarPago(pago)"
+              />
+            </li>
+          </ul>
+        </template>
         <p v-else class="rounded-xl bg-white/5 px-4 py-3 text-sm text-slate-400">Aún no hay vouchers. El delegado los sube con su link{{ puedeInscribir ? ' o puedes agregarlos abajo' : '' }}.</p>
 
         <details v-if="puedeInscribir" class="rounded-xl bg-white/5 p-4">
@@ -585,7 +621,7 @@ watch(planUnico, (plan) => {
       <!-- Integrantes -->
       <section class="space-y-3">
         <h3 class="kicker">Integrantes ({{ detalle.inscripciones.length }})</h3>
-        <div class="overflow-x-auto">
+        <div class="relative hidden overflow-x-auto md:block">
           <table class="table-base">
             <thead>
               <tr><th>Integrante</th><th>Documento</th><th>Correo</th><th>Plan</th><th>Estado</th><th class="text-right">Monto</th><th class="text-right"><span class="sr-only">Acciones</span></th></tr>
@@ -596,7 +632,7 @@ watch(planUnico, (plan) => {
                 <td class="font-mono text-xs">{{ inscripcion.participante.tipoDocumento.toUpperCase() }} {{ inscripcion.participante.numeroDocumento }}</td>
                 <td class="text-xs text-slate-400">{{ inscripcion.participante.correo }}</td>
                 <td class="whitespace-nowrap">
-                  <select v-if="puedeCambiarPlan(inscripcion)" :value="inscripcion.plan ?? ''" class="field-control py-1 text-xs" :aria-label="`Plan de ${nombreCompleto(inscripcion.participante)}`" @change="cambiarPlan(inscripcion, $event)">
+                  <select v-if="puedeCambiarPlan(inscripcion)" :value="inscripcion.plan ?? ''" class="field-control min-w-36 py-1 text-xs" :aria-label="`Plan de ${nombreCompleto(inscripcion.participante)}`" @change="cambiarPlan(inscripcion, $event)">
                     <option v-if="!inscripcion.plan" value="" disabled>Sin plan</option>
                     <option v-for="plan in planesDestino(inscripcion)" :key="plan" :value="plan">{{ ETIQUETA_PLAN[plan] }}</option>
                   </select>
@@ -614,6 +650,30 @@ watch(planUnico, (plan) => {
             </tbody>
           </table>
         </div>
+
+        <!-- Móvil: una tarjeta por integrante -->
+        <ul class="space-y-2 md:hidden">
+          <li v-for="inscripcion in detalle.inscripciones" :key="inscripcion.id" class="rounded-xl bg-white/5 p-3">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="font-medium text-white">{{ nombreCompleto(inscripcion.participante) }}</p>
+                <p class="font-mono text-xs text-slate-400">{{ inscripcion.participante.tipoDocumento.toUpperCase() }} {{ inscripcion.participante.numeroDocumento }}</p>
+                <p class="break-all text-xs text-slate-400">{{ inscripcion.participante.correo }}</p>
+              </div>
+              <AppBadge :estado="inscripcion.estado.codigo">{{ inscripcion.estado.nombre }}</AppBadge>
+            </div>
+            <div class="mt-3 flex items-center justify-between gap-2">
+              <select v-if="puedeCambiarPlan(inscripcion)" :value="inscripcion.plan ?? ''" class="field-control min-w-0 flex-1 py-1 text-xs" :aria-label="`Plan de ${nombreCompleto(inscripcion.participante)}`" @change="cambiarPlan(inscripcion, $event)">
+                <option v-if="!inscripcion.plan" value="" disabled>Sin plan</option>
+                <option v-for="plan in planesDestino(inscripcion)" :key="plan" :value="plan">{{ ETIQUETA_PLAN[plan] }}</option>
+              </select>
+              <span v-else class="text-xs text-slate-300">{{ inscripcion.plan ? ETIQUETA_PLAN[inscripcion.plan] : '—' }}</span>
+              <span class="shrink-0 text-sm font-semibold tabular-nums text-white">{{ soles(inscripcion.monto) }}</span>
+              <AppButton v-if="puedeInscribir && inscripcion.estado.codigo !== 'APROBADO'" size="sm" variant="ghost" icon="heroicons:user-minus" :aria-label="`Quitar a ${nombreCompleto(inscripcion.participante)}`" @click="quitar(inscripcion.id, nombreCompleto(inscripcion.participante))" />
+            </div>
+          </li>
+          <li v-if="!detalle.inscripciones.length" class="rounded-xl bg-white/5 px-4 py-3 text-center text-sm text-slate-400">Aún no hay integrantes registrados.</li>
+        </ul>
 
         <details v-if="puedeInscribir" class="rounded-xl bg-white/5 p-4" :open="!detalle.inscripciones.length && activos.length > 0">
           <summary class="cursor-pointer text-sm font-semibold text-slate-200">Agregar integrantes</summary>
@@ -708,6 +768,19 @@ watch(planUnico, (plan) => {
       <AppButton variant="secondary" @click="emit('cerrar')">Cerrar</AppButton>
     </template>
   </AppModal>
+
+  <VisorVoucher
+    v-if="detalle"
+    :abierto="viendoId !== null"
+    :delegacion-id="detalle.id"
+    :pagos="detalle.pagos"
+    :pago-id="viendoId"
+    :puede-validar="puedeValidar"
+    @cerrar="viendoId = null"
+    @cambiar="viendoId = $event"
+    @verificar="marcarPago($event, 'VERIFICADO')"
+    @rechazar="rechazando = $event"
+  />
 
   <AppModal :abierto="rechazando !== null" titulo="Rechazar voucher" :descripcion="rechazando ? `Operación ${rechazando.numeroOperacion} por ${soles(rechazando.monto)}` : ''" ancho="sm" @cerrar="rechazando = null">
     <AppField label="Motivo (opcional)" for="rechazo-motivo">

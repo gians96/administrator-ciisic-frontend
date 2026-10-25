@@ -2,7 +2,7 @@
 // DELEGACIONES (backend spec 029): planes por delegación, carga masiva y links públicos (funciones puras)
 // ============================================================================
 
-import type { CambiosPlanes, CodigoPlan, EstadoPagoDelegacion, PlanDelegacion } from '~/types/api'
+import type { CambiosPlanes, CodigoPlan, EstadoPagoDelegacion, PagoDelegacion, PlanDelegacion } from '~/types/api'
 
 /** Mínimo de integrantes con el que nace una delegación (desde ahí los planes con promocional lo cobran). */
 export const MIN_INTEGRANTES_POR_DEFECTO = 10
@@ -349,6 +349,35 @@ export const TONO_ESTADO_PAGO: Record<EstadoPagoDelegacion, 'warn' | 'ok' | 'err
   PENDIENTE: 'warn',
   VERIFICADO: 'ok',
   RECHAZADO: 'error',
+}
+
+/** Medio con el que se pagó: «Banco bcp · directo» o «Billetera yape». */
+export function medioDePago(pago: Pick<PagoDelegacion, 'modalidadPago' | 'banco' | 'tipoOperacion' | 'billeteraDigital'>): string {
+  const medio = pago.modalidadPago === 'banco'
+    ? `Banco ${pago.banco ?? ''}${pago.tipoOperacion ? ` · ${pago.tipoOperacion}` : ''}`
+    : `Billetera ${pago.billeteraDigital ?? ''}`
+  return medio.trim()
+}
+
+/** Cómo se muestra el archivo de un voucher: imagen, PDF u otro tipo (solo se ofrece abrirlo). */
+export type TipoVoucher = 'imagen' | 'pdf' | 'otro'
+
+export function tipoDeVoucher(mime: string | null | undefined): TipoVoucher {
+  const tipo = (mime ?? '').split(';')[0]?.trim().toLowerCase() ?? ''
+  if (tipo.startsWith('image/')) return 'imagen'
+  return tipo === 'application/pdf' ? 'pdf' : 'otro'
+}
+
+/** Borrar un voucher: quien configura (`gestionar`) o revisa los pagos (`validar`), y nunca uno verificado (primero vuelve a pendiente). */
+export function puedeEliminarVoucher(estado: EstadoPagoDelegacion, permisos: { gestionar: boolean, validar: boolean }): boolean {
+  return (permisos.gestionar || permisos.validar) && estado !== 'VERIFICADO'
+}
+
+/** Posición del voucher en la lista y sus vecinos (el visor recorre los vouchers con Anterior y Siguiente). */
+export function vecinosDeVoucher<T extends { id: number }>(pagos: readonly T[], id: number | null): { indice: number, anterior: T | null, siguiente: T | null } {
+  const indice = id === null ? -1 : pagos.findIndex((pago) => pago.id === id)
+  if (indice < 0) return { indice: -1, anterior: null, siguiente: null }
+  return { indice, anterior: pagos[indice - 1] ?? null, siguiente: pagos[indice + 1] ?? null }
 }
 
 export const BANCOS = ['bcp', 'bbva', 'interbank', 'scotiabank', 'banco de la nación', 'otro'] as const

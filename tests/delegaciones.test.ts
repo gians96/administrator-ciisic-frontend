@@ -14,6 +14,7 @@ import {
   formularioDePlanes,
   formularioPagos,
   hoyLima,
+  medioDePago,
   montoDelegacion,
   normalizarDni,
   normalizarDominio,
@@ -25,10 +26,13 @@ import {
   planesVacios,
   planPorDefecto,
   precioUnitarioPlan,
+  puedeEliminarVoucher,
   resumenPlanes,
   textoSaldo,
+  tipoDeVoucher,
   validarPago,
   validarPlanes,
+  vecinosDeVoucher,
   type PagoFormulario,
 } from '~/utils/delegaciones'
 import type { PlanDelegacion } from '~/types/api'
@@ -326,6 +330,48 @@ describe('vouchers del panel', () => {
     // 03:00 UTC del 21 todavía es 22:00 del 20 en Lima
     expect(hoyLima(new Date('2026-10-21T03:00:00Z'))).toBe('2026-10-20')
     expect(hoyLima(new Date('2026-10-21T12:00:00Z'))).toBe('2026-10-21')
+  })
+})
+
+describe('visor de vouchers', () => {
+  it('describe el medio de pago', () => {
+    expect(medioDePago({ modalidadPago: 'billetera', banco: null, tipoOperacion: null, billeteraDigital: 'yape' })).toBe('Billetera yape')
+    expect(medioDePago({ modalidadPago: 'banco', banco: 'bcp', tipoOperacion: 'directo', billeteraDigital: null })).toBe('Banco bcp · directo')
+    expect(medioDePago({ modalidadPago: 'banco', banco: null, tipoOperacion: null, billeteraDigital: null })).toBe('Banco')
+  })
+
+  it('distingue imagen, PDF y otros tipos por el tipo del archivo (con o sin parámetros)', () => {
+    expect(tipoDeVoucher('image/png')).toBe('imagen')
+    expect(tipoDeVoucher('image/webp')).toBe('imagen')
+    expect(tipoDeVoucher('application/pdf')).toBe('pdf')
+    expect(tipoDeVoucher('Application/PDF; charset=binary')).toBe('pdf')
+    expect(tipoDeVoucher('application/octet-stream')).toBe('otro')
+    expect(tipoDeVoucher('')).toBe('otro')
+    expect(tipoDeVoucher(null)).toBe('otro')
+    expect(tipoDeVoucher(undefined)).toBe('otro')
+  })
+
+  it('borra un voucher quien configura o quien valida (Tesorero), y nunca uno verificado', () => {
+    const configura = { gestionar: true, validar: false }
+    const valida = { gestionar: false, validar: true }
+    const nadie = { gestionar: false, validar: false }
+    for (const estado of ['PENDIENTE', 'RECHAZADO'] as const) {
+      expect(puedeEliminarVoucher(estado, configura)).toBe(true)
+      expect(puedeEliminarVoucher(estado, valida)).toBe(true)
+      expect(puedeEliminarVoucher(estado, nadie)).toBe(false)
+    }
+    expect(puedeEliminarVoucher('VERIFICADO', configura)).toBe(false)
+    expect(puedeEliminarVoucher('VERIFICADO', valida)).toBe(false)
+  })
+
+  it('recorre los vouchers: anterior y siguiente, sin salirse de los extremos', () => {
+    const pagos = [{ id: 4 }, { id: 9 }, { id: 12 }]
+    expect(vecinosDeVoucher(pagos, 9)).toEqual({ indice: 1, anterior: { id: 4 }, siguiente: { id: 12 } })
+    expect(vecinosDeVoucher(pagos, 4)).toEqual({ indice: 0, anterior: null, siguiente: { id: 9 } })
+    expect(vecinosDeVoucher(pagos, 12)).toEqual({ indice: 2, anterior: { id: 9 }, siguiente: null })
+    expect(vecinosDeVoucher(pagos, 99)).toEqual({ indice: -1, anterior: null, siguiente: null })
+    expect(vecinosDeVoucher(pagos, null)).toEqual({ indice: -1, anterior: null, siguiente: null })
+    expect(vecinosDeVoucher([], 1)).toEqual({ indice: -1, anterior: null, siguiente: null })
   })
 })
 

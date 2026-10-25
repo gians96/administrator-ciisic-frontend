@@ -18,8 +18,8 @@ en lo que tocan a la tarifa, la modalidad y la pestaña.
   se cambia el plan de un integrante con un selector (`PATCH …/inscriptions/:id`).
 - **Links** (`DelegacionDetalle` → «Links y correo institucional»): dominio del correo, interruptor del link individual y regenerar cada link. El link individual se copia desde la tarjeta o el detalle
   (`/delegaciones?unirme=<código>` de la landing).
-- **Cada botón sigue al permiso de su acción**: crear y datos del grupo, integrantes, plan y vouchers = `delegaciones.inscribir`; planes, links, dominio y borrar voucher = `delegaciones.gestionar`;
-  verificar/rechazar vouchers y aprobar al grupo = `inscripciones.validar`; ver el archivo del voucher = `pagos.ver`. Sin `pagos.ver` los importes llegan en `null` y no se muestran los
+- **Cada botón sigue al permiso de su acción**: crear y datos del grupo, integrantes, plan y vouchers = `delegaciones.inscribir`; planes, links y dominio = `delegaciones.gestionar`;
+  verificar/rechazar/borrar vouchers (no verificados) y aprobar al grupo = `inscripciones.validar` (borrar también con `delegaciones.gestionar`); ver el archivo del voucher = `pagos.ver`, en un visor sobre el detalle. Sin `pagos.ver` los importes llegan en `null` y no se muestran los
   totales ni los vouchers. Una Comisión que crea una delegación no ve los planes: nacen apagados hasta que un Owner o Administrador los configure.
 
 ## Despliegue
