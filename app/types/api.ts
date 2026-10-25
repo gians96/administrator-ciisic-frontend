@@ -48,6 +48,7 @@ export type Permiso =
   | 'legacy.usar'
   | 'certificados.gestionar'
   | 'especializadas.gestionar'
+  | 'especializadas.enlace_aforo'
   | 'reportes.gestionar'
   | 'delegaciones.gestionar'
   // Por evento: las cuentas con alcance `EVENTO` los ejercen solo en sus eventos
@@ -918,6 +919,14 @@ export interface VistaDocente {
 // ─── Enlaces públicos por ciclo (spec 027 del backend, spec 018 del panel) ───
 
 /** Enlace público de un ciclo. `token` es la credencial: solo lo recibe quien tiene `reportes.gestionar`. */
+/** Enlace público del aforo de las ponencias especializadas (backend spec 036): uno por evento, solo del Owner. */
+export interface EnlaceAforo {
+  /** `null`: el evento no tiene enlace. */
+  token: string | null
+  creadoEn: string | null
+  ultimoAcceso: string | null
+}
+
 export interface EnlaceCiclo {
   ciclo: string
   /** Estudiantes del ciclo en el padrón (0 si el ciclo ya no está en el padrón cargado). */

@@ -44,6 +44,8 @@ import {
   validarComunicado,
   validarPersona,
   validarPonencia,
+  mensajeEnlaceAforo,
+  urlEnlaceAforo,
   type PersonaResumen,
   type PonenciaEspecializada,
   type ResultadoPuerta,
@@ -285,6 +287,24 @@ describe('filtros de las inscripciones', () => {
 
   it('enlace desde el programa', () => {
     expect(enlaceInscripciones(12)).toBe('/ponencias-especializadas/inscripciones?ponenciaId=12')
+  })
+})
+
+describe('enlace público del aforo (backend spec 036)', () => {
+  const TOKEN = 'A'.repeat(43)
+
+  it('apunta a la página oculta de la landing con el token tras el #', () => {
+    expect(urlEnlaceAforo(TOKEN, 'https://ciisic-viii.episundc.pe/')).toBe(`https://ciisic-viii.episundc.pe/aforo-ponencias#${TOKEN}`)
+    // Sin origen explícito usa el de la landing configurada (fuera del puerto 3001 del panel en desarrollo)
+    expect(urlEnlaceAforo(TOKEN)).toBe(`https://ciisic-viii.episundc.pe/aforo-ponencias#${TOKEN}`)
+  })
+
+  it('el mensaje lleva el enlace, el evento y el aviso de uso restringido', () => {
+    const mensaje = mensajeEnlaceAforo('https://x/aforo-ponencias#t', 'VIII CIISIC')
+    expect(mensaje).toContain('del VIII CIISIC')
+    expect(mensaje).toContain('https://x/aforo-ponencias#t')
+    expect(mensaje).toContain('no lo publiques')
+    expect(mensajeEnlaceAforo('u', null)).not.toContain('del ')
   })
 })
 

@@ -23,6 +23,7 @@ export const ETIQUETAS_PERMISO: Readonly<Record<Permiso, string>> = {
   'legacy.usar': 'Usar las rutas de la versión anterior',
   'certificados.gestionar': 'Gestionar plantillas y emitir certificados',
   'especializadas.gestionar': 'Crear, editar y eliminar ponencias especializadas',
+  'especializadas.enlace_aforo': 'Crear, renovar y desactivar el enlace público del aforo de las ponencias especializadas',
   'reportes.gestionar': 'Cargar el padrón de estudiantes y los asesores por sección',
   'delegaciones.gestionar': 'Configurar delegaciones: planes, precios, dominio del correo y links',
 
@@ -156,8 +157,8 @@ export function tienePermiso(acceso: AccesoPanel | null | undefined, permiso: Pe
   return buscados.some((p) => acceso.permisos.includes(p))
 }
 
-/** Permisos que solo tiene el Owner (`PERMISOS_SOLO_OWNER` del backend, specs 017 y 035). */
-export const PERMISOS_SOLO_OWNER: readonly Permiso[] = ['sistema.configurar', 'inscripciones.eliminar', 'inscripciones.cambiar_tipo']
+/** Permisos que solo tiene el Owner (`PERMISOS_SOLO_OWNER` del backend, specs 017, 035 y 036). */
+export const PERMISOS_SOLO_OWNER: readonly Permiso[] = ['sistema.configurar', 'inscripciones.eliminar', 'inscripciones.cambiar_tipo', 'especializadas.enlace_aforo']
 
 /** Acceso por rol para sesiones sin `acceso` (respuestas anteriores a la spec 013). */
 function accesoPorRol(codigo: unknown): AccesoPanel {

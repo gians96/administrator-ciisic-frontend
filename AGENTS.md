@@ -210,6 +210,10 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   el descuento (`descuentoTrasCambio`, igual que el backend), si cambia la modalidad de asistencia (las ponencias especializadas pendientes de la persona pasan al modo nuevo; a presencial puede fallar
   por cupo: `TALK_FULL_ON_TYPE_CHANGE`) y que la credencial PDF se actualiza sola pero **no se envía ningún correo**. El historial (`cambiosTipo`) viene solo en `GET inscriptions/:id` y en la respuesta del
   cambio: al cambiar el estado se conserva el que ya se tenía. El servidor decide y vuelve a comprobar todo. **Backend 035 primero.**
+- **Enlace público del aforo** (spec 027; backend 036): la tarjeta `EnlaceAforoCard` del Programa (`/ponencias-especializadas`) crea, copia, renueva y desactiva el enlace
+  `<landing>/aforo-ponencias#<token>` (`urlEnlaceAforo`, con `origenLanding`; el token va tras el `#`), con el que la landing muestra el aforo, los inscritos presenciales, los cupos libres y la
+  asistencia de cada tema sin datos de personas. Es una credencial y es **solo del Owner** (`especializadas.enlace_aforo`, en `PERMISOS_SOLO_OWNER`): la tarjeta solo se monta con
+  `auth.puede('especializadas.enlace_aforo')`. Uno por evento (`GET|POST|DELETE events/:id/specialized-talks/occupancy-link`, `{ regenerar }` para renovar). **Backend 036 primero.**
 - Foto del perfil: recodificada con canvas (recorte cuadrado centrado, JPEG de 600 × 600 px, mínimo
   200 px) y con la casilla de consentimiento obligatoria; el multipart lleva solo `file` y
   `consentimiento=true`.
@@ -267,11 +271,11 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–026
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–027
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
 escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de
-asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable (reemplazada por la 021, delegaciones con planes propios), reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo, docentes con DNI y página común, ponencias especializadas solo para congresistas con pago aprobado, resumen por persona de las ponencias con cancelación y comunicado, temas de ponencias con varios ponentes, alumnos en varias secciones, seguimiento por curso y docente de SIVIRENO, cambiar el tipo de una inscripción solo el Owner). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
+asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable (reemplazada por la 021, delegaciones con planes propios), reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo, docentes con DNI y página común, ponencias especializadas solo para congresistas con pago aprobado, resumen por persona de las ponencias con cancelación y comunicado, temas de ponencias con varios ponentes, alumnos en varias secciones, seguimiento por curso y docente de SIVIRENO, cambiar el tipo de una inscripción solo el Owner, enlace público del aforo de las ponencias solo el Owner). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
 `backend-ciisic/specs/013-roles-permisos/contracts/`; código por correo, portal, fotocheck,
 asistencia por QR, alta de participantes y cortesías en
 `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`; modalidad virtual en

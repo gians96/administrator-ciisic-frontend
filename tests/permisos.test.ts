@@ -39,8 +39,8 @@ const COMISION = acceso(['asistencia.marcar', 'asistencia.ver'])
 const rutas = (a: AccesoPanel | null) => menuPara(a).flatMap((seccion) => seccion.items.map((item) => item.to))
 
 describe('permisos: catálogo', () => {
-  it('tiene los 40 permisos del backend, sin repetir', () => {
-    expect(PERMISOS).toHaveLength(40)
+  it('tiene los 41 permisos del backend, sin repetir', () => {
+    expect(PERMISOS).toHaveLength(41)
     expect(new Set(PERMISOS).size).toBe(PERMISOS.length)
     expect(esPermiso('pagos.ver')).toBe(true)
     expect(esPermiso('pagos.editar')).toBe(false)
@@ -93,12 +93,14 @@ describe('permisos: accesoDeSesion', () => {
     expect(owner.eventoIds).toBeNull()
     expect(owner.permisos).toEqual(PERMISOS)
 
-    // Como en el backend: el Administrador no configura el sistema ni elimina inscripciones (spec 017) ni cambia su tipo (spec 035)
+    // Como en el backend: el Administrador no configura el sistema ni elimina inscripciones (spec 017), ni cambia su tipo (spec 035),
+    // ni administra el enlace público del aforo (spec 036)
     const administrador = accesoDeSesion({ rolCodigo: 'ADMIN' })
-    expect(administrador.permisos).toHaveLength(PERMISOS.length - 3)
+    expect(administrador.permisos).toHaveLength(PERMISOS.length - 4)
     expect(administrador.permisos).not.toContain('sistema.configurar')
     expect(administrador.permisos).not.toContain('inscripciones.eliminar')
     expect(administrador.permisos).not.toContain('inscripciones.cambiar_tipo')
+    expect(administrador.permisos).not.toContain('especializadas.enlace_aforo')
 
     for (const rolCodigo of ['TESORERO', 'COMISION', 'OTRO'] as const) {
       expect(accesoDeSesion({ rolCodigo: rolCodigo as 'TESORERO' }), rolCodigo).toEqual({ alcance: 'EVENTO', permisos: [], eventoIds: [], perfilParticipante: false })

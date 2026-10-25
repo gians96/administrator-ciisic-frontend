@@ -1,6 +1,7 @@
 import { aErrorApi } from '~/utils/errores'
 import { esCorreoDeAcceso, normalizarCorreo } from '~/utils/codigoAcceso'
 import { hoyEnLima } from '~/utils/tokensAcceso'
+import { origenLanding } from '~/utils/delegaciones'
 import {
   esDocumentoValido,
   normalizarCelular,
@@ -605,6 +606,25 @@ export function errorDePuerta(error: unknown): ErrorPuerta {
 /** Enlace a la lista de inscripciones filtrada por una ponencia. */
 export function enlaceInscripciones(ponenciaId: number): string {
   return `/ponencias-especializadas/inscripciones?ponenciaId=${ponenciaId}`
+}
+
+// ─── Enlace público del aforo (backend spec 036) ───
+
+/** Página oculta de la landing que muestra el aforo, los inscritos presenciales y la asistencia por tema. */
+export const RUTA_AFORO_LANDING = '/aforo-ponencias'
+
+/**
+ * `<landing>/aforo-ponencias#<token>`: el token va tras el `#` para que el navegador no lo envíe a ningún servidor (ni en
+ * `Referer`); la página de la landing lo lee de ahí. El origen es el de la landing (`origenLanding`, que en desarrollo es el 3000).
+ */
+export function urlEnlaceAforo(token: string, origen: string = origenLanding()): string {
+  return `${origen.replace(/\/+$/, '')}${RUTA_AFORO_LANDING}#${token}`
+}
+
+/** Texto listo para pegar en WhatsApp o en un correo junto con el enlace. */
+export function mensajeEnlaceAforo(url: string, evento?: string | null): string {
+  const nombre = evento?.trim() ? ` del ${evento.trim()}` : ''
+  return `Aforo de las ponencias especializadas${nombre}: inscritos, cupos libres y asistencia de cada tema, actualizado cada minuto.\n${url}\nEs de uso restringido: no lo publiques.`
 }
 
 // ─── Resumen por persona, cancelación y comunicado (backend spec 031) ───

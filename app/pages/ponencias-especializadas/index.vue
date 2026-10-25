@@ -33,6 +33,7 @@ const editando = ref<PonenciaEspecializada | null>(null)
 const puedeGestionar = computed(() => auth.puede('especializadas.gestionar'))
 const puedeVerInscritos = computed(() => auth.puede('especializadas.ver'))
 const puedeAsistencia = computed(() => auth.puede('especializadas.asistencia'))
+const puedeCompartirAforo = computed(() => auth.puede('especializadas.enlace_aforo'))
 
 const dias = computed(() => agruparPorDia(ponencias.value))
 const totales = computed(() => ({
@@ -133,6 +134,9 @@ async function publicar(ponencia: PonenciaEspecializada) {
       </div>
 
       <AccesoPonenciasCard :acceso-libre="accesoLibre" :puede-cambiar="puedeGestionar" :guardar="guardarAcceso" />
+
+      <!-- Spec 027 (backend 036): solo el Owner crea y comparte el enlace público del aforo -->
+      <EnlaceAforoCard v-if="puedeCompartirAforo" :evento-id="eventos.seleccionadoId" :evento-nombre="eventos.seleccionado?.nombreCorto" />
 
       <div v-if="cargando && !ponencias.length" class="card py-14 text-center text-sm text-slate-400">Cargando ponencias…</div>
       <section v-else-if="!ponencias.length" class="card">
