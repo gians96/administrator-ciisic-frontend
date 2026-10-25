@@ -7,7 +7,7 @@ import { mensajeEnlaceAforo, urlEnlaceAforo } from '~/utils/ponenciasEspecializa
 /**
  * Enlace público del aforo de las ponencias especializadas (spec 027; backend 036). Con él, en la landing
  * (`/aforo-ponencias#<token>`) se ve sin iniciar sesión el aforo, los inscritos presenciales y la asistencia de cada
- * tema, sin datos de personas. Es una credencial: se crea, se copia, se renueva y se desactiva. Solo el Owner
+ * tema, con los nombres de los inscritos (sin documento ni contacto). Es una credencial: se crea, se copia, se renueva y se desactiva. Solo el Owner
  * (`especializadas.enlace_aforo`); la página que lo usa solo muestra esta tarjeta a quien tiene el permiso.
  */
 const props = defineProps<{ eventoId: number | null, eventoNombre?: string | null }>()
@@ -132,7 +132,7 @@ const copiarMensaje = () => copiarTexto(mensajeEnlaceAforo(url.value, props.even
 
       <p class="flex gap-2 rounded-xl bg-amber-400/10 px-4 py-3 text-sm text-amber-200 ring-1 ring-amber-400/30 ring-inset">
         <Icon name="heroicons:shield-exclamation" class="mt-0.5 size-5 shrink-0" aria-hidden="true" />
-        <span>Cualquiera con el enlace ve el aforo, los inscritos y la asistencia de cada tema (sin nombres ni datos de las personas). Compártelo solo con quien lo necesite y renuévalo si se difunde.</span>
+        <span>Cualquiera con el enlace ve el aforo de cada tema y la <strong>lista de sus inscritos</strong> con nombre, modo y si asistió (sin DNI, correo ni celular). Compártelo solo con quien lo necesite y renuévalo si se difunde.</span>
       </p>
     </template>
   </section>

@@ -212,7 +212,7 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   cambio: al cambiar el estado se conserva el que ya se tenía. El servidor decide y vuelve a comprobar todo. **Backend 035 primero.**
 - **Enlace público del aforo** (spec 027; backend 036): la tarjeta `EnlaceAforoCard` del Programa (`/ponencias-especializadas`) crea, copia, renueva y desactiva el enlace
   `<landing>/aforo-ponencias#<token>` (`urlEnlaceAforo`, con `origenLanding`; el token va tras el `#`), con el que la landing muestra el aforo, los inscritos presenciales, los cupos libres y la
-  asistencia de cada tema sin datos de personas. Es una credencial y es **solo del Owner** (`especializadas.enlace_aforo`, en `PERMISOS_SOLO_OWNER`): la tarjeta solo se monta con
+  asistencia de cada tema y la lista de sus inscritos (solo nombre, modo y asistencia; sin DNI ni contacto). Es una credencial y es **solo del Owner** (`especializadas.enlace_aforo`, en `PERMISOS_SOLO_OWNER`): la tarjeta solo se monta con
   `auth.puede('especializadas.enlace_aforo')`. Uno por evento (`GET|POST|DELETE events/:id/specialized-talks/occupancy-link`, `{ regenerar }` para renovar). **Backend 036 primero.**
 - Foto del perfil: recodificada con canvas (recorte cuadrado centrado, JPEG de 600 × 600 px, mínimo
   200 px) y con la casilla de consentimiento obligatoria; el multipart lleva solo `file` y

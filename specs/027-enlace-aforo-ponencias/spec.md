@@ -14,7 +14,7 @@ público que **solo él genera y comparte**. La página vive en la landing (spec
 - **Tarjeta `EnlaceAforoCard`** en el Programa (`/ponencias-especializadas`), debajo de «Acceso a la inscripción»: sin enlace, «Crear enlace público»; con enlace, el enlace a la vista
   (campo de solo lectura), «Copiar enlace», «Copiar mensaje» (texto para WhatsApp o correo, `mensajeEnlaceAforo`) y el menú «Más» con «Abrir como se verá», «Renovar enlace» y
   «Desactivar enlace» (ambos con confirmación). Estado «Sin enlace», «Aún no se abre» o «Activo · Se abrió hace …» (`estadoDelEnlace`, `haceCuanto`). Aviso ámbar: cualquiera con
-  el enlace ve las cifras (sin nombres); se renueva si se difunde.
+  el enlace ve las cifras y, desde el 2026-10-25, la lista de inscritos de cada tema con nombre, modo y asistencia (sin DNI, correo ni celular); se renueva si se difunde.
 - **URL**: `<landing>/aforo-ponencias#<token>` (`urlEnlaceAforo`): el origen es el de la landing (`origenLanding`; en desarrollo, el puerto 3000) y el token va tras el `#`
   (el navegador no lo envía a ningún servidor).
 - Un enlace por evento: la tarjeta sigue al evento elegido (descarta respuestas tardías de otro evento).

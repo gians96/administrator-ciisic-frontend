@@ -624,7 +624,7 @@ export function urlEnlaceAforo(token: string, origen: string = origenLanding()):
 /** Texto listo para pegar en WhatsApp o en un correo junto con el enlace. */
 export function mensajeEnlaceAforo(url: string, evento?: string | null): string {
   const nombre = evento?.trim() ? ` del ${evento.trim()}` : ''
-  return `Aforo de las ponencias especializadas${nombre}: inscritos, cupos libres y asistencia de cada tema, actualizado cada minuto.\n${url}\nEs de uso restringido: no lo publiques.`
+  return `Aforo de las ponencias especializadas${nombre}: inscritos (con sus nombres), cupos libres y asistencia de cada tema, actualizado cada minuto.\n${url}\nEs de uso restringido porque muestra nombres de personas: no lo publiques.`
 }
 
 // ─── Resumen por persona, cancelación y comunicado (backend spec 031) ───
