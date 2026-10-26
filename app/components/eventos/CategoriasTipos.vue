@@ -4,6 +4,16 @@ import { numero, soles } from '~/utils/formato'
 import { aErrorApi, mensajeError } from '~/utils/errores'
 import { clonarLista } from '~/utils/clonar'
 import {
+  AVISO_KIT_NO_GUARDADO,
+  AVISO_SERVIDOR_SIN_KIT,
+  AYUDA_INCLUYE_KIT,
+  avisoCambioKit,
+  avisoKitIncoherente,
+  backendSinKit,
+  diceConKit,
+  kitNoGuardado,
+} from '~/utils/kit'
+import {
   AVISO_MODALIDAD_NO_GUARDADA,
   AVISO_SERVIDOR_SIN_MODALIDAD,
   backendSinModalidad,
@@ -109,8 +119,12 @@ async function eliminarCategoria(categoria: Categoria) {
 const tipoModal = ref(false)
 const tipoCategoria = ref<Categoria | null>(null)
 const tipoEditando = ref<TipoInscripcion | null>(null)
-const tipoForm = reactive<FormularioTipo>({ codigo: '', nombre: '', etiqueta: '', descripcion: '', precio: 0, precioInstitucional: 0, disponiblePara: 'TODOS', modalidad: 'PRESENCIAL', excluyeEstudiantesUndc: false, activo: true, orden: 0 })
+const tipoForm = reactive<FormularioTipo>({ codigo: '', nombre: '', etiqueta: '', descripcion: '', precio: 0, precioInstitucional: 0, disponiblePara: 'TODOS', modalidad: 'PRESENCIAL', excluyeEstudiantesUndc: false, incluyeKit: false, activo: true, orden: 0 })
 const soloExternos = computed(() => tipoForm.disponiblePara === 'EXTERNOS')
+/** El backend es anterior a la spec 037: descartaría «Incluye kit» al guardar y la entrega del kit no tendría efecto. */
+const servidorSinKit = computed(() => backendSinKit(categorias.value))
+/** El código o la etiqueta dicen una cosa y el interruptor otra: en la puerta manda el interruptor. */
+const avisoKit = computed(() => avisoKitIncoherente(tipoForm))
 /** El backend es anterior a la spec 020: descartaría «No admitir estudiantes UNDC» al guardar y no aplicaría la regla. */
 const servidorSinExcluye = computed(() => backendSinExcluyeEstudiantes(categorias.value))
 /**
@@ -148,6 +162,8 @@ function abrirTipo(categoria: Categoria, tipo?: TipoInscripcion) {
  */
 function alElegirModalidad(evento: Event) {
   tipoForm.modalidad = modalidadDe((evento.target as HTMLSelectElement).value)
+  // Un tipo virtual no lleva kit (el backend también lo guarda así)
+  if (tipoForm.modalidad === 'VIRTUAL') tipoForm.incluyeKit = false
   if (preciosOcultos.value) return
   const cambio = precioUndcAlCambiarModalidad(tipoForm.modalidad, tipoForm, { creando: !tipoEditando.value, precarga: precargaPrecioUndc })
   tipoForm.precioInstitucional = cambio.precioInstitucional
@@ -174,6 +190,9 @@ async function guardarTipo() {
   // La modalidad se lee del tipo en vivo: cambiarla con inscripciones las reclasifica a todas
   const avisoModalidad = avisoCambioModalidad(tipoEditando.value, tipoForm.modalidad)
   if (avisoModalidad && !(await confirmar({ titulo: 'Cambiar la modalidad', mensaje: avisoModalidad, textoConfirmar: 'Guardar así' }))) return
+  // «Incluye kit» también se lee en vivo: cambiarlo con inscripciones cambia quién recibe kit en la puerta
+  const avisoDeKit = avisoCambioKit(tipoEditando.value, body.incluyeKit === true)
+  if (avisoDeKit && !(await confirmar({ titulo: 'Cambiar «Incluye kit»', mensaje: avisoDeKit, textoConfirmar: 'Guardar así' }))) return
   guardando.value = true
   try {
     const guardado = tipoEditando.value
@@ -182,6 +201,7 @@ async function guardarTipo() {
     // Un backend sin la spec 018 descarta `modalidad` y responde bien: se avisa en lugar de dar por bueno
     if (modalidadVirtualNoGuardada(body.modalidad, guardado?.data)) toast.error(AVISO_MODALIDAD_NO_GUARDADA)
     else if (excluyeEstudiantesNoGuardado(body.excluyeEstudiantesUndc, guardado?.data)) toast.error(AVISO_EXCLUYE_NO_GUARDADO)
+    else if (kitNoGuardado(body.incluyeKit, guardado?.data)) toast.error(AVISO_KIT_NO_GUARDADO)
     else toast.exito('Tipo de inscripción guardado.')
     tipoModal.value = false
     await cargar()
@@ -259,6 +279,13 @@ async function eliminarTipo(tipo: TipoInscripcion) {
                 <p class="font-medium text-white">
                   {{ tipo.nombre }} <AppBadge v-if="etiquetaDeInsignia(tipo)" tono="brand" class="ml-1">{{ etiquetaDeInsignia(tipo) }}</AppBadge>
                   <AppBadgeVirtual v-if="esVirtual(tipo)" class="ml-1" />
+                  <AppBadge v-if="tipo.incluyeKit === true" tono="ok" class="ml-1" title="Incluye kit: en la puerta se marca su entrega">
+                    <Icon name="heroicons:gift" class="size-3.5" aria-hidden="true" /> Entrega kit
+                  </AppBadge>
+                  <!-- La etiqueta dice «CON KIT» pero el interruptor está apagado: en la puerta saldría «Sin kit» -->
+                  <AppBadge v-else-if="tipo.incluyeKit === false && !esVirtual(tipo) && diceConKit(tipo.codigo, tipo.etiqueta ?? '')" tono="warn" class="ml-1" title="El código o la etiqueta dicen CON KIT, pero «Incluye kit» está apagado">
+                    Revisar kit
+                  </AppBadge>
                   <AppBadge v-if="tipo.disponiblePara === 'EXTERNOS'" tono="warn" class="ml-1">Solo externos</AppBadge>
                   <AppBadge v-else-if="tipo.disponiblePara === 'INSTITUCIONAL'" tono="info" class="ml-1">Solo UNDC</AppBadge>
                   <AppBadge v-if="tipo.excluyeEstudiantesUndc" tono="warn" class="ml-1">Sin estudiantes UNDC</AppBadge>
@@ -358,6 +385,11 @@ async function eliminarTipo(tipo: TipoInscripcion) {
           </select>
           <p v-if="servidorSinModalidad && tipoForm.modalidad === 'VIRTUAL'" class="mt-1.5 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-200" role="status">{{ AVISO_SERVIDOR_SIN_MODALIDAD }}</p>
         </AppField>
+        <div class="md:col-span-2">
+          <AppSwitch v-model="tipoForm.incluyeKit" label="Incluye kit" :descripcion="AYUDA_INCLUYE_KIT" :disabled="tipoForm.modalidad === 'VIRTUAL'" />
+          <p v-if="servidorSinKit && tipoForm.incluyeKit" class="mt-1.5 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-200" role="status">{{ AVISO_SERVIDOR_SIN_KIT }}</p>
+          <p v-else-if="avisoKit" class="mt-1.5 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-200" role="status">{{ avisoKit }}</p>
+        </div>
         <div class="md:col-span-2">
           <AppSwitch v-model="tipoForm.excluyeEstudiantesUndc" label="No admitir estudiantes UNDC" :descripcion="AYUDA_EXCLUYE_ESTUDIANTES" />
           <p v-if="servidorSinExcluye && tipoForm.excluyeEstudiantesUndc" class="mt-1.5 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-200" role="status">{{ AVISO_SERVIDOR_SIN_EXCLUYE }}</p>

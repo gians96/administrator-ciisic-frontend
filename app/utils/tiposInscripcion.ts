@@ -79,6 +79,8 @@ export interface FormularioTipo {
   modalidad: ModalidadAsistencia
   /** Spec 020: no admite estudiantes UNDC. Un tipo que el backend aún no devuelve con el campo parte de `false`. */
   excluyeEstudiantesUndc: boolean
+  /** Spec 037: incluye el kit que se entrega en la puerta. Un tipo que el backend aún no devuelve con el campo parte de `false`. */
+  incluyeKit: boolean
   activo: boolean
   orden: number | ''
 }
@@ -99,6 +101,7 @@ export function formularioDeTipo(tipo: TipoInscripcion | null | undefined, categ
     disponiblePara: tipo?.disponiblePara ?? 'TODOS',
     modalidad: modalidadDe(tipo?.modalidad),
     excluyeEstudiantesUndc: tipo?.excluyeEstudiantesUndc === true,
+    incluyeKit: tipo?.incluyeKit === true,
     activo: tipo?.activo ?? true,
     orden: tipo?.orden ?? categoria.tipos.length + 1,
   }
@@ -199,8 +202,8 @@ export function avisoCambioModalidad(
  * - Un precio vacío es un error (antes viajaba como 0, y 0 es «gratis»).
  * - «Solo externos» no usa el precio UNDC: se envía igual al regular para cumplir `precioInstitucional <= precio`.
  * - Sin `pagos.ver` (`preciosOcultos`) no se envían precios: el backend conserva los actuales.
- * - `modalidad` y `excluyeEstudiantesUndc` viajan siempre (también sin `pagos.ver`: no son precios); un
- *   backend anterior a la spec 018 / 020 los ignora.
+ * - `modalidad`, `excluyeEstudiantesUndc` e `incluyeKit` viajan siempre (también sin `pagos.ver`: no son
+ *   precios); un backend anterior a la spec 018 / 020 / 037 los ignora. Un tipo virtual viaja siempre sin kit.
  */
 export function cuerpoTipo(form: FormularioTipo, caracteristicas: readonly Caracteristica[], opciones: { preciosOcultos: boolean }): ResultadoCuerpoTipo {
   const errores: Record<string, string> = {}
@@ -225,6 +228,7 @@ export function cuerpoTipo(form: FormularioTipo, caracteristicas: readonly Carac
       disponiblePara: form.disponiblePara,
       modalidad: modalidadDe(form.modalidad),
       excluyeEstudiantesUndc: form.excluyeEstudiantesUndc === true,
+      incluyeKit: modalidadDe(form.modalidad) === 'PRESENCIAL' && form.incluyeKit === true,
       activo: form.activo,
       orden: Number(form.orden) || 0,
       caracteristicas: caracteristicas.filter((c) => c.text.trim()).map((c) => ({ icon: c.icon.trim() || 'heroicons:check', text: c.text.trim() })),

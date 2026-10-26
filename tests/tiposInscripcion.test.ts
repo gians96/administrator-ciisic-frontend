@@ -30,6 +30,7 @@ const formulario = (cambios: Partial<FormularioTipo> = {}): FormularioTipo => ({
   disponiblePara: 'TODOS',
   modalidad: 'PRESENCIAL',
   excluyeEstudiantesUndc: false,
+  incluyeKit: false,
   activo: true,
   orden: 2,
   ...cambios,
@@ -53,10 +54,30 @@ describe('cuerpo del tipo de inscripción', () => {
       disponiblePara: 'TODOS',
       modalidad: 'PRESENCIAL',
       excluyeEstudiantesUndc: false,
+      incluyeKit: false,
       activo: true,
       orden: 2,
       caracteristicas: [{ icon: 'heroicons:check', text: 'Acceso a todas las ponencias' }],
     })
+  })
+
+  it('envía «Incluye kit» (spec 037): también sin pagos.ver, que no es un precio', () => {
+    expect(cuerpo(formulario({ incluyeKit: true }))).toMatchObject({ modalidad: 'PRESENCIAL', incluyeKit: true })
+    expect(cuerpo(formulario({ incluyeKit: true }), true)).toMatchObject({ incluyeKit: true })
+    expect(cuerpo(formulario({ incluyeKit: false }))).toMatchObject({ incluyeKit: false })
+  })
+
+  it('un tipo virtual viaja siempre sin kit, aunque el formulario lo tenga encendido', () => {
+    expect(cuerpo(formulario({ modalidad: 'VIRTUAL', incluyeKit: true }))).toMatchObject({ modalidad: 'VIRTUAL', incluyeKit: false })
+  })
+
+  it('el formulario de un tipo parte del kit que trae (ausente = sin kit) y uno nuevo, sin kit', () => {
+    const categoria = { nombre: 'ESTUDIANTES', tipos: [] }
+    const tipo = { id: 1, categoriaId: 1, codigo: 'estudiantes_con_kit', nombre: 'ESTUDIANTES', etiqueta: 'CON KIT', descripcion: null, caracteristicas: null, precio: 120, precioInstitucional: 100, activo: true, orden: 1 }
+    expect(formularioDeTipo({ ...tipo, incluyeKit: true }, categoria).incluyeKit).toBe(true)
+    expect(formularioDeTipo({ ...tipo, incluyeKit: false }, categoria).incluyeKit).toBe(false)
+    expect(formularioDeTipo(tipo, categoria).incluyeKit).toBe(false)
+    expect(formularioDeTipo(null, categoria).incluyeKit).toBe(false)
   })
 
   it('envía «VIRTUAL» sin tocar los precios (30 / 30 es un tipo válido)', () => {

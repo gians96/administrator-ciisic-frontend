@@ -6,6 +6,7 @@ import { fechaCorreoVerificado, textoCorreoVerificado } from '~/utils/cuentaGoog
 import { accionesInscripcion, hayAcciones } from '~/utils/inscripciones'
 import { puedeCambiarTipo } from '~/utils/cambioTipo'
 import { esVirtual, etiquetaModalidad } from '~/utils/modalidad'
+import { estadoKit, kitDe, mensajeDeshacerKit, puedeDeshacerKit, puedeEntregarKit, rutaKit, TEXTO_KIT, textoEntregaKit, TONO_KIT, type ResultadoKit } from '~/utils/kit'
 
 const props = defineProps<{ inscripcionId: number | null }>()
 const emit = defineEmits<{ cerrar: [], actualizada: [detalle: InscripcionDetalle], eliminada: [id: number] }>()
@@ -25,6 +26,11 @@ const motivo = ref('')
 /** Sin `pagos.ver` el pago llega con sus claves en `null` y sin voucher: no se muestra. */
 const conPagos = computed(() => auth.puede('pagos.ver'))
 const acciones = computed(() => (detalle.value ? accionesInscripcion(detalle.value.estado.codigo, auth.puede) : null))
+/** Spec 037: entregar y deshacer el kit lo hace quien marca asistencia (`asistencia.marcar`). */
+const marcaKit = computed(() => auth.puede('asistencia.marcar'))
+const kit = computed(() => kitDe(detalle.value?.kit))
+const estadoDelKit = computed(() => estadoKit(kit.value, detalle.value?.tipoInscripcion))
+const procesandoKit = ref(false)
 /** Solo el Owner y no en un integrante de una delegación (su plan se cambia en Delegaciones, spec 035 del backend). */
 const cambiaTipo = computed(() => (detalle.value ? puedeCambiarTipo(detalle.value, auth.puede) : false))
 
@@ -62,6 +68,39 @@ function alCambiarTipo(nuevo: InscripcionDetalle) {
   detalle.value = nuevo
   cambiarTipoAbierto.value = false
   emit('actualizada', nuevo)
+}
+
+/** Marca el kit como entregado ahora o deshace la entrega; el detalle y la lista se actualizan con el kit nuevo. */
+async function cambiarKit(entregar: boolean) {
+  const actual = detalle.value
+  if (!actual || procesandoKit.value) return
+  const nombre = nombreCompleto(actual.participante)
+  if (!entregar) {
+    const ok = await confirmar({
+      titulo: 'Deshacer entrega del kit',
+      mensaje: mensajeDeshacerKit(nombre, kit.value),
+      textoConfirmar: 'Deshacer',
+      peligro: true,
+    })
+    if (!ok) return
+  }
+  procesandoKit.value = true
+  try {
+    const r = await api<Respuesta<ResultadoKit>>(rutaKit(actual.id), { method: entregar ? 'PUT' : 'DELETE' })
+    // Si mientras tanto se abrió otra inscripción, no se toca
+    if (detalle.value?.id === actual.id) {
+      detalle.value = { ...detalle.value, kit: r.data.kit }
+      emit('actualizada', detalle.value)
+    }
+    toast.exito(entregar ? `Kit entregado a ${nombre}.` : `Entrega deshecha: el kit de ${nombre} quedó pendiente.`)
+  } catch (error) {
+    toast.error(mensajeError(error))
+    // Otra cuenta ya lo cambió: se relee para mostrar lo vigente
+    const codigo = aErrorApi(error).code
+    if (codigo === 'KIT_ALREADY_DELIVERED' || codigo === 'KIT_NOT_DELIVERED') await cargar(actual.id)
+  } finally {
+    procesandoKit.value = false
+  }
 }
 
 async function cambiarEstado(estado: CodigoEstado, motivoRechazo?: string) {
@@ -216,6 +255,18 @@ const correoVerificado = computed(() => textoCorreoVerificado(detalle.value?.ver
             <div class="flex justify-between gap-3"><dt class="text-slate-400">Categoría</dt><dd class="text-white">{{ detalle.tipoInscripcion?.categoria.nombre ?? '—' }}</dd></div>
             <div v-if="detalle.tipoInscripcion?.modalidad" class="flex justify-between gap-3"><dt class="text-slate-400">Modalidad de asistencia</dt><dd class="text-white">{{ etiquetaModalidad(detalle.tipoInscripcion.modalidad) }}</dd></div>
             <div class="flex justify-between gap-3"><dt class="text-slate-400">Clasificación</dt><dd class="text-white">{{ detalle.clasificacion?.nombre ?? '—' }}</dd></div>
+            <!-- Spec 037: el kit se entrega una vez por congreso; el detalle dice si lo lleva, cuándo y quién lo entregó -->
+            <div v-if="estadoDelKit !== 'NO_APLICA'" class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+              <dt class="text-slate-400">Kit</dt>
+              <dd class="text-right">
+                <AppBadge :tono="TONO_KIT[estadoDelKit]">{{ TEXTO_KIT[estadoDelKit] }}</AppBadge>
+                <span v-if="textoEntregaKit(kit)" class="mt-1 block text-xs text-slate-400">{{ textoEntregaKit(kit) }}</span>
+              </dd>
+            </div>
+            <div v-if="marcaKit && (puedeEntregarKit(kit) || puedeDeshacerKit(kit))" class="flex justify-end pt-1">
+              <AppButton v-if="puedeEntregarKit(kit)" size="sm" variant="secondary" icon="heroicons:gift" :loading="procesandoKit" @click="cambiarKit(true)">Entregar kit</AppButton>
+              <AppButton v-else size="sm" variant="ghost" icon="heroicons:arrow-uturn-left" :loading="procesandoKit" @click="cambiarKit(false)">Deshacer entrega</AppButton>
+            </div>
             <div v-if="conPagos" class="flex justify-between gap-3"><dt class="text-slate-400">Monto</dt><dd class="font-semibold text-white">{{ soles(detalle.pago.monto) }}<span v-if="detalle.pago.descuento" class="ml-1 text-xs text-emerald-300">(−{{ soles(detalle.pago.descuento) }})</span></dd></div>
           </dl>
         </div>

@@ -4,6 +4,8 @@ export interface ErrorApi {
   code: string
   message: string
   fields?: Record<string, string>
+  /** Datos que acompañan a algunos errores de negocio (backend spec 037: a quién ya se le registró la asistencia y su kit). */
+  datos?: unknown
 }
 
 interface ErrorFetch {
@@ -21,6 +23,11 @@ export const MENSAJES_POR_CODIGO: Readonly<Record<string, string>> = {
   EMAIL_CREDENTIAL_NOT_FOUND: 'La credencial de correo no existe o ya fue eliminada. Actualiza la página.',
   EMAIL_CREDENTIAL_IN_USE: 'La credencial está asignada a uno o más eventos. Asígnales otra credencial (o «Usar la predeterminada») y vuelve a intentarlo.',
   ACCESS_TOKEN_NOT_FOUND: 'El token de acceso no existe o ya fue eliminado. Actualiza la lista.',
+
+  // Asistencia solo presencial y entrega del kit (backend spec 037)
+  VIRTUAL_REGISTRATION: 'La inscripción es virtual: no registra asistencia presencial. Recibe el enlace de la transmisión por correo.',
+  KIT_NOT_INCLUDED: 'El tipo de inscripción de esta persona no incluye kit.',
+  KIT_NOT_DELIVERED: 'El kit de esta persona no estaba entregado. Actualiza la lista.',
 
   // Inicio de sesión con Google
   GOOGLE_NOT_CONFIGURED: 'El inicio de sesión con Google aún no está configurado. Los administradores pueden entrar con su correo y contraseña.',
@@ -184,6 +191,9 @@ const RESPALDO_POR_CODIGO: Readonly<Record<string, string>> = {
   REGISTRATION_TYPE_INVALID: 'El tipo de inscripción no existe o no pertenece a este evento.',
   DUPLICATE_RECORD: 'Ya existe un registro con estos datos.',
 
+  // Entrega del kit (backend spec 037): el servidor dice a qué hora se entregó
+  KIT_ALREADY_DELIVERED: 'El kit de esta persona ya estaba entregado.',
+
   // Cambiar el tipo de una inscripción (backend spec 035)
   TYPE_UNCHANGED: 'La inscripción ya tiene ese tipo. Elige otro.',
   INSCRIPTION_IN_DELEGATION: 'Esta inscripción es de una delegación: su plan se cambia desde Delegaciones.',
@@ -193,12 +203,15 @@ const RESPALDO_POR_CODIGO: Readonly<Record<string, string>> = {
 function cuerpo(data: unknown): Partial<ErrorApi> {
   if (!data || typeof data !== 'object') return {}
   const valor = data as Record<string, unknown>
-  // createError de Nitro anida el cuerpo en `data`
-  const origen = (valor.data && typeof valor.data === 'object' ? valor.data : valor) as Record<string, unknown>
+  // createError de Nitro anida el cuerpo en `data`; el del backend llega tal cual (`proxyRequest`) y su `data`, si lo
+  // tiene, son los datos del error (spec 037), no otro cuerpo
+  const anidado = valor.data && typeof valor.data === 'object' ? valor.data as Record<string, unknown> : null
+  const origen = typeof valor.code !== 'string' && anidado ? anidado : valor
   return {
     code: typeof origen.code === 'string' ? origen.code : undefined,
     message: typeof origen.message === 'string' ? origen.message : undefined,
     fields: origen.fields && typeof origen.fields === 'object' ? origen.fields as Record<string, string> : undefined,
+    datos: origen.data ?? undefined,
   }
 }
 
@@ -215,6 +228,7 @@ export function aErrorApi(error: unknown): ErrorApi {
     code,
     message: MENSAJES_POR_CODIGO[code] ?? datos.message ?? RESPALDO_POR_CODIGO[code] ?? porDefecto,
     fields: datos.fields,
+    ...(datos.datos !== undefined ? { datos: datos.datos } : {}),
   }
 }
 

@@ -214,6 +214,15 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   `<landing>/aforo-ponencias#<token>` (`urlEnlaceAforo`, con `origenLanding`; el token va tras el `#`), con el que la landing muestra el aforo, los inscritos presenciales, los cupos libres y la
   asistencia de cada tema y la lista de sus inscritos (solo nombre, modo y asistencia; sin DNI ni contacto). Es una credencial y es **solo del Owner** (`especializadas.enlace_aforo`, en `PERMISOS_SOLO_OWNER`): la tarjeta solo se monta con
   `auth.puede('especializadas.enlace_aforo')`. Uno por evento (`GET|POST|DELETE events/:id/specialized-talks/occupancy-link`, `{ regenerar }` para renovar). **Backend 036 primero.**
+- **Entrega del kit y asistencia solo presencial** (spec 028; backend 037): el kit es de la **inscripción** (uno por persona en todo el congreso, no uno por actividad); el tipo dice si lo incluye
+  (`tipo.incluyeKit`, dentro del objeto del tipo como `modalidad`; los planes de delegación, solo `CON_KIT`) y **el panel nunca lo deduce del texto de la etiqueta** (`app/utils/kit.ts`: `estadoKit` =
+  `ENTREGADO` | `PENDIENTE` | `SIN_KIT` | `NO_APLICA`). Entregar y deshacer (`PUT|DELETE inscriptions/:id/kit`) son de quien marca asistencia (`asistencia.marcar`, sin permiso nuevo) y se ven en tres lugares: el
+  **escáner** (insignia CON KIT / SIN KIT / KIT ENTREGADO; con el kit pendiente el resultado **no se cierra solo** —`esperaContinuar`: cámara pausada y lecturas en espera— hasta «Entregar kit» o «Continuar sin entregar»),
+  la **pantalla Asistencia** (botón junto al resultado, columna «Tipo y kit», acciones en la tabla y «Kits: X entregados · Y pendientes de Z» del evento) y el **detalle de la inscripción**. «Ya registrada» (409) trae a la persona y su
+  kit en `datos` del error (`aErrorApi`: el cuerpo del backend llega tal cual y su `data` son esos datos; el cuerpo anidado de `createError` del BFF no los tiene), así un kit pendiente se entrega al volver a escanear.
+  **Deshacer** no pide que el tipo siga incluyendo kit. En el editor de tipos «Incluye kit» queda apagado y desactivado si el tipo es virtual (`backendSinKit`, `kitNoGuardado`, `avisoKitIncoherente`, `avisoCambioKit`).
+  **Los virtuales no marcan asistencia**: el backend responde `403 VIRTUAL_REGISTRATION` y el escáner lo muestra en rojo («Inscripción virtual»); el aviso ámbar anterior queda solo como respaldo con un backend que aún no bloquea.
+  Todo es tolerante: sin `kit` (backend anterior) las pantallas se ven como antes. **Backend 037 primero.**
 - Foto del perfil: recodificada con canvas (recorte cuadrado centrado, JPEG de 600 × 600 px, mínimo
   200 px) y con la casilla de consentimiento obligatoria; el multipart lleva solo `file` y
   `consentimiento=true`.
@@ -271,17 +280,17 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–027
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–028
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
 escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de
-asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable (reemplazada por la 021, delegaciones con planes propios), reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo, docentes con DNI y página común, ponencias especializadas solo para congresistas con pago aprobado, resumen por persona de las ponencias con cancelación y comunicado, temas de ponencias con varios ponentes, alumnos en varias secciones, seguimiento por curso y docente de SIVIRENO, cambiar el tipo de una inscripción solo el Owner, enlace público del aforo de las ponencias solo el Owner). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
+asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable (reemplazada por la 021, delegaciones con planes propios), reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo, docentes con DNI y página común, ponencias especializadas solo para congresistas con pago aprobado, resumen por persona de las ponencias con cancelación y comunicado, temas de ponencias con varios ponentes, alumnos en varias secciones, seguimiento por curso y docente de SIVIRENO, cambiar el tipo de una inscripción solo el Owner, enlace público del aforo de las ponencias solo el Owner, entrega del kit y asistencia solo presencial). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
 `backend-ciisic/specs/013-roles-permisos/contracts/`; código por correo, portal, fotocheck,
 asistencia por QR, alta de participantes y cortesías en
 `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`; modalidad virtual en
 `backend-ciisic/specs/018-modalidad-virtual/contracts/`; tipos que no admiten estudiantes UNDC en
 `backend-ciisic/specs/020-virtual-sin-estudiantes-undc/contracts/`; delegaciones con convenio en
-`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y, con planes y tarifa propios, en `backend-ciisic/specs/029-delegaciones-planes/contracts/`; reportes por asesor en `backend-ciisic/specs/025-reportes-asesores/contracts/`, los enlaces de los docentes en `backend-ciisic/specs/026-enlaces-docentes/contracts/` y los de los ciclos en `backend-ciisic/specs/027-enlaces-ciclo/contracts/` y los docentes con DNI en `backend-ciisic/specs/028-docentes-dni/contracts/` y el resumen de ponencias en `backend-ciisic/specs/031-ponencias-resumen-personas/contracts/` y las secciones por curso en `backend-ciisic/specs/033-padron-secciones-jp/contracts/` y los cursos y docentes de SIVIRENO en `backend-ciisic/specs/034-padron-cursos-sivireno/contracts/` y el cambio de tipo de una inscripción en `backend-ciisic/specs/035-cambiar-tipo-inscripcion/contracts/`.
+`backend-ciisic/specs/023-delegaciones-convenio/contracts/` y, con planes y tarifa propios, en `backend-ciisic/specs/029-delegaciones-planes/contracts/`; reportes por asesor en `backend-ciisic/specs/025-reportes-asesores/contracts/`, los enlaces de los docentes en `backend-ciisic/specs/026-enlaces-docentes/contracts/` y los de los ciclos en `backend-ciisic/specs/027-enlaces-ciclo/contracts/` y los docentes con DNI en `backend-ciisic/specs/028-docentes-dni/contracts/` y el resumen de ponencias en `backend-ciisic/specs/031-ponencias-resumen-personas/contracts/` y las secciones por curso en `backend-ciisic/specs/033-padron-secciones-jp/contracts/` y los cursos y docentes de SIVIRENO en `backend-ciisic/specs/034-padron-cursos-sivireno/contracts/` y el cambio de tipo de una inscripción en `backend-ciisic/specs/035-cambiar-tipo-inscripcion/contracts/` y la entrega del kit en `backend-ciisic/specs/037-entrega-kit/contracts/`.
 
 ## Antes de dar por terminado
 

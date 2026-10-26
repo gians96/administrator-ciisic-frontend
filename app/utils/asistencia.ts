@@ -1,5 +1,6 @@
-import type { Actividad, ModalidadAsistencia } from '~/types/api'
+import type { Actividad, KitEstado, ModalidadAsistencia } from '~/types/api'
 import type { ErrorApi } from '~/utils/errores'
+import { estadoKit, kitDe, ROTULO_KIT, TEXTO_KIT, type EstadoKit } from '~/utils/kit'
 import { interpretarLectura, type LecturaQr } from '~/utils/lecturaQr'
 import { esVirtual } from '~/utils/modalidad'
 
@@ -32,6 +33,8 @@ export interface AsistenciaFila {
   /** `null` en las marcas anteriores a la spec 013. */
   registradoPor: { id: number, nombres: string, apellidos: string } | null
   participante: PersonaAsistencia
+  /** Spec 037 del backend: la inscripción de la persona en el evento, con su tipo y el kit. Ausente con un backend anterior. */
+  inscripcion?: InscripcionMarca | null
 }
 
 /** Aviso de la marca (spec 014): `QR_LEGADO` se registró con el QR anterior (verificar el DNI y la foto). */
@@ -39,12 +42,21 @@ export type AlertaAsistencia = 'QR_LEGADO'
 
 /**
  * Tipo de inscripción de la marca (`null` si la inscripción no tiene). `modalidad` (de asistencia, spec
- * 018 del backend) falta con un backend anterior: equivale a `PRESENCIAL`.
+ * 018 del backend) falta con un backend anterior: equivale a `PRESENCIAL`; `incluyeKit` (spec 037), a `false`.
  */
 export interface TipoInscripcionMarca {
   nombre: string
   etiqueta: string | null
   modalidad?: ModalidadAsistencia
+  incluyeKit?: boolean
+}
+
+/** Inscripción de la persona tal como la ven la marca y el listado: su tipo y, desde la spec 037, el kit. */
+export interface InscripcionMarca {
+  id: number
+  tipoInscripcion: TipoInscripcionMarca | null
+  /** Ausente con un backend anterior a la spec 037: no hay nada que decir del kit. */
+  kit?: KitEstado
 }
 
 /**
@@ -61,7 +73,7 @@ export interface MarcaAsistencia {
     /** Hay una foto guardada (no comprueba el archivo); se pide con `GET /inscriptions/:id/photo`. */
     foto?: { tiene: boolean }
   }
-  inscripcion?: { id: number, tipoInscripcion: TipoInscripcionMarca | null }
+  inscripcion?: InscripcionMarca
 }
 
 export const ETIQUETAS_METODO: Readonly<Record<MetodoAsistencia, string>> = {
@@ -179,7 +191,9 @@ export function textoMarca(marca: Pick<MarcaAsistencia, 'esFueraDeHorario' | 'pa
   const documento = `${participante.tipoDocumento.toUpperCase()} ${participante.numeroDocumento}`.trim()
   const prefijo = marca.alerta === 'QR_LEGADO' ? `⚠ ${TITULO_QR_LEGADO} ·` : '✓'
   const aviso = esVirtual(marca.inscripcion?.tipoInscripcion) ? ` · ${AVISO_INSCRIPCION_VIRTUAL}` : ''
-  return `${prefijo} ${nombre} · ${documento}${marca.esFueraDeHorario ? ' · fuera de horario' : ''}${aviso}`
+  // Spec 037: si tiene kit (o ya se entregó), se dice al final: «Con kit · pendiente», «Kit entregado»
+  const textoKit = TEXTO_KIT[estadoKit(kitDe(marca.inscripcion?.kit), marca.inscripcion?.tipoInscripcion)]
+  return `${prefijo} ${nombre} · ${documento}${marca.esFueraDeHorario ? ' · fuera de horario' : ''}${aviso}${textoKit ? ` · ${textoKit}` : ''}`
 }
 
 /** Id positivo de un parámetro de la URL (`?evento=`, `?actividad=`); cualquier otro valor, `null`. */
@@ -334,25 +348,38 @@ export interface ResultadoLectura {
   titulo: string
   /** Detalle: qué hacer o el mensaje del backend (con la hora, la fecha o el horario). */
   mensaje: string | null
-  persona: {
-    nombre: string
-    /** Tipo y número, tal cual llega (completo con `inscripciones.ver`). */
-    documento: string
-    tipoInscripcion: string | null
-    /** Inscripción cuya foto se muestra (`GET /inscriptions/:id/photo`); `null` sin foto (o con el 013). */
-    fotoInscripcionId: number | null
-  } | null
+  persona: PersonaResultado | null
   fueraDeHorario: boolean
   /** Se cierra solo tras estos ms; `null`: espera a que el operador continúe. */
   cierraEnMs: number | null
   /** Error pasajero (red o servidor): se ofrece reintentar la misma lectura. */
   reintentable: boolean
+  /** El aviso pide comparar el DNI y la foto antes de continuar (solo el QR anterior). */
+  verificaDni?: boolean
+}
+
+/** La persona de un resultado: lo que se muestra a pantalla completa y lo que hace falta para entregar su kit. */
+export interface PersonaResultado {
+  nombre: string
+  /** Tipo y número, tal cual llega (completo con `inscripciones.ver`). */
+  documento: string
+  tipoInscripcion: string | null
+  /** Inscripción cuya foto se muestra (`GET /inscriptions/:id/photo`); `null` sin foto (o con el 013). */
+  fotoInscripcionId: number | null
+  /** Inscripción de la persona (para entregar su kit); `null` si el backend no la envía. */
+  inscripcionId: number | null
+  /** Entrega del kit (spec 037); `null` con un backend anterior. */
+  kit: KitEstado | null
+  /** `PENDIENTE` pide entregarlo: el resultado no se cierra solo. */
+  estadoKit: EstadoKit
 }
 
 export const CIERRE_EXITO_MS = 2500
 export const CIERRE_YA_REGISTRADA_MS = 4000
 export const CIERRE_QR_NO_VALIDO_MS = 3000
 export const CIERRE_AVISO_VIRTUAL_MS = 4000
+/** Tras marcar el kit como entregado el resultado se despide pronto: la persona ya tiene su kit. */
+export const CIERRE_KIT_ENTREGADO_MS = 1500
 
 /**
  * Aviso ámbar de una marca de una inscripción virtual: la asistencia ya quedó registrada (no se
@@ -376,13 +403,7 @@ const MENSAJE_QR_LEGADO = 'Se registró con el QR anterior. Pide el DNI y compá
  * aviso virtual a su mensaje). La foto solo si la hay.
  */
 export function resultadoDeMarca(marca: MarcaAsistencia): ResultadoLectura {
-  const { participante } = marca
-  const persona = {
-    nombre: `${participante.nombres} ${participante.apellidos}`.trim(),
-    documento: `${participante.tipoDocumento.toUpperCase()} ${participante.numeroDocumento}`.trim(),
-    tipoInscripcion: nombreTipoInscripcion(marca.inscripcion?.tipoInscripcion),
-    fotoInscripcionId: participante.foto?.tiene && marca.inscripcion ? marca.inscripcion.id : null,
-  }
+  const persona = personaDe(marca)
   const virtual = esVirtual(marca.inscripcion?.tipoInscripcion)
   if (marca.alerta === 'QR_LEGADO') {
     return {
@@ -393,6 +414,7 @@ export function resultadoDeMarca(marca: MarcaAsistencia): ResultadoLectura {
       fueraDeHorario: marca.esFueraDeHorario,
       cierraEnMs: null,
       reintentable: false,
+      verificaDni: true,
     }
   }
   if (virtual) {
@@ -402,11 +424,67 @@ export function resultadoDeMarca(marca: MarcaAsistencia): ResultadoLectura {
       mensaje: AVISO_INSCRIPCION_VIRTUAL,
       persona,
       fueraDeHorario: marca.esFueraDeHorario,
-      cierraEnMs: CIERRE_AVISO_VIRTUAL_MS,
+      cierraEnMs: persona.estadoKit === 'PENDIENTE' ? null : CIERRE_AVISO_VIRTUAL_MS,
       reintentable: false,
     }
   }
-  return { tono: 'exito', titulo: 'Asistencia registrada', mensaje: null, persona, fueraDeHorario: marca.esFueraDeHorario, cierraEnMs: CIERRE_EXITO_MS, reintentable: false }
+  // Spec 037: con kit pendiente el resultado espera a que el operador lo entregue («Entregar kit») o siga («Continuar»)
+  const cierraEnMs = persona.estadoKit === 'PENDIENTE' ? null : CIERRE_EXITO_MS
+  return { tono: 'exito', titulo: 'Asistencia registrada', mensaje: null, persona, fueraDeHorario: marca.esFueraDeHorario, cierraEnMs, reintentable: false }
+}
+
+/** Datos de una persona con su inscripción: la respuesta de una marca o lo que acompaña a «ya registrada». */
+export type DatosPersonaMarca = Pick<MarcaAsistencia, 'participante' | 'inscripcion'>
+
+/** La persona de un resultado: su nombre, documento, tipo y el estado de su kit (`NO_APLICA` si el backend no lo envía). */
+export function personaDe({ participante, inscripcion }: DatosPersonaMarca): PersonaResultado {
+  const kit = kitDe(inscripcion?.kit)
+  return {
+    nombre: `${participante.nombres} ${participante.apellidos}`.trim(),
+    documento: `${participante.tipoDocumento.toUpperCase()} ${participante.numeroDocumento}`.trim(),
+    tipoInscripcion: nombreTipoInscripcion(inscripcion?.tipoInscripcion),
+    fotoInscripcionId: participante.foto?.tiene && inscripcion ? inscripcion.id : null,
+    inscripcionId: inscripcion?.id ?? null,
+    kit,
+    estadoKit: estadoKit(kit, inscripcion?.tipoInscripcion),
+  }
+}
+
+/**
+ * `datos` de un `ATTENDANCE_ALREADY_REGISTERED` (spec 037 del backend): la persona y su inscripción, para poder
+ * entregar un kit pendiente al volver a escanear. Con un backend anterior (o una forma inesperada), `null`.
+ */
+export function datosDeYaRegistrada(datos: unknown): DatosPersonaMarca | null {
+  if (!datos || typeof datos !== 'object') return null
+  const { participante, inscripcion } = datos as Partial<DatosPersonaMarca>
+  if (!participante || typeof participante !== 'object') return null
+  if (typeof participante.nombres !== 'string' || typeof participante.apellidos !== 'string' || typeof participante.numeroDocumento !== 'string') return null
+  const sinInscripcion = !inscripcion || typeof inscripcion !== 'object' || typeof inscripcion.id !== 'number'
+  return {
+    participante: { ...participante, tipoDocumento: typeof participante.tipoDocumento === 'string' ? participante.tipoDocumento : '' },
+    ...(sinInscripcion ? {} : { inscripcion }),
+  }
+}
+
+/**
+ * El mismo resultado con el kit ya entregado (`kit` de la respuesta de `PUT /inscriptions/:id/kit`): se despide pronto
+ * porque la persona ya tiene su kit, y un «ya registrada» ámbar pasa a verde («Kit entregado»). El aviso del QR
+ * anterior no cambia y sigue esperando «Continuar» (falta comparar el DNI).
+ */
+export function resultadoConKitEntregado(resultado: ResultadoLectura, kit: KitEstado): ResultadoLectura {
+  const { persona } = resultado
+  if (!persona) return resultado
+  const nuevaPersona = { ...persona, kit, estadoKit: estadoKit(kit, { modalidad: 'PRESENCIAL' }) }
+  if (resultado.verificaDni) return { ...resultado, persona: nuevaPersona }
+  const ambar = resultado.tono !== 'exito'
+  return {
+    ...resultado,
+    tono: 'exito',
+    titulo: ambar ? 'Kit entregado' : resultado.titulo,
+    mensaje: ambar ? null : resultado.mensaje,
+    persona: nuevaPersona,
+    cierraEnMs: CIERRE_KIT_ENTREGADO_MS,
+  }
 }
 
 /** Título corto de cada rechazo (el detalle es el mensaje de `app/utils/errores.ts` o del backend). */
@@ -424,6 +502,8 @@ const TITULOS_ERROR: Readonly<Record<string, string>> = {
   EVENT_NOT_ASSIGNED: 'Evento no asignado',
   ACTIVITY_NOT_FOUND: 'La actividad ya no existe',
   RATE_LIMITED: 'Demasiadas lecturas',
+  // Spec 037: los virtuales no marcan asistencia (reciben el enlace de la transmisión por correo)
+  VIRTUAL_REGISTRATION: 'Inscripción virtual',
 }
 
 /** El backend 013 no conoce `{ codigo }` (responde 422 `VALIDATION_ERROR`): no emite esos QR. */
@@ -434,10 +514,14 @@ export const MENSAJE_CODIGO_SIN_SOPORTE = 'El servidor aún no reconoce el QR de
  * (ámbar: ya estaba, con la hora). Un `{ codigo }` rechazado por validación es el backend 013. Los
  * errores de red o del servidor se pueden reintentar.
  */
-export function resultadoDeError(error: Pick<ErrorApi, 'status' | 'code' | 'message'>, lectura: LecturaQr | null = null): ResultadoLectura {
+export function resultadoDeError(error: Pick<ErrorApi, 'status' | 'code' | 'message'> & { datos?: unknown }, lectura: LecturaQr | null = null): ResultadoLectura {
   const base = { persona: null, fueraDeHorario: false }
   if (error.code === 'ATTENDANCE_ALREADY_REGISTERED') {
-    return { ...base, tono: 'alerta', titulo: 'Ya estaba registrada', mensaje: error.message, cierraEnMs: CIERRE_YA_REGISTRADA_MS, reintentable: false }
+    // Spec 037: el 409 trae a la persona y su kit; con un kit pendiente espera a que el operador lo entregue
+    const datos = datosDeYaRegistrada(error.datos)
+    const persona = datos ? personaDe(datos) : null
+    const cierraEnMs = persona?.estadoKit === 'PENDIENTE' ? null : CIERRE_YA_REGISTRADA_MS
+    return { ...base, persona, tono: 'alerta', titulo: 'Ya estaba registrada', mensaje: error.message, cierraEnMs, reintentable: false }
   }
   if (error.code === 'VALIDATION_ERROR' && lectura && 'codigo' in lectura) {
     return { ...base, tono: 'error', titulo: 'QR no reconocido', mensaje: MENSAJE_CODIGO_SIN_SOPORTE, cierraEnMs: null, reintentable: false }
@@ -452,18 +536,41 @@ export function resultadoDeError(error: Pick<ErrorApi, 'status' | 'code' | 'mess
   }
 }
 
+/**
+ * Texto de un resultado para la pantalla Asistencia (`/asistencia`, una sola línea): el mensaje (o el título) y, si se
+ * identificó a la persona (p. ej. «ya registrada» con su kit pendiente, spec 037), su nombre y el estado del kit.
+ */
+export function textoDeResultado(resultado: Pick<ResultadoLectura, 'titulo' | 'mensaje' | 'persona'>): string {
+  const base = resultado.mensaje ?? resultado.titulo
+  const { persona } = resultado
+  if (!persona) return base
+  const kit = TEXTO_KIT[persona.estadoKit]
+  return `${base} · ${persona.nombre}${kit ? ` · ${kit}` : ''}`
+}
+
 /** Sin red, error del servidor o demasiadas lecturas (429): la misma lectura se puede reintentar. */
 export function esErrorPasajero(status: number): boolean {
   return status === 0 || status === 429 || status >= 500
 }
 
 /**
- * El resultado espera «Continuar»: el aviso ámbar del QR anterior (verificar el DNI y la foto). No se
- * cierra tocando el fondo, con Escape ni con una lectura nueva (la cámara se pausa y lo que lea el lector
- * USB espera en la cola).
+ * El resultado espera al operador: el aviso ámbar del QR anterior (verificar el DNI y la foto) o un kit pendiente de
+ * entregar (spec 037: «Entregar kit» o «Continuar»). No se cierra tocando el fondo, con Escape ni con una lectura
+ * nueva (la cámara se pausa y lo que lea el lector USB espera en la cola): así ninguna entrega se pierde.
  */
-export function esperaContinuar(resultado: Pick<ResultadoLectura, 'tono' | 'cierraEnMs'>): boolean {
-  return resultado.tono === 'alerta' && resultado.cierraEnMs === null
+export function esperaContinuar(resultado: Pick<ResultadoLectura, 'tono' | 'cierraEnMs'> & { persona?: Pick<PersonaResultado, 'estadoKit'> | null }): boolean {
+  if (resultado.cierraEnMs !== null) return false
+  return resultado.tono === 'alerta' || (resultado.tono === 'exito' && resultado.persona?.estadoKit === 'PENDIENTE')
+}
+
+/** La persona con el kit por entregar (para ofrecer «Entregar kit» junto al resultado), o `null` si no hay nada que entregar. */
+export function kitPorEntregarDe(persona: Pick<PersonaResultado, 'estadoKit' | 'inscripcionId' | 'nombre'>): { inscripcionId: number, nombre: string } | null {
+  return persona.estadoKit === 'PENDIENTE' && persona.inscripcionId !== null ? { inscripcionId: persona.inscripcionId, nombre: persona.nombre } : null
+}
+
+/** El resultado trae un kit por entregar (muestra «Entregar kit»). */
+export function kitPorEntregar(resultado: { persona?: Pick<PersonaResultado, 'estadoKit' | 'inscripcionId'> | null }): boolean {
+  return resultado.persona?.estadoKit === 'PENDIENTE' && resultado.persona.inscripcionId !== null
 }
 
 /** La cámara se pausa mientras se ve un resultado que no se cierra solo (error o aviso del QR anterior). */
@@ -521,7 +628,7 @@ export function registroDeResultado(
     instante: datos.instante,
     tono: resultado.tono,
     titulo: resultado.titulo,
-    detalle: persona ? `${persona.nombre} · ${persona.documento}` : datos.leido ?? resultado.mensaje ?? '',
+    detalle: persona ? `${persona.nombre} · ${persona.documento}${ROTULO_KIT[persona.estadoKit] ? ` · ${ROTULO_KIT[persona.estadoKit]}` : ''}` : datos.leido ?? resultado.mensaje ?? '',
     actividad: datos.actividad,
   }
 }

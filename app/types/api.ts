@@ -205,6 +205,18 @@ export type DisponiblePara = 'TODOS' | 'INSTITUCIONAL' | 'EXTERNOS'
  */
 export type ModalidadAsistencia = 'PRESENCIAL' | 'VIRTUAL'
 
+/**
+ * Entrega del kit de una inscripción (spec 037 del backend): una vez por congreso. `incluye`: el tipo incluye
+ * kit y es presencial. `entregado` y los datos de la entrega: la vigente (deshacerla los deja en `null`).
+ * Ausente con un backend anterior: las pantallas se ven como antes, sin kit.
+ */
+export interface KitEstado {
+  incluye: boolean
+  entregado: boolean
+  entregadoEn: string | null
+  entregadoPor: { id: number, nombres: string, apellidos: string } | null
+}
+
 export interface TipoInscripcion {
   id: number
   categoriaId: number
@@ -223,6 +235,8 @@ export interface TipoInscripcion {
   modalidad?: ModalidadAsistencia
   /** Spec 020 del backend: el tipo no admite estudiantes UNDC. Ausente con un backend anterior: equivale a `false`. */
   excluyeEstudiantesUndc?: boolean
+  /** Spec 037 del backend: el tipo incluye el kit que se entrega en la puerta. Ausente con un backend anterior: equivale a `false`. */
+  incluyeKit?: boolean
   activo: boolean
   orden: number
   totalInscripciones?: number
@@ -398,7 +412,9 @@ export interface InscripcionFila {
   creadoEn: string
   participante: ParticipanteRef
   /** `modalidad` (de asistencia) falta con un backend anterior a la spec 018. */
-  tipoInscripcion: { id: number, nombre: string, etiqueta: string | null, categoria: string, modalidad?: ModalidadAsistencia } | null
+  tipoInscripcion: { id: number, nombre: string, etiqueta: string | null, categoria: string, modalidad?: ModalidadAsistencia, incluyeKit?: boolean } | null
+  /** Spec 037: el kit ya se entregó (cuándo y quién, en el detalle). Ausente con un backend anterior. */
+  kitEntregado?: boolean
   clasificacion: { id: number, nombre: string } | null
   estado: EstadoRef
   /** Sin `pagos.ver`: `monto`, `modalidadPago`, `numeroOperacion` y `fechaPago` en `null` y `tieneVoucher: false`. */
@@ -447,8 +463,12 @@ export interface InscripcionDetalle {
   tipoInscripcion: {
     id: number, codigo: string, nombre: string, etiqueta: string | null, precio: number | null, precioInstitucional: number | null
     modalidad?: ModalidadAsistencia
+    /** Spec 037: el tipo incluye kit. Ausente con un backend anterior. */
+    incluyeKit?: boolean
     categoria: { id: number, codigo: string, nombre: string, esEstudiantil: boolean }
   } | null
+  /** Entrega del kit (spec 037): si el tipo lo incluye y, si ya se entregó, cuándo y quién. Ausente con un backend anterior. */
+  kit?: KitEstado
   clasificacion: { id: number, nombre: string } | null
   estado: EstadoRef
   /** Sin `pagos.ver` llega con las mismas claves en `null` y `tieneVoucher: false`. */

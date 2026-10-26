@@ -12,6 +12,7 @@ import {
   pausaLaCamara,
   registroDeResultado,
   resultadoDeError,
+  resultadoConKitEntregado,
   resultadoDeMarca,
   resultadoNoProcesada,
   resultadoQrNoValido,
@@ -29,6 +30,7 @@ import {
 } from '~/utils/asistencia'
 import { crearColaEnvios } from '~/utils/colaEnvios'
 import { aErrorApi } from '~/utils/errores'
+import { rutaKit, type ResultadoKit } from '~/utils/kit'
 import { claveLectura, debeProcesar, interpretarLectura, limpiarLectura, recienteTrasCerrar, type LecturaQr, type LecturaReciente } from '~/utils/lecturaQr'
 
 /**
@@ -38,8 +40,9 @@ import { claveLectura, debeProcesar, interpretarLectura, limpiarLectura, recient
  * envía) y la misma lectura dentro de 3 s se ignora (`debeProcesar`, con aviso). Las lecturas se
  * registran de una en una y en orden (`crearColaEnvios`): ninguna se pierde sin aviso. Cada resultado se
  * muestra a pantalla completa con vibración y un pitido, y queda en las últimas 10 lecturas. Mientras se
- * ve un resultado que no se cierra solo (error o QR anterior) la cámara se pausa; al cerrarlo un error,
- * el mismo QR se puede volver a escanear.
+ * ve un resultado que no se cierra solo (error, QR anterior o kit por entregar) la cámara se pausa; al
+ * cerrarlo un error, el mismo QR se puede volver a escanear. Spec 037: el resultado dice si la persona
+ * lleva kit y, si falta entregarlo, «Entregar kit» lo marca con la hora (`PUT inscriptions/:id/kit`).
  */
 definePageMeta({ permiso: 'asistencia.marcar', layout: 'escaner' })
 useHead({ title: 'Escanear asistencia · Panel CIISIC' })
@@ -98,6 +101,10 @@ const resultado = ref<ResultadoLectura | null>(null)
 const resultadoId = ref(0)
 const resultadoActividad = ref<string | null>(null)
 const recientes = ref<RegistroLectura[]>([])
+/** Se está marcando el kit del resultado a la vista como entregado. */
+const entregandoKit = ref(false)
+/** Por qué no se pudo marcar el kit (se muestra en el resultado). */
+const errorKit = ref<string | null>(null)
 const urlFoto = computed(() => {
   const id = resultado.value?.persona?.fotoInscripcionId
   return id ? urlArchivo(`inscriptions/${id}/photo`) : null
@@ -124,6 +131,7 @@ function mostrar(nuevo: ResultadoLectura, leido: string | null, actividadNombre:
   resultado.value = nuevo
   resultadoId.value++
   resultadoActividad.value = actividadNombre
+  errorKit.value = null
   if (esperaContinuar(nuevo)) cola.detener()
 }
 
@@ -131,6 +139,7 @@ function mostrar(nuevo: ResultadoLectura, leido: string | null, actividadNombre:
 function quitarResultado() {
   const anterior = resultado.value
   resultado.value = null
+  errorKit.value = null
   if (anterior) reciente = recienteTrasCerrar(reciente, anterior.tono)
   cola.reanudar()
 }
@@ -202,6 +211,34 @@ async function reintentar() {
   if (!envio || enviando.value) return
   const codigo = await encolar(envio)
   if (codigo === null && envio.lectura === null) limpiarDocumento()
+}
+
+/**
+ * «Entregar kit» del resultado a la vista (spec 037): marca el kit de la persona como entregado ahora y deja el
+ * resultado con «Kit entregado», que se cierra pronto. Si falla se dice por qué y el botón sigue; si otro operador ya lo
+ * entregó, se avisa con su hora (el servidor la dice).
+ */
+async function entregarKit() {
+  const actual = resultado.value
+  const inscripcionId = actual?.persona?.inscripcionId
+  if (!actual || !inscripcionId || entregandoKit.value) return
+  entregandoKit.value = true
+  errorKit.value = null
+  try {
+    const respuesta = await api<Respuesta<ResultadoKit>>(rutaKit(inscripcionId), { method: 'PUT' })
+    // Si mientras tanto se cerró o cambió el resultado, no se toca el que está a la vista
+    if (resultado.value !== actual) return
+    const entregado = resultadoConKitEntregado(actual, respuesta.data.kit)
+    registrar({ ...entregado, titulo: 'Kit entregado' }, null, resultadoActividad.value)
+    resultado.value = entregado
+    resultadoId.value++
+  } catch (error) {
+    const e = aErrorApi(error)
+    // 401: useApi ya lleva al login
+    if (resultado.value === actual && e.status !== 401) errorKit.value = e.message
+  } finally {
+    entregandoKit.value = false
+  }
 }
 
 /** Aviso breve: la misma lectura de hace un momento se ignoró. */
@@ -561,8 +598,11 @@ onBeforeUnmount(() => {
       :url-foto="urlFoto"
       :actividad="resultadoActividad"
       :reintentando="enviando"
+      :entregando-kit="entregandoKit"
+      :error-kit="errorKit"
       @cerrar="cerrarResultado"
       @reintentar="reintentar"
+      @entregar-kit="entregarKit"
     />
   </div>
 </template>

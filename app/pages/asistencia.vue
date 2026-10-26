@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Actividad, Respuesta } from '~/types/api'
+import type { Actividad, KitEstado, Respuesta } from '~/types/api'
 import { fechaDia, fechaHoraLima, nombreCompleto, numero } from '~/utils/formato'
 import { aErrorApi, mensajeError } from '~/utils/errores'
 import {
@@ -8,7 +8,11 @@ import {
   cuerpoMarca,
   etiquetaMetodo,
   idDeConsulta,
+  kitPorEntregarDe,
+  nombreTipoInscripcion,
+  personaDe,
   resultadoDeError,
+  textoDeResultado,
   textoMarca,
   tonoDeMarca,
   TIPOS_DOCUMENTO_MARCA,
@@ -18,6 +22,21 @@ import {
   type TipoDocumentoMarca,
   type TonoResultado,
 } from '~/utils/asistencia'
+import {
+  estadoKit,
+  kitDe,
+  mensajeDeshacerKit,
+  puedeDeshacerKit,
+  puedeEntregarKit,
+  resumenKitsDe,
+  rutaKit,
+  TEXTO_KIT,
+  textoEntregaKit,
+  textoResumenKits,
+  TONO_KIT,
+  type ResultadoKit,
+  type ResumenKits,
+} from '~/utils/kit'
 import { claveLectura, debeProcesar, interpretarLectura, type LecturaReciente } from '~/utils/lecturaQr'
 import { RUTA_ESCANER } from '~/utils/permisos'
 
@@ -42,6 +61,12 @@ const fueraDeHorario = ref(false)
 const registrando = ref(false)
 /** Resultado de la última marca: verde, ámbar (QR anterior, inscripción virtual o ya registrada) o rojo. */
 const ultimo = ref<{ tono: TonoResultado, texto: string } | null>(null)
+/** Spec 037: kits entregados y pendientes del evento (aprobados presenciales con kit); `null` con un backend anterior. */
+const resumenKits = ref<ResumenKits | null>(null)
+/** Persona de la última marca con el kit por entregar: se ofrece «Entregar kit» junto al resultado. */
+const kitPendiente = ref<{ inscripcionId: number, nombre: string } | null>(null)
+/** Inscripción cuyo kit se está marcando o deshaciendo (un botón a la vez). */
+const kitEnCurso = ref<number | null>(null)
 /** Última lectura del QR procesada: el lector USB a veces envía la misma dos veces (`debeProcesar`). */
 let lecturaReciente: LecturaReciente | null = null
 /** La última lectura se ignoró por repetida (se avisa sin tapar el resultado anterior). */
@@ -84,8 +109,11 @@ async function cargarActividades() {
   actividades.value = []
   actividadId.value = null
   ultimo.value = null
+  kitPendiente.value = null
+  resumenKits.value = null
   cargandoActividades.value = Boolean(eventoId)
   if (!eventoId) return
+  cargarResumenKits()
   try {
     const lista = (await api<Respuesta<Actividad[]>>(`events/${eventoId}/activities`)).data
     if (consulta !== consultaActividades) return
@@ -112,6 +140,79 @@ async function cargarAsistencias() {
     if (consulta === consultaAsistencias) toast.error(mensajeError(error))
   }
 }
+
+/** Cuántos kits van entregados y cuántos faltan; un backend anterior responde 404 y no se muestra nada. */
+let consultaResumen = 0
+async function cargarResumenKits() {
+  const consulta = ++consultaResumen
+  const eventoId = eventos.seleccionadoId
+  if (!eventoId) return
+  try {
+    const resumen = resumenKitsDe((await api<Respuesta<ResumenKits>>(`events/${eventoId}/kits/summary`)).data)
+    if (consulta === consultaResumen) resumenKits.value = resumen
+  } catch {
+    if (consulta === consultaResumen) resumenKits.value = null
+  }
+}
+
+/** Marca el kit de la persona como entregado (con la hora y quién) y actualiza la lista y el resumen. */
+async function entregarKit(inscripcionId: number, nombre: string) {
+  if (kitEnCurso.value !== null) return
+  kitEnCurso.value = inscripcionId
+  try {
+    const r = await api<Respuesta<ResultadoKit>>(rutaKit(inscripcionId), { method: 'PUT' })
+    toast.exito(`Kit entregado a ${nombre}.`)
+    // Lo que se veía del último registro pasa a «entregado»
+    if (kitPendiente.value?.inscripcionId === inscripcionId) {
+      ultimo.value = { tono: 'exito', texto: `✓ ${nombre} · ${textoEntregaKit(r.data.kit)}` }
+      kitPendiente.value = null
+    }
+    await Promise.all([cargarAsistencias(), cargarResumenKits()])
+  } catch (error) {
+    toast.error(mensajeError(error))
+    // Otra cuenta ya lo entregó: se actualiza lo que se ve
+    if (aErrorApi(error).code === 'KIT_ALREADY_DELIVERED') {
+      if (kitPendiente.value?.inscripcionId === inscripcionId) kitPendiente.value = null
+      await Promise.all([cargarAsistencias(), cargarResumenKits()])
+    }
+  } finally {
+    kitEnCurso.value = null
+    enfocarEntrada()
+  }
+}
+
+/** Deshace la entrega (se marcó por error, o el kit se entregará otro día): vuelve a quedar pendiente. */
+async function deshacerKit(inscripcionId: number, nombre: string, kit: KitEstado | null) {
+  if (kitEnCurso.value !== null) return
+  const ok = await confirmar({
+    titulo: 'Deshacer entrega del kit',
+    mensaje: mensajeDeshacerKit(nombre, kit),
+    textoConfirmar: 'Deshacer',
+    peligro: true,
+  })
+  if (!ok) return
+  kitEnCurso.value = inscripcionId
+  try {
+    await api(rutaKit(inscripcionId), { method: 'DELETE' })
+    toast.exito(`Entrega del kit deshecha: el kit de ${nombre} quedó pendiente.`)
+    // El último resultado a la vista (p. ej. «Kit entregado») ya no es verdad
+    ultimo.value = null
+    kitPendiente.value = null
+    await Promise.all([cargarAsistencias(), cargarResumenKits()])
+  } catch (error) {
+    toast.error(mensajeError(error))
+    if (aErrorApi(error).code === 'KIT_NOT_DELIVERED') await Promise.all([cargarAsistencias(), cargarResumenKits()])
+  } finally {
+    kitEnCurso.value = null
+    enfocarEntrada()
+  }
+}
+
+/** Kit de la inscripción de una fila de la lista; `null` con un backend anterior. */
+const kitDeFila = (fila: AsistenciaFila) => kitDe(fila.inscripcion?.kit)
+const estadoDeFila = (fila: AsistenciaFila) => estadoKit(kitDeFila(fila), fila.inscripcion?.tipoInscripcion)
+/** «Estudiantes · CON KIT» de la fila, o «—» sin tipo. */
+const tipoDeFila = (fila: AsistenciaFila) => nombreTipoInscripcion(fila.inscripcion?.tipoInscripcion) ?? '—'
 
 function enfocarEntrada() {
   nextTick(() => entrada.value?.focus())
@@ -154,6 +255,7 @@ async function registrar() {
     return
   }
   repetida.value = false
+  kitPendiente.value = null
   const resultado = cuerpoMarca(
     { modo: modo.value, valor: valor.value, tipoDocumento: tipoDocumento.value, fueraDeHorario: fueraDeHorario.value },
     puedeFueraDeHorario.value,
@@ -172,14 +274,17 @@ async function registrar() {
     // Ámbar con el QR anterior (se pide verificar el DNI) o con una inscripción virtual (se avisa; la
     // asistencia ya quedó registrada y nada se bloquea)
     ultimo.value = { tono: tonoDeMarca(r.data), texto: textoMarca(r.data) }
+    kitPendiente.value = kitPorEntregarDe(personaDe(r.data))
     valor.value = ''
     tipoDocumento.value = ''
-    await cargarAsistencias()
+    await Promise.all([cargarAsistencias(), cargarResumenKits()])
   } catch (error) {
     const e = aErrorApi(error)
     // Ya registrada en ámbar (con la hora); un código que el backend 013 no reconoce lo explica
     const rechazo = resultadoDeError(e, lectura)
-    ultimo.value = { tono: rechazo.tono, texto: rechazo.mensaje ?? e.message }
+    ultimo.value = { tono: rechazo.tono, texto: textoDeResultado({ ...rechazo, mensaje: rechazo.mensaje ?? e.message }) }
+    // «Ya registrada» trae a la persona y su kit: si falta entregarlo, se ofrece aquí también
+    kitPendiente.value = rechazo.persona ? kitPorEntregarDe(rechazo.persona) : null
     // Tras un rechazo, volver a escanear el mismo código lo envía de nuevo (como en el escáner)
     if (rechazo.tono === 'error') lecturaReciente = null
     if (conservarValorTrasError(modo.value, e.code)) {
@@ -238,7 +343,9 @@ async function exportar() {
   }
 }
 
-const columnas = computed(() => (puedeAnular.value ? 6 : 5))
+/** La tabla tiene columna de acciones si se puede anular o entregar/deshacer el kit. */
+const conAcciones = computed(() => puedeAnular.value || puedeMarcar.value)
+const columnas = computed(() => (conAcciones.value ? 7 : 6))
 </script>
 
 <template>
@@ -317,6 +424,14 @@ const columnas = computed(() => (puedeAnular.value ? 6 : 5))
             <AppButton type="submit" :loading="registrando" :disabled="!valor.trim()" icon="heroicons:check">Registrar</AppButton>
           </div>
           <p v-if="ultimo" class="rounded-xl px-4 py-3 text-sm font-medium" :class="TONOS_ULTIMO[ultimo.tono]" role="status">{{ ultimo.texto }}</p>
+          <!-- Spec 037: la persona lleva kit y aún no se le entrega -->
+          <div v-if="kitPendiente && puedeMarcar" class="flex flex-wrap items-center gap-3 rounded-xl bg-amber-400/15 px-4 py-3 ring-1 ring-amber-400/40">
+            <p class="flex-1 text-sm font-semibold text-amber-100">
+              <Icon name="heroicons:gift" class="mr-1 inline size-5 align-[-0.2em]" aria-hidden="true" />
+              Lleva kit: entrégalo y márcalo aquí.
+            </p>
+            <AppButton type="button" icon="heroicons:gift" :loading="kitEnCurso === kitPendiente.inscripcionId" :disabled="kitEnCurso !== null" @click="entregarKit(kitPendiente.inscripcionId, kitPendiente.nombre)">Entregar kit</AppButton>
+          </div>
           <p v-if="repetida" class="text-xs text-amber-200" role="status">Misma lectura de hace un momento: se ignoró. Si fue a propósito, vuelve a escanear en unos segundos.</p>
         </form>
       </section>
@@ -324,7 +439,12 @@ const columnas = computed(() => (puedeAnular.value ? 6 : 5))
       <section class="card overflow-hidden">
         <header class="flex items-center justify-between border-b border-white/10 px-6 py-4">
           <h2 class="text-lg font-bold">{{ actividad?.nombre }}</h2>
-          <AppBadge tono="brand">{{ numero(asistencias.length) }} asistentes</AppBadge>
+          <div class="flex flex-wrap items-center gap-2">
+            <AppBadge v-if="textoResumenKits(resumenKits)" :tono="resumenKits && resumenKits.pendientes > 0 ? 'warn' : 'ok'" title="Kits de todo el evento: inscripciones aprobadas presenciales con kit">
+              <Icon name="heroicons:gift" class="size-3.5" aria-hidden="true" /> Kits: {{ textoResumenKits(resumenKits) }}
+            </AppBadge>
+            <AppBadge tono="brand">{{ numero(asistencias.length) }} asistentes</AppBadge>
+          </div>
         </header>
         <div class="relative overflow-x-auto">
           <table class="table-base">
@@ -332,24 +452,58 @@ const columnas = computed(() => (puedeAnular.value ? 6 : 5))
               <tr>
                 <th>Participante</th>
                 <th>Documento</th>
+                <th>Tipo y kit</th>
                 <th>Método</th>
                 <th>Registrado</th>
                 <th>Registrado por</th>
-                <th v-if="puedeAnular"><span class="sr-only">Acciones</span></th>
+                <th v-if="conAcciones"><span class="sr-only">Acciones</span></th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="asistencia in asistencias" :key="asistencia.id">
                 <td class="font-medium text-white">{{ nombreCompleto(asistencia.participante) }}</td>
                 <td class="font-mono text-sm whitespace-nowrap">{{ asistencia.participante.tipoDocumento.toUpperCase() }} {{ asistencia.participante.numeroDocumento }}</td>
+                <td class="text-sm">
+                  <p class="whitespace-nowrap">{{ tipoDeFila(asistencia) }}</p>
+                  <p v-if="estadoDeFila(asistencia) !== 'NO_APLICA'" class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <AppBadge :tono="TONO_KIT[estadoDeFila(asistencia)]">{{ TEXTO_KIT[estadoDeFila(asistencia)] }}</AppBadge>
+                    <span v-if="textoEntregaKit(kitDeFila(asistencia))" class="text-xs text-slate-400">{{ textoEntregaKit(kitDeFila(asistencia)) }}</span>
+                  </p>
+                </td>
                 <td class="text-sm whitespace-nowrap">{{ etiquetaMetodo(asistencia.metodo) }}</td>
                 <td class="text-sm whitespace-nowrap">
                   {{ fechaHoraLima(asistencia.registradoEn) }}
                   <AppBadge v-if="asistencia.esFueraDeHorario" tono="warn" class="ml-1">Fuera de horario</AppBadge>
                 </td>
                 <td class="text-sm">{{ nombreCompleto(asistencia.registradoPor) }}</td>
-                <td v-if="puedeAnular" class="text-right">
-                  <AppButton size="sm" variant="ghost" icon="heroicons:no-symbol" :aria-label="`Anular la asistencia de ${nombreCompleto(asistencia.participante)}`" @click="anular(asistencia)">Anular</AppButton>
+                <td v-if="conAcciones" class="text-right whitespace-nowrap">
+                  <template v-if="puedeMarcar && asistencia.inscripcion">
+                    <AppButton
+                      v-if="puedeEntregarKit(kitDeFila(asistencia))"
+                      size="sm"
+                      variant="secondary"
+                      icon="heroicons:gift"
+                      :loading="kitEnCurso === asistencia.inscripcion.id"
+                      :disabled="kitEnCurso !== null"
+                      :aria-label="`Entregar el kit de ${nombreCompleto(asistencia.participante)}`"
+                      @click="entregarKit(asistencia.inscripcion.id, nombreCompleto(asistencia.participante))"
+                    >
+                      Entregar kit
+                    </AppButton>
+                    <AppButton
+                      v-else-if="puedeDeshacerKit(kitDeFila(asistencia))"
+                      size="sm"
+                      variant="ghost"
+                      icon="heroicons:arrow-uturn-left"
+                      :loading="kitEnCurso === asistencia.inscripcion.id"
+                      :disabled="kitEnCurso !== null"
+                      :aria-label="`Deshacer la entrega del kit de ${nombreCompleto(asistencia.participante)}`"
+                      @click="deshacerKit(asistencia.inscripcion.id, nombreCompleto(asistencia.participante), kitDeFila(asistencia))"
+                    >
+                      Deshacer entrega
+                    </AppButton>
+                  </template>
+                  <AppButton v-if="puedeAnular" size="sm" variant="ghost" icon="heroicons:no-symbol" :aria-label="`Anular la asistencia de ${nombreCompleto(asistencia.participante)}`" @click="anular(asistencia)">Anular</AppButton>
                 </td>
               </tr>
               <tr v-if="!asistencias.length"><td :colspan="columnas" class="py-8 text-center text-slate-400">Aún no hay asistencias en esta actividad.</td></tr>
