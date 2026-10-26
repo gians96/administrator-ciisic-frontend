@@ -79,6 +79,7 @@ const cambios = computed(() => Object.fromEntries(
 const estadoUndc = computed(() => (config.value ? estadoUndcApi(config.value.undcApi) : null))
 const origenes = computed(() => origenesAutorizados(origenPanel, config.value?.urlPanel))
 const avisoPanel = computed(() => avisoUrlPanel(form.urlPanel))
+const avisoLanding = computed(() => avisoUrlPanel(form.urlLanding))
 const sugerirOrigen = computed(() => origenDe(form.urlPanel) !== origenPanel)
 const motivoSinPrueba = computed(() => {
   if (!config.value?.undcApi.configurada) return 'Guarda la URL y la API key para poder probar la conexión.'
@@ -361,9 +362,10 @@ async function copiarOrigen(origen: string) {
             <Icon name="heroicons:globe-alt" class="size-5" aria-hidden="true" />
           </span>
           <div class="min-w-0">
-            <h2 id="titulo-panel" class="text-lg font-bold">URL del panel</h2>
+            <h2 id="titulo-panel" class="text-lg font-bold">URL del panel y de la landing</h2>
             <p class="mt-0.5 text-sm text-slate-400">
-              La landing la usa para el enlace de inicio de sesión (<span class="font-mono">/login</span>) y para «Ver mi inscripción» después de inscribirse.
+              La landing usa la del panel para el enlace de inicio de sesión (<span class="font-mono">/login</span>) y para «Ver mi inscripción» después de inscribirse.
+              Los correos usan la de la landing para el enlace de la credencial 3D y el de la inscripción a las ponencias especializadas.
             </p>
           </div>
         </div>
@@ -380,6 +382,9 @@ async function copiarOrigen(origen: string) {
           >
             <Icon name="heroicons:light-bulb" class="size-3.5" aria-hidden="true" /> Usar el origen actual: <span class="font-mono">{{ origenPanel }}</span>
           </button>
+          <AppField class="mt-5" label="URL pública de la landing" for="si-landing" :error="errores.urlLanding" :hint="avisoLanding ?? 'Solo el origen (https://dominio), p. ej. https://ciisic-viii.episundc.pe. Vacía = los correos salen sin enlace a la credencial y no se puede enviar el enlace de ponencias.'">
+            <input id="si-landing" v-model="form.urlLanding" type="url" class="field-control font-mono" maxlength="255" autocomplete="off" spellcheck="false" placeholder="https://ciisic-viii.episundc.pe">
+          </AppField>
         </form>
 
         <div class="mt-5 flex justify-end border-t border-white/5 pt-4">

@@ -12,14 +12,14 @@ export const FORMATO_CLIENT_ID_GOOGLE = /^[0-9]+-[a-z0-9]+\.apps\.googleusercont
 const TIMEOUT_POR_DEFECTO_MS = 8000
 
 /** Campos del PUT parcial de `settings`. */
-export type CampoSistema = 'undcApiUrl' | 'undcApiKey' | 'undcApiTimeoutMs' | 'googleClientId' | 'urlPanel' | 'rutasLegacyActivas'
+export type CampoSistema = 'undcApiUrl' | 'undcApiKey' | 'undcApiTimeoutMs' | 'googleClientId' | 'urlPanel' | 'urlLanding' | 'rutasLegacyActivas'
 /** Cada tarjeta de la página guarda solo sus campos. */
 export type TarjetaSistema = 'undc' | 'google' | 'panel' | 'legacy'
 
 export const CAMPOS_POR_TARJETA: Readonly<Record<TarjetaSistema, readonly CampoSistema[]>> = {
   undc: ['undcApiUrl', 'undcApiKey', 'undcApiTimeoutMs'],
   google: ['googleClientId'],
-  panel: ['urlPanel'],
+  panel: ['urlPanel', 'urlLanding'],
   legacy: ['rutasLegacyActivas'],
 }
 
@@ -30,6 +30,7 @@ export const ETIQUETAS_CAMPOS_SISTEMA: Readonly<Record<string, string>> = {
   undcApiTimeoutMs: 'Tiempo de espera',
   googleClientId: 'Client ID de Google',
   urlPanel: 'URL del panel',
+  urlLanding: 'URL de la landing',
   rutasLegacyActivas: 'Rutas de la landing anterior',
 }
 
@@ -46,13 +47,14 @@ export interface FormularioSistema {
   undcApiTimeoutMs: number | string
   googleClientId: string
   urlPanel: string
+  urlLanding: string
   rutasLegacyActivas: boolean
 }
 
 const CAMPOS_FORMULARIO: Readonly<Record<TarjetaSistema, ReadonlyArray<keyof FormularioSistema>>> = {
   undc: ['undcApiUrl', 'undcApiKey', 'quitarUndcApiKey', 'undcApiTimeoutMs'],
   google: ['googleClientId'],
-  panel: ['urlPanel'],
+  panel: ['urlPanel', 'urlLanding'],
   legacy: ['rutasLegacyActivas'],
 }
 
@@ -65,6 +67,7 @@ export function formularioSistema(config?: ConfiguracionSistema | null): Formula
     undcApiTimeoutMs: config?.undcApi.timeoutMs ?? TIMEOUT_POR_DEFECTO_MS,
     googleClientId: config?.google.clientId ?? '',
     urlPanel: config?.urlPanel ?? '',
+    urlLanding: config?.urlLanding ?? '',
     rutasLegacyActivas: config?.rutasLegacy.activas ?? true,
   }
 }
@@ -140,6 +143,8 @@ export function validarSistema(form: FormularioSistema): Record<string, string> 
   if (clientId) errores.googleClientId = clientId
   const urlPanel = errorUrl(form.urlPanel)
   if (urlPanel) errores.urlPanel = urlPanel
+  const urlLanding = errorUrl(form.urlLanding)
+  if (urlLanding) errores.urlLanding = urlLanding
   return errores
 }
 
@@ -150,11 +155,12 @@ export function erroresDeTarjeta(errores: Readonly<Record<string, string>>, tarj
 
 /**
  * Errores de campo tras un PUT fallido: `fields` del backend o, para `INVALID_URL` y `HOST_NOT_ALLOWED`
- * (que no traen `fields`), el mensaje junto a la URL de la tarjeta.
+ * (que no traen `fields`), el mensaje junto a la URL de la tarjeta (en la del panel, la de la landing si el mensaje la nombra).
  */
 export function erroresDeGuardado(error: Pick<ErrorApi, 'code' | 'message' | 'fields'>, tarjeta: TarjetaSistema): Record<string, string> {
   if (error.fields && Object.keys(error.fields).length) return { ...error.fields }
-  const campoUrl = tarjeta === 'undc' ? 'undcApiUrl' : tarjeta === 'panel' ? 'urlPanel' : null
+  const campoPanel = /landing/i.test(error.message) ? 'urlLanding' : 'urlPanel'
+  const campoUrl = tarjeta === 'undc' ? 'undcApiUrl' : tarjeta === 'panel' ? campoPanel : null
   if (campoUrl && (error.code === 'INVALID_URL' || error.code === 'HOST_NOT_ALLOWED')) return { [campoUrl]: error.message }
   return {}
 }
@@ -185,6 +191,8 @@ export function cuerpoSistema(form: FormularioSistema, original: ConfiguracionSi
   if (clientId !== (original.google.clientId ?? '')) cuerpo.googleClientId = clientId || null
   const urlPanel = form.urlPanel.trim()
   if (sinBarraFinal(urlPanel) !== sinBarraFinal(original.urlPanel ?? '')) cuerpo.urlPanel = urlPanel || null
+  const urlLanding = form.urlLanding.trim()
+  if (sinBarraFinal(urlLanding) !== sinBarraFinal(original.urlLanding ?? '')) cuerpo.urlLanding = urlLanding || null
   if (form.rutasLegacyActivas !== original.rutasLegacy.activas) cuerpo.rutasLegacyActivas = form.rutasLegacyActivas
   return cuerpo
 }
@@ -238,7 +246,7 @@ export function origenesAutorizados(origenActual: string | null | undefined, url
   return [...new Set([origenDe(origenActual), origenDe(urlPanel)].filter((origen): origen is string => Boolean(origen)))]
 }
 
-/** Aviso si la URL del panel trae una ruta: el backend guarda solo el origen. */
+/** Aviso si la URL del panel o de la landing trae una ruta: el backend guarda solo el origen. */
 export function avisoUrlPanel(valor: string): string | null {
   const texto = valor.trim()
   const origen = origenDe(texto)

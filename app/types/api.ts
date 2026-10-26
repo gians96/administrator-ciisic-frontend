@@ -733,6 +733,8 @@ export interface ConfiguracionSistema {
   google: { clientId: string | null, configurado: boolean }
   /** Origen público del panel; la landing lo usa para `/login` y «Ver mi inscripción». */
   urlPanel: string | null
+  /** Origen público de la landing: de aquí salen el enlace de la credencial 3D y el de la inscripción a ponencias (backend spec 038). Ausente en un backend anterior. */
+  urlLanding?: string | null
   /** Rutas del backend que usa la landing anterior (sin token de acceso). */
   rutasLegacy: { activas: boolean }
   actualizadoPor: { id: number, nombres: string, apellidos: string } | null

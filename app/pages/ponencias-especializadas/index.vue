@@ -138,6 +138,9 @@ async function publicar(ponencia: PonenciaEspecializada) {
       <!-- Spec 027 (backend 036): solo el Owner crea y comparte el enlace público del aforo -->
       <EnlaceAforoCard v-if="puedeCompartirAforo" :evento-id="eventos.seleccionadoId" :evento-nombre="eventos.seleccionado?.nombreCorto" />
 
+      <!-- Spec 029 (backend 039): un mismo mensaje con el enlace de inscripción a los inscritos presenciales -->
+      <EnvioEnlaceCard v-if="puedeVerInscritos" />
+
       <div v-if="cargando && !ponencias.length" class="card py-14 text-center text-sm text-slate-400">Cargando ponencias…</div>
       <section v-else-if="!ponencias.length" class="card">
         <AppEmpty titulo="Aún no hay ponencias" descripcion="Crea la primera con «Nueva ponencia»." icon="heroicons:presentation-chart-bar" />

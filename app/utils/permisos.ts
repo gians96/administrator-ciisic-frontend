@@ -217,6 +217,7 @@ export const MENU: readonly SeccionMenu[] = [
     items: [
       { to: '/', label: 'Resumen', icon: 'heroicons:squares-2x2', permiso: 'resumen.ver' },
       { to: '/inscripciones', label: 'Inscripciones', icon: 'heroicons:clipboard-document-check', permiso: 'inscripciones.ver' },
+      { to: '/credenciales', label: 'Credencial 3D', icon: 'heroicons:cube-transparent', permiso: 'inscripciones.ver' },
       { to: '/asistencia', label: 'Asistencia', icon: 'heroicons:qr-code', permiso: 'asistencia.ver' },
       { to: '/delegaciones', label: 'Delegaciones', icon: 'heroicons:user-group', permiso: 'delegaciones.ver' },
       { to: '/reportes', label: 'Reportes', icon: 'heroicons:chart-bar-square', permiso: 'reportes.ver' },
@@ -231,6 +232,7 @@ export const MENU: readonly SeccionMenu[] = [
       { to: '/ponencias-especializadas', label: 'Programa', icon: 'heroicons:presentation-chart-bar', permiso: 'especializadas.ver' },
       { to: '/ponencias-especializadas/inscripciones', label: 'Inscripciones', icon: 'heroicons:clipboard-document-list', permiso: 'especializadas.ver' },
       { to: '/ponencias-especializadas/resumen', label: 'Resumen', icon: 'heroicons:users', permiso: 'especializadas.ver' },
+      { to: '/ponencias-especializadas/enviar-enlace', label: 'Enviar enlace', icon: 'heroicons:paper-airplane', permiso: 'especializadas.ver' },
       { to: RUTA_PUERTA, label: 'Asistencia en puerta', icon: 'heroicons:identification', permiso: 'especializadas.asistencia' },
     ],
   },

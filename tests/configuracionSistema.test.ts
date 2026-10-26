@@ -36,6 +36,7 @@ function config(datos: Partial<ConfiguracionSistema> = {}): ConfiguracionSistema
     },
     google: { clientId: '123456789012-abc123def456.apps.googleusercontent.com', configurado: true },
     urlPanel: 'https://panel.ciisic.undc.edu.pe',
+    urlLanding: 'https://ciisic-viii.episundc.pe',
     rutasLegacy: { activas: true },
     actualizadoPor: { id: 1, nombres: 'Ana', apellidos: 'Quispe' },
     actualizadoEn: '2026-09-29T15:30:00.000Z',
@@ -54,10 +55,13 @@ describe('sistema: formulario', () => {
       undcApiTimeoutMs: 8000,
       googleClientId: CLIENT_ID,
       urlPanel: 'https://panel.ciisic.undc.edu.pe',
+      urlLanding: 'https://ciisic-viii.episundc.pe',
       rutasLegacyActivas: true,
     })
-    const vacia = config({ undcApi: { ...config().undcApi, url: null, apiKeyEnmascarada: null }, google: { clientId: null, configurado: false }, urlPanel: null })
-    expect(formularioSistema(vacia)).toMatchObject({ undcApiUrl: '', googleClientId: '', urlPanel: '' })
+    const vacia = config({ undcApi: { ...config().undcApi, url: null, apiKeyEnmascarada: null }, google: { clientId: null, configurado: false }, urlPanel: null, urlLanding: null })
+    expect(formularioSistema(vacia)).toMatchObject({ undcApiUrl: '', googleClientId: '', urlPanel: '', urlLanding: '' })
+    // Un backend anterior no envía la URL de la landing
+    expect(formularioSistema(config({ urlLanding: undefined })).urlLanding).toBe('')
     expect(formularioSistema(null).undcApiTimeoutMs).toBe(8000)
   })
 
@@ -93,8 +97,8 @@ describe('sistema: validación', () => {
   })
 
   it('valida el formulario con las claves del backend', () => {
-    const form = { ...formularioSistema(config()), undcApiUrl: 'http://api.undc.edu.pe', undcApiKey: 'corta', undcApiTimeoutMs: '', googleClientId: 'x', urlPanel: 'panel' }
-    expect(Object.keys(validarSistema(form))).toEqual(['undcApiUrl', 'undcApiKey', 'undcApiTimeoutMs', 'googleClientId', 'urlPanel'])
+    const form = { ...formularioSistema(config()), undcApiUrl: 'http://api.undc.edu.pe', undcApiKey: 'corta', undcApiTimeoutMs: '', googleClientId: 'x', urlPanel: 'panel', urlLanding: 'landing' }
+    expect(Object.keys(validarSistema(form))).toEqual(['undcApiUrl', 'undcApiKey', 'undcApiTimeoutMs', 'googleClientId', 'urlPanel', 'urlLanding'])
     expect(validarSistema({ ...formularioSistema(config()), undcApiKey: 'x'.repeat(501) }).undcApiKey).toMatch(/500/)
     // Con «Quitar key» no se valida lo escrito
     expect(validarSistema({ ...formularioSistema(config()), undcApiKey: 'corta', quitarUndcApiKey: true })).toEqual({})
@@ -112,6 +116,8 @@ describe('sistema: validación', () => {
     expect(erroresDeGuardado({ code: 'VALIDATION_ERROR', message: 'x', fields: { undcApiTimeoutMs: 'min 1000' } }, 'undc')).toEqual({ undcApiTimeoutMs: 'min 1000' })
     expect(erroresDeGuardado({ code: 'HOST_NOT_ALLOWED', message: 'Interna' }, 'undc')).toEqual({ undcApiUrl: 'Interna' })
     expect(erroresDeGuardado({ code: 'INVALID_URL', message: 'No válida' }, 'panel')).toEqual({ urlPanel: 'No válida' })
+    // La tarjeta guarda dos URL: el mensaje que nombra la landing va junto a su campo
+    expect(erroresDeGuardado({ code: 'INVALID_URL', message: 'La URL de la landing debe usar https.' }, 'panel')).toEqual({ urlLanding: 'La URL de la landing debe usar https.' })
     expect(erroresDeGuardado({ code: 'INVALID_URL', message: 'No válida' }, 'google')).toEqual({})
   })
 })
@@ -144,6 +150,10 @@ describe('sistema: PUT parcial', () => {
     expect(cuerpoDeTarjeta(form, original, 'undc')).toEqual({ undcApiTimeoutMs: 9000 })
     expect(cuerpoDeTarjeta(form, original, 'google')).toEqual({ googleClientId: null })
     expect(cuerpoDeTarjeta(form, original, 'panel')).toEqual({ urlPanel: 'https://otro.undc.edu.pe' })
+    const conLanding = { ...formularioSistema(original), urlLanding: ' https://ciisic-viii.episundc.pe/ ' }
+    expect(cuerpoDeTarjeta(conLanding, original, 'panel')).toEqual({})
+    expect(cuerpoDeTarjeta({ ...conLanding, urlLanding: 'https://nueva.episundc.pe' }, original, 'panel')).toEqual({ urlLanding: 'https://nueva.episundc.pe' })
+    expect(cuerpoDeTarjeta({ ...conLanding, urlLanding: '' }, original, 'panel')).toEqual({ urlLanding: null })
     expect(hayCambiosEnTarjeta(form, original, 'legacy')).toBe(false)
     expect(hayCambiosEnTarjeta(form, original, 'undc')).toBe(true)
   })

@@ -223,6 +223,13 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   **Deshacer** no pide que el tipo siga incluyendo kit. En el editor de tipos «Incluye kit» queda apagado y desactivado si el tipo es virtual (`backendSinKit`, `kitNoGuardado`, `avisoKitIncoherente`, `avisoCambioKit`).
   **Los virtuales no marcan asistencia**: el backend responde `403 VIRTUAL_REGISTRATION` y el escáner lo muestra en rojo («Inscripción virtual»); el aviso ámbar anterior queda solo como respaldo con un backend que aún no bloquea.
   Todo es tolerante: sin `kit` (backend anterior) las pantallas se ven como antes. **Backend 037 primero.**
+- **Envíos masivos a los inscritos presenciales** (spec 029; backend 038 y 039): `/credenciales` («Credencial 3D», `inscripciones.ver`; enviar = `credenciales.reenviar`) manda a cada persona **su** enlace a la
+  credencial 3D de la landing y `/ponencias-especializadas/enviar-enlace` (`especializadas.ver`; enviar y probar = `especializadas.inscribir`) manda **un mismo mensaje** editable con el botón a la inscripción de ponencias
+  (la tarjeta `EnvioEnlaceCard` del Programa lleva ahí). Los dos usan `components/envios/PanelEnvio.vue` y la lógica pura de `app/utils/enviosMasivos.ts`: la lista son los **aprobados presenciales** del backend con su
+  marca de envío por canal; «Elegir a todos los sin enviar» pide los ids al backend (no solo la página); se envía **por tandas de 25, una a la vez** (`enviarPorTandas`: si una falla se corta y lo que faltó sigue «sin enviar»; «Detener»
+  corta entre tandas) y se exige la casilla «Entiendo que se envía de inmediato». **El panel no decide a quién**: el servidor vuelve a comprobar y omite a quien ya lo recibió (salvo «reenviar»). El mensaje de ponencias es
+  **el mismo para todas** (no hay `{nombre}`) y el servidor lo escapa; «Enviarme una prueba» sale como `[Prueba]` y no marca a nadie. Sin la URL de la landing en Sistema (`urlLanding`) el backend responde
+  `409 LANDING_URL_MISSING`. Un backend anterior responde 404 y la pantalla dice que aún no está disponible. **Backend 038 y 039 primero.**
 - Foto del perfil: recodificada con canvas (recorte cuadrado centrado, JPEG de 600 × 600 px, mínimo
   200 px) y con la casilla de consentimiento obligatoria; el multipart lleva solo `file` y
   `consentimiento=true`.
@@ -280,11 +287,11 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–028
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–029
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
 escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de
-asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable (reemplazada por la 021, delegaciones con planes propios), reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo, docentes con DNI y página común, ponencias especializadas solo para congresistas con pago aprobado, resumen por persona de las ponencias con cancelación y comunicado, temas de ponencias con varios ponentes, alumnos en varias secciones, seguimiento por curso y docente de SIVIRENO, cambiar el tipo de una inscripción solo el Owner, enlace público del aforo de las ponencias solo el Owner, entrega del kit y asistencia solo presencial). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
+asistencia, tipos que no admiten estudiantes UNDC, delegaciones con convenio, tarifa de delegaciones administrable (reemplazada por la 021, delegaciones con planes propios), reportes de seguimiento por asesor, enlace público por docente, enlace público por ciclo, docentes con DNI y página común, ponencias especializadas solo para congresistas con pago aprobado, resumen por persona de las ponencias con cancelación y comunicado, temas de ponencias con varios ponentes, alumnos en varias secciones, seguimiento por curso y docente de SIVIRENO, cambiar el tipo de una inscripción solo el Owner, enlace público del aforo de las ponencias solo el Owner, entrega del kit y asistencia solo presencial, envíos masivos a los inscritos presenciales). Flujo: spec → plan → tasks; marcar tasks. Contratos: roles y permisos en
 `backend-ciisic/specs/013-roles-permisos/contracts/`; código por correo, portal, fotocheck,
 asistencia por QR, alta de participantes y cortesías en
 `backend-ciisic/specs/014-portal-fotocheck-asistencia/contracts/`; modalidad virtual en

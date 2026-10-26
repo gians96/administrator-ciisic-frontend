@@ -175,6 +175,9 @@ const RESPALDO_POR_CODIGO: Readonly<Record<string, string>> = {
   // Resumen por persona, cancelación y comunicado (backend spec 031)
   FREE_ACCESS_ENABLED: 'El acceso libre está encendido: todas las personas pueden asistir, no hay a quién cancelar. Apágalo en el Programa para exigir el congreso.',
   EMAIL_CREDENTIAL_UNAVAILABLE: 'No hay una credencial de correo activa para enviar el comunicado. Configúrala en Correo.',
+  // Envíos masivos a los inscritos presenciales (backend spec 039)
+  LANDING_URL_MISSING: 'Falta la URL de la landing. Configúrala en Sistema para poder armar los enlaces.',
+  EMAIL_SEND_FAILED: 'No se pudo enviar el correo. Revisa la credencial de correo en Correo (¿quedan créditos en Brevo?).',
   ATTENDEES_NOT_FOUND: 'Ninguna de las personas elegidas necesita el aviso (ya pueden asistir o ya no tienen inscripciones).',
   // Archivos (foto del portal, QR de pagos)
   FILE_REQUIRED: 'Adjunta el archivo.',

@@ -115,22 +115,31 @@ describe('permisos: accesoDeSesion', () => {
 
 describe('permisos: menú', () => {
   it('Owner ve todo; Administrador, todo menos Sistema', () => {
-    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/asistencia', '/delegaciones', '/reportes', '/escanear', '/ponencias', '/mensajes', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen', RUTA_PUERTA, '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
+    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/credenciales', '/asistencia', '/delegaciones', '/reportes', '/escanear', '/ponencias', '/mensajes', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen', '/ponencias-especializadas/enviar-enlace', RUTA_PUERTA, '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
     expect(rutas(ADMINISTRADOR)).not.toContain('/sistema')
     expect(rutas(ADMINISTRADOR)).toContain('/administradores')
   })
 
   it('Tesorero: solo el Congreso; la sección Configuración se oculta', () => {
     expect(menuPara(TESORERO).map((seccion) => seccion.titulo)).toEqual(['Congreso'])
-    expect(rutas(TESORERO)).toEqual(['/', '/inscripciones', '/asistencia', '/delegaciones', '/reportes', '/ponencias', '/mensajes'])
+    expect(rutas(TESORERO)).toEqual(['/', '/inscripciones', '/credenciales', '/asistencia', '/delegaciones', '/reportes', '/ponencias', '/mensajes'])
   })
 
   it('Ponencias especializadas: programa e inscripciones con «ver»; la puerta, con «asistencia»', () => {
     expect(menuPara(acceso(['especializadas.ver'])).map((s) => s.titulo)).toEqual(['Ponencias especializadas'])
-    expect(rutas(acceso(['especializadas.ver']))).toEqual(['/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen'])
-    expect(rutas(acceso(['especializadas.ver', 'especializadas.asistencia']))).toEqual(['/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen', RUTA_PUERTA])
+    expect(rutas(acceso(['especializadas.ver']))).toEqual(['/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen', '/ponencias-especializadas/enviar-enlace'])
+    expect(rutas(acceso(['especializadas.ver', 'especializadas.asistencia']))).toEqual(['/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen', '/ponencias-especializadas/enviar-enlace', RUTA_PUERTA])
     // El Tesorero no tiene permisos de ponencias especializadas
     expect(rutas(TESORERO)).not.toContain('/ponencias-especializadas')
+    expect(rutas(TESORERO)).not.toContain('/ponencias-especializadas/enviar-enlace')
+  })
+
+  it('Credencial 3D la ve quien ve inscripciones; Enviar enlace, quien ve las ponencias especializadas (enviar tiene su propio permiso)', () => {
+    expect(rutas(acceso(['inscripciones.ver']))).toContain('/credenciales')
+    expect(rutas(acceso(['asistencia.ver']))).not.toContain('/credenciales')
+    const items = MENU.flatMap((seccion) => seccion.items)
+    expect(items.find((i) => i.to === '/credenciales')?.permiso).toBe('inscripciones.ver')
+    expect(items.find((i) => i.to === '/ponencias-especializadas/enviar-enlace')?.permiso).toBe('especializadas.ver')
   })
 
   it('Comisión: solo lo que se le asignó', () => {
@@ -142,12 +151,14 @@ describe('permisos: menú', () => {
 })
 
 describe('permisos: ítem activo del menú', () => {
-  const destinos = ['/', '/inscripciones', '/ponencias', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen', RUTA_PUERTA, '/eventos']
+  const destinos = ['/', '/inscripciones', '/credenciales', '/ponencias', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen', '/ponencias-especializadas/enviar-enlace', RUTA_PUERTA, '/eventos']
 
   it('marca solo el ítem de la ruta más específica', () => {
     expect(itemActivo('/', destinos)).toBe('/')
     expect(itemActivo('/ponencias', destinos)).toBe('/ponencias')
     expect(itemActivo('/ponencias-especializadas', destinos)).toBe('/ponencias-especializadas')
+    expect(itemActivo('/ponencias-especializadas/enviar-enlace', destinos)).toBe('/ponencias-especializadas/enviar-enlace')
+    expect(itemActivo('/credenciales', destinos)).toBe('/credenciales')
     expect(itemActivo('/ponencias-especializadas/inscripciones', destinos)).toBe('/ponencias-especializadas/inscripciones')
     expect(itemActivo(RUTA_PUERTA, destinos)).toBe(RUTA_PUERTA)
     expect(itemActivo('/ponencias-especializadas/otra', destinos)).toBe('/ponencias-especializadas')
