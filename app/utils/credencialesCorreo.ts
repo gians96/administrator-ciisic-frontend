@@ -1,10 +1,38 @@
-import type { CredencialCorreo, PlanBrevo } from '~/types/api'
+import type { CredencialCorreo, PlanBrevo, ProveedorCorreo } from '~/types/api'
 import { numero } from '~/utils/formato'
+
+// ─── Proveedor: Brevo (API key) o Gmail por SMTP (contraseña de aplicación) ───
+
+export const PROVEEDORES_CORREO: ReadonlyArray<{ valor: ProveedorCorreo, nombre: string }> = [
+  { valor: 'BREVO', nombre: 'Brevo (API key)' },
+  { valor: 'GMAIL_SMTP', nombre: 'Gmail (SMTP con contraseña de aplicación)' },
+]
+
+export function nombreProveedor(proveedor: ProveedorCorreo | undefined): string {
+  return proveedor === 'GMAIL_SMTP' ? 'Gmail' : 'Brevo'
+}
+
+/** Cómo se llama el secreto que guarda cada proveedor. */
+export function nombreSecreto(proveedor: ProveedorCorreo | undefined): string {
+  return proveedor === 'GMAIL_SMTP' ? 'contraseña de aplicación' : 'API key'
+}
+
+/** Google las muestra en 4 grupos de 4 letras separados por espacios; el backend las guarda sin espacios y en minúsculas. */
+export function normalizarClaveAplicacion(valor: string): string {
+  return valor.replace(/\s+/g, '').toLowerCase()
+}
+
+const CLAVE_APLICACION = /^[a-z]{16}$/
+
+export function esClaveAplicacionValida(valor: string): boolean {
+  return CLAVE_APLICACION.test(normalizarClaveAplicacion(valor))
+}
 
 /** Credencial tal como la referencia un evento (`credencialCorreo` del detalle). */
 export interface CredencialCorreoRef { id: number, nombre?: string, remitenteCorreo?: string }
 
 export interface FormularioCredencialCorreo {
+  proveedor: ProveedorCorreo
   nombre: string
   apiKey: string
   remitenteCorreo: string
@@ -15,8 +43,9 @@ export interface FormularioCredencialCorreo {
 
 /** Nombres legibles de las claves de `fields` (errores de validación del backend). */
 export const ETIQUETAS_CAMPOS_CREDENCIAL: Readonly<Record<string, string>> = {
+  proveedor: 'Proveedor',
   nombre: 'Nombre',
-  apiKey: 'API key',
+  apiKey: 'API key o contraseña',
   remitenteCorreo: 'Correo del remitente',
   remitenteNombre: 'Nombre del remitente',
   esPredeterminada: 'Predeterminada',
@@ -67,12 +96,48 @@ export function describirPlanBrevo(plan: PlanBrevo): string {
   return `${tipo}: ${numero(plan.creditos)} ${unidadCreditosBrevo(plan.tipoCreditos)}`
 }
 
-/** Predeterminada primero, luego las activas y por nombre. */
-export function ordenarCredencialesCorreo<T extends Pick<CredencialCorreo, 'esPredeterminada' | 'activo' | 'nombre'>>(lista: readonly T[]): T[] {
+type Ordenable = Pick<CredencialCorreo, 'esPredeterminada' | 'activo' | 'nombre'> & { prioridad?: number }
+
+/**
+ * Predeterminada primero y luego el orden de respaldo (`prioridad`, el mismo con el que el backend prueba
+ * las credenciales); con un backend anterior, que no la envía, las activas y por nombre.
+ */
+export function ordenarCredencialesCorreo<T extends Ordenable>(lista: readonly T[]): T[] {
   return [...lista].sort((a, b) =>
     Number(b.esPredeterminada) - Number(a.esPredeterminada)
-    || Number(b.activo) - Number(a.activo)
+    || (a.prioridad !== undefined && b.prioridad !== undefined ? a.prioridad - b.prioridad : Number(b.activo) - Number(a.activo))
     || a.nombre.localeCompare(b.nombre, 'es'))
+}
+
+/** El backend conoce el orden de respaldo y el envío por Gmail (spec 041): todas las credenciales traen `prioridad`. */
+export function hayPrioridades(lista: readonly Pick<CredencialCorreo, 'prioridad'>[]): boolean {
+  return lista.length > 0 && lista.every((credencial) => typeof credencial.prioridad === 'number')
+}
+
+export type DireccionOrden = 'arriba' | 'abajo'
+
+/**
+ * Ids de **todas** las credenciales en el orden nuevo al mover una de respaldo un lugar, o `null` si no se
+ * puede. La predeterminada es siempre la primera y no se mueve (para cambiarla se marca otra), y nada
+ * pasa por encima de ella.
+ */
+export function ordenTrasMover(ordenadas: readonly Pick<CredencialCorreo, 'id' | 'esPredeterminada'>[], id: number, direccion: DireccionOrden): number[] | null {
+  const indice = ordenadas.findIndex((credencial) => credencial.id === id)
+  const destino = direccion === 'arriba' ? indice - 1 : indice + 1
+  if (indice < 0 || ordenadas[indice]!.esPredeterminada || destino < 0 || destino >= ordenadas.length || ordenadas[destino]!.esPredeterminada) return null
+  const ids = ordenadas.map((credencial) => credencial.id)
+  const movido = ids[indice]!
+  ids[indice] = ids[destino]!
+  ids[destino] = movido
+  return ids
+}
+
+/** Aviso cuando hay una sola credencial activa: si se agota, no sale ningún correo. `null` en los demás casos. */
+export function avisoSinRespaldo(lista: readonly Pick<CredencialCorreo, 'activo' | 'proveedor'>[]): string | null {
+  const activas = lista.filter((credencial) => credencial.activo)
+  if (activas.length !== 1) return null
+  const limite = activas[0]!.proveedor === 'GMAIL_SMTP' ? 'Gmail permite unos 500 envíos al día (2000 en Google Workspace)' : 'el plan gratuito de Brevo da 300 envíos al día'
+  return `Solo hay una credencial activa: ${limite} y, al agotarse, no saldrán correos. Agrega otra como respaldo y se usará sola cuando esta falle.`
 }
 
 /** Nombres cortos de los eventos que usan la credencial. */
@@ -80,8 +145,9 @@ export function eventosDeCredencial(credencial: Pick<CredencialCorreo, 'eventos'
   return credencial.eventos.map((evento) => evento.nombreCorto).join(', ')
 }
 
-export function formularioCredencialCorreo(credencial?: CredencialCorreo | null, esPrimera = false): FormularioCredencialCorreo {
+export function formularioCredencialCorreo(credencial?: CredencialCorreo | null, esPrimera = false, proveedor: ProveedorCorreo = 'BREVO'): FormularioCredencialCorreo {
   return {
+    proveedor: credencial?.proveedor ?? proveedor,
     nombre: credencial?.nombre ?? '',
     apiKey: '',
     remitenteCorreo: credencial?.remitenteCorreo ?? '',
@@ -92,8 +158,8 @@ export function formularioCredencialCorreo(credencial?: CredencialCorreo | null,
 }
 
 /**
- * Validación en el navegador con las mismas reglas del backend (nombre 2–120, API key ≥ 10) y las
- * mismas claves que `fields`, para dar los mensajes en español antes de enviar.
+ * Validación en el navegador con las mismas reglas del backend (nombre 2–120, API key ≥ 10, contraseña de
+ * aplicación de Gmail de 16 letras) y las mismas claves que `fields`, para dar los mensajes en español antes de enviar.
  */
 export function validarCredencialCorreo(form: FormularioCredencialCorreo, original?: CredencialCorreo | null): Record<string, string> {
   const errores: Record<string, string> = {}
@@ -101,7 +167,11 @@ export function validarCredencialCorreo(form: FormularioCredencialCorreo, origin
   const apiKey = form.apiKey.trim()
   if (!nombre) errores.nombre = 'Ingresa un nombre para reconocer la credencial.'
   else if (nombre.length < 2) errores.nombre = 'El nombre debe tener al menos 2 caracteres.'
-  if (!original && !apiKey) errores.apiKey = 'Pega la API key de Brevo.'
+  if (form.proveedor === 'GMAIL_SMTP') {
+    if (!original && !apiKey) errores.apiKey = 'Pega la contraseña de aplicación de Google.'
+    else if (apiKey && !esClaveAplicacionValida(apiKey)) errores.apiKey = 'La contraseña de aplicación tiene 16 letras (puedes pegarla con sus espacios).'
+    else if (original && !apiKey && form.remitenteCorreo.trim() !== original.remitenteCorreo) errores.apiKey = 'Cambiaste la cuenta de Gmail: pega también su contraseña de aplicación.'
+  } else if (!original && !apiKey) errores.apiKey = 'Pega la API key de Brevo.'
   else if (apiKey && apiKey.length < 10) errores.apiKey = 'La API key parece incompleta (mínimo 10 caracteres).'
   if (!form.remitenteCorreo.trim()) errores.remitenteCorreo = 'Ingresa el correo del remitente.'
   else if (!esCorreoValido(form.remitenteCorreo)) errores.remitenteCorreo = 'Ingresa un correo válido.'
@@ -124,12 +194,14 @@ export function avisoApiKeyBrevo(apiKey: string): string | null {
  */
 export function cuerpoCredencialCorreo(form: FormularioCredencialCorreo, original?: CredencialCorreo | null): Record<string, unknown> {
   const nombre = form.nombre.trim()
-  const apiKey = form.apiKey.trim()
+  const apiKey = form.proveedor === 'GMAIL_SMTP' ? normalizarClaveAplicacion(form.apiKey) : form.apiKey.trim()
   const remitenteCorreo = form.remitenteCorreo.trim()
   const remitenteNombre = form.remitenteNombre.trim()
 
   if (!original) {
     return {
+      // Solo Gmail lo envía: un backend anterior descartaría `proveedor` y guardaría la contraseña como API key de Brevo
+      ...(form.proveedor === 'GMAIL_SMTP' ? { proveedor: form.proveedor } : {}),
       nombre,
       apiKey,
       remitenteCorreo,
@@ -151,7 +223,8 @@ export function cuerpoCredencialCorreo(form: FormularioCredencialCorreo, origina
 
 /** Texto de confirmación al eliminar. */
 export function mensajeEliminarCredencial(credencial: CredencialCorreo): string {
-  const partes = [`¿Eliminar «${credencial.nombre}»? La API key guardada se descarta y no se puede deshacer.`]
+  const secreto = credencial.proveedor === 'GMAIL_SMTP' ? 'La contraseña de aplicación guardada' : 'La API key guardada'
+  const partes = [`¿Eliminar «${credencial.nombre}»? ${secreto} se descarta y no se puede deshacer.`]
   if (credencial.eventos.length) partes.push(`La usan: ${eventosDeCredencial(credencial)}; pasarán a usar la credencial predeterminada.`)
   if (credencial.esPredeterminada) partes.push('Es la predeterminada: otra credencial activa pasará a serlo.')
   return partes.join(' ')

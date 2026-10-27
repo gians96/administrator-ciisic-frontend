@@ -7,7 +7,7 @@ Panel del Congreso Internacional de Ingeniería de Sistemas e Investigación Cie
 (UNDC) para gestionar **eventos**, **inscripciones** (revisión de vouchers, aprobación y
 credenciales), **tipos de inscripción**, **asistencia**, **consultas DNI** (pool de tokens
 Decolecta/apiperu), **ponencias**, **mensajes**, **participantes**, **administradores**, los
-**tokens de acceso** de cada evento, el **correo** (Brevo), la configuración del **sistema**
+**tokens de acceso** de cada evento, el **correo** (Brevo y Gmail, con respaldo entre credenciales), la configuración del **sistema**
 (API UNDC, Google, URL del panel) y la **integración con deportes-fi** (resumen de la Semana
 Sistémica). Incluye un **escáner de asistencia** para la puerta (cámara del celular, lector USB o
 DNI). Los inscritos también entran, con Google o con un código a su correo, a su **portal del

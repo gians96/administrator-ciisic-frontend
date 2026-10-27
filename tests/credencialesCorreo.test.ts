@@ -2,17 +2,24 @@ import { describe, expect, it } from 'vitest'
 import type { CredencialCorreo } from '~/types/api'
 import {
   avisoApiKeyBrevo,
+  avisoSinRespaldo,
   cuerpoCredencialCorreo,
   describirCredencialEvento,
   describirPlanBrevo,
+  esClaveAplicacionValida,
   esCorreoValido,
   estadoCredencialCorreo,
   etiquetaUsarPredeterminada,
   formularioCredencialCorreo,
+  hayPrioridades,
   mensajeDesactivarCredencial,
   mensajeEliminarCredencial,
+  nombreProveedor,
+  nombreSecreto,
+  normalizarClaveAplicacion,
   opcionesCredencialEvento,
   ordenarCredencialesCorreo,
+  ordenTrasMover,
   remitenteCredencial,
   validarCredencialCorreo,
 } from '~/utils/credencialesCorreo'
@@ -82,7 +89,9 @@ describe('credenciales de correo: formulario', () => {
   })
 
   it('arranca vacío (la primera queda predeterminada) o con los datos sin la API key', () => {
-    expect(formularioCredencialCorreo(null, true)).toEqual({ nombre: '', apiKey: '', remitenteCorreo: '', remitenteNombre: '', esPredeterminada: true, activo: true })
+    expect(formularioCredencialCorreo(null, true)).toEqual({ proveedor: 'BREVO', nombre: '', apiKey: '', remitenteCorreo: '', remitenteNombre: '', esPredeterminada: true, activo: true })
+    expect(formularioCredencialCorreo(null, false, 'GMAIL_SMTP').proveedor).toBe('GMAIL_SMTP')
+    expect(formularioCredencialCorreo(credencial({ proveedor: 'GMAIL_SMTP' }), false, 'BREVO').proveedor).toBe('GMAIL_SMTP')
     expect(formularioCredencialCorreo(credencial({ esPredeterminada: false }), true)).toMatchObject({ nombre: 'Brevo congreso', apiKey: '', esPredeterminada: false })
   })
 
@@ -116,7 +125,7 @@ describe('credenciales de correo: formulario', () => {
   })
 
   it('arma el cuerpo del alta', () => {
-    const form = { nombre: ' Brevo ', apiKey: ' xkeysib-1 ', remitenteCorreo: ' a@b.pe ', remitenteNombre: ' ', esPredeterminada: false, activo: true }
+    const form = { proveedor: 'BREVO' as const, nombre: ' Brevo ', apiKey: ' xkeysib-1 ', remitenteCorreo: ' a@b.pe ', remitenteNombre: ' ', esPredeterminada: false, activo: true }
     expect(cuerpoCredencialCorreo(form)).toEqual({ nombre: 'Brevo', apiKey: 'xkeysib-1', remitenteCorreo: 'a@b.pe', activo: true })
     expect(cuerpoCredencialCorreo({ ...form, remitenteNombre: 'CIISIC', esPredeterminada: true })).toMatchObject({ remitenteNombre: 'CIISIC', esPredeterminada: true })
   })
@@ -134,6 +143,98 @@ describe('credenciales de correo: formulario', () => {
     expect(cuerpoCredencialCorreo({ ...formularioCredencialCorreo(original), esPredeterminada: true }, original)).toEqual({ esPredeterminada: true })
     const predeterminada = credencial({ esPredeterminada: true })
     expect(cuerpoCredencialCorreo({ ...formularioCredencialCorreo(predeterminada), esPredeterminada: false }, predeterminada)).toEqual({})
+  })
+})
+
+describe('credenciales de correo: Gmail por SMTP (backend spec 041)', () => {
+  const gmail = () => credencial({ id: 5, proveedor: 'GMAIL_SMTP', nombre: 'Gmail', remitenteCorreo: 'garias@undc.edu.pe', apiKeyEnmascarada: '••••mnop' })
+  const formulario = (datos = {}) => ({ ...formularioCredencialCorreo(null, false, 'GMAIL_SMTP'), nombre: 'Gmail', remitenteCorreo: 'garias@undc.edu.pe', ...datos })
+
+  it('nombra al proveedor y a su secreto', () => {
+    expect(nombreProveedor('GMAIL_SMTP')).toBe('Gmail')
+    expect(nombreProveedor('BREVO')).toBe('Brevo')
+    expect(nombreProveedor(undefined)).toBe('Brevo')
+    expect(nombreSecreto('GMAIL_SMTP')).toBe('contraseña de aplicación')
+    expect(nombreSecreto('BREVO')).toBe('API key')
+  })
+
+  it('acepta la contraseña de aplicación con o sin espacios y exige 16 letras', () => {
+    expect(normalizarClaveAplicacion(' ABCD efgh  ijkl mnop ')).toBe('abcdefghijklmnop')
+    expect(esClaveAplicacionValida('abcd efgh ijkl mnop')).toBe(true)
+    expect(esClaveAplicacionValida('abcdefghijklmno')).toBe(false)
+    expect(esClaveAplicacionValida('abcdefghijklmno1')).toBe(false)
+    expect(esClaveAplicacionValida('xkeysib-abcdefghijklmnop')).toBe(false)
+  })
+
+  it('valida la contraseña con su propio mensaje (no el de la API key de Brevo)', () => {
+    expect(validarCredencialCorreo(formulario())).toEqual({ apiKey: 'Pega la contraseña de aplicación de Google.' })
+    expect(validarCredencialCorreo(formulario({ apiKey: 'corta' })).apiKey).toContain('16 letras')
+    expect(validarCredencialCorreo(formulario({ apiKey: 'abcd efgh ijkl mnop' }))).toEqual({})
+  })
+
+  it('al cambiar la cuenta de Gmail exige la contraseña de esa cuenta', () => {
+    const original = gmail()
+    expect(validarCredencialCorreo({ ...formularioCredencialCorreo(original) }, original)).toEqual({})
+    expect(validarCredencialCorreo({ ...formularioCredencialCorreo(original), remitenteCorreo: 'otra@undc.edu.pe' }, original).apiKey).toContain('Cambiaste la cuenta de Gmail')
+    expect(validarCredencialCorreo({ ...formularioCredencialCorreo(original), remitenteCorreo: 'otra@undc.edu.pe', apiKey: 'zzzz yyyy xxxx wwww' }, original)).toEqual({})
+  })
+
+  it('el alta envía el proveedor y la contraseña sin espacios; Brevo no envía proveedor', () => {
+    expect(cuerpoCredencialCorreo(formulario({ apiKey: ' abcd EFGH ijkl mnop ' }))).toEqual({
+      proveedor: 'GMAIL_SMTP', nombre: 'Gmail', apiKey: 'abcdefghijklmnop', remitenteCorreo: 'garias@undc.edu.pe', activo: true,
+    })
+    expect(cuerpoCredencialCorreo({ ...formulario({ apiKey: 'xkeysib-123456' }), proveedor: 'BREVO' })).not.toHaveProperty('proveedor')
+  })
+
+  it('al editar normaliza la contraseña nueva y no envía el proveedor', () => {
+    const original = gmail()
+    expect(cuerpoCredencialCorreo({ ...formularioCredencialCorreo(original), apiKey: 'wxyz abcd wxyz abcd' }, original)).toEqual({ apiKey: 'wxyzabcdwxyzabcd' })
+  })
+
+  it('al eliminar nombra la contraseña de aplicación', () => {
+    expect(mensajeEliminarCredencial(gmail())).toBe('¿Eliminar «Gmail»? La contraseña de aplicación guardada se descarta y no se puede deshacer.')
+  })
+})
+
+describe('credenciales de correo: orden de respaldo (backend spec 041)', () => {
+  const lista = () => [
+    credencial({ id: 1, nombre: 'Brevo', esPredeterminada: true, prioridad: 1 }),
+    credencial({ id: 2, nombre: 'Gmail', proveedor: 'GMAIL_SMTP', prioridad: 3 }),
+    credencial({ id: 3, nombre: 'Brevo 2', prioridad: 2, activo: false }),
+    credencial({ id: 4, nombre: 'Brevo 3', prioridad: 4 }),
+  ]
+
+  it('ordena por prioridad con la predeterminada primero, también las inactivas', () => {
+    expect(ordenarCredencialesCorreo(lista()).map((c) => c.id)).toEqual([1, 3, 2, 4])
+    const marcada = lista().map((c) => ({ ...c, esPredeterminada: c.id === 4 }))
+    expect(ordenarCredencialesCorreo(marcada).map((c) => c.id)).toEqual([4, 1, 3, 2])
+  })
+
+  it('con un backend anterior (sin prioridad) conserva el orden de siempre', () => {
+    const anterior = lista().map(({ prioridad: _prioridad, ...resto }) => resto as CredencialCorreo)
+    expect(ordenarCredencialesCorreo(anterior).map((c) => c.id)).toEqual([1, 4, 2, 3])
+    expect(hayPrioridades(anterior)).toBe(false)
+    expect(hayPrioridades(lista())).toBe(true)
+    expect(hayPrioridades([])).toBe(false)
+  })
+
+  it('sube y baja una credencial de respaldo un lugar y devuelve el orden completo', () => {
+    const ordenadas = ordenarCredencialesCorreo(lista())
+    expect(ordenTrasMover(ordenadas, 2, 'arriba')).toEqual([1, 2, 3, 4])
+    expect(ordenTrasMover(ordenadas, 3, 'abajo')).toEqual([1, 2, 3, 4])
+    expect(ordenTrasMover(ordenadas, 3, 'arriba')).toBeNull() // pasaría por encima de la predeterminada
+    expect(ordenTrasMover(ordenadas, 4, 'abajo')).toBeNull()
+    expect(ordenTrasMover(ordenadas, 1, 'abajo')).toBeNull() // la predeterminada no se mueve
+    expect(ordenTrasMover(ordenadas, 99, 'arriba')).toBeNull()
+    expect(ordenadas.map((c) => c.id)).toEqual([1, 3, 2, 4])
+  })
+
+  it('avisa cuando solo hay una credencial activa', () => {
+    expect(avisoSinRespaldo(lista().map((c) => ({ ...c, activo: c.id === 1 })))).toContain('300 envíos al día')
+    expect(avisoSinRespaldo([credencial({ proveedor: 'GMAIL_SMTP' })])).toContain('500 envíos al día')
+    expect(avisoSinRespaldo(lista())).toBeNull()
+    expect(avisoSinRespaldo([])).toBeNull()
+    expect(avisoSinRespaldo([credencial({ activo: false })])).toBeNull()
   })
 })
 

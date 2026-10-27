@@ -21,7 +21,9 @@ interface ErrorFetch {
  */
 export const MENSAJES_POR_CODIGO: Readonly<Record<string, string>> = {
   EMAIL_CREDENTIAL_NOT_FOUND: 'La credencial de correo no existe o ya fue eliminada. Actualiza la página.',
-  EMAIL_CREDENTIAL_IN_USE: 'La credencial está asignada a uno o más eventos. Asígnales otra credencial (o «Usar la predeterminada») y vuelve a intentarlo.',
+  INVALID_ORDER: 'El orden de las credenciales cambió mientras lo editabas. Actualiza la página e inténtalo de nuevo.',
+  DEFAULT_CREDENTIAL_INACTIVE: 'La primera credencial es la predeterminada y debe estar activa.',
+  EMAIL_CREDENTIAL_IN_USE:'La credencial está asignada a uno o más eventos. Asígnales otra credencial (o «Usar la predeterminada») y vuelve a intentarlo.',
   ACCESS_TOKEN_NOT_FOUND: 'El token de acceso no existe o ya fue eliminado. Actualiza la lista.',
 
   // Asistencia solo presencial y entrega del kit (backend spec 037)

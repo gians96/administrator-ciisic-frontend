@@ -655,17 +655,22 @@ export interface Administrador {
 
 export interface Clasificacion { id: number, nombre: string }
 
-// ─── Correo (Brevo) ───
+// ─── Correo (Brevo y Gmail por SMTP) ───
+
+export type ProveedorCorreo = 'BREVO' | 'GMAIL_SMTP'
 
 export interface CredencialCorreo {
   id: number
-  proveedor: 'BREVO'
+  /** Gmail (backend spec 041): la «API key» es la contraseña de aplicación y el remitente es la cuenta de Gmail. */
+  proveedor: ProveedorCorreo
   nombre: string
-  /** `••••abcd`: la API key completa nunca vuelve del backend. */
+  /** `••••abcd`: la API key (o contraseña de aplicación) completa nunca vuelve del backend. */
   apiKeyEnmascarada: string
   remitenteCorreo: string
   remitenteNombre: string | null
   esPredeterminada: boolean
+  /** Orden de respaldo (1 = primera; la predeterminada siempre es la primera). Ausente en un backend anterior a la spec 041. */
+  prioridad?: number
   activo: boolean
   ultimoEstado: 'OK' | 'ERROR' | null
   ultimoError: string | null
@@ -681,6 +686,7 @@ export interface PlanBrevo { tipo: string, creditos: number | null, tipoCreditos
 
 export interface PruebaCredencialCorreo {
   ok: boolean
+  /** Gmail: solo `correo` (la cuenta que inició sesión); sin planes. */
   cuenta?: { correo: string | null, empresa: string | null, planes: PlanBrevo[] }
   error?: string
   credencial: CredencialCorreo

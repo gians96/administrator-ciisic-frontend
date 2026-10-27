@@ -33,9 +33,11 @@ cuente la IP de cada visitante:
 1. **Sistema** (solo Owner, `sistema.configurar`): API_UNDC (URL + API key creada en SIGENET →
    Clientes API, **Probar**), client ID de Google, URL del panel (la usa la landing) y el
    interruptor de la landing anterior.
-2. **Correo**: credencial de Brevo (**Probar** y **Enviar prueba**). Con el backend 014, el código
-   de acceso al portal sale de la credencial **predeterminada activa**: sin ella (o si su último
-   envío falló hace menos de 15 min) el login no ofrece el código.
+2. **Correo**: credenciales de Brevo (API key) o de **Gmail por SMTP** (contraseña de aplicación),
+   cada una con **Probar** y **Enviar prueba**, y su **orden de prioridad** (backend 041): si una falla
+   o se queda sin créditos, el correo sale por la siguiente. Con el backend 014, el código de acceso al
+   portal sale de la primera credencial activa cuyo último envío no falló hace menos de 15 min: sin
+   ninguna, el login no ofrece el código.
 3. **Consultas DNI**: tokens de Decolecta/apiperu.
 4. **Eventos → Acceso**: token de la landing del evento (se muestra una vez).
 5. **Eventos → Integraciones**: URL y token de deportes-fi.
