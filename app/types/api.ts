@@ -671,6 +671,9 @@ export interface CredencialCorreo {
   esPredeterminada: boolean
   /** Orden de respaldo (1 = primera; la predeterminada siempre es la primera). Ausente en un backend anterior a la spec 041. */
   prioridad?: number
+  /** Envíos que le quedan en Brevo en la última revisión; `null` = no se sabe (nunca se revisó o es Gmail). Ausente en un backend anterior a la spec 042. */
+  creditosDisponibles?: number | null
+  creditosVerificadosEn?: string | null
   activo: boolean
   ultimoEstado: 'OK' | 'ERROR' | null
   ultimoError: string | null
@@ -694,6 +697,8 @@ export interface PruebaCredencialCorreo {
 
 export interface EnvioPruebaCorreo {
   ok: boolean
+  /** Identificador con el que el proveedor confirmó que aceptó el correo (backend spec 042). */
+  messageId?: string
   error?: string
   credencial: CredencialCorreo
 }

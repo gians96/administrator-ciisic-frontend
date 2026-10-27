@@ -4,22 +4,29 @@ import { fechaHoraLima } from '~/utils/formato'
 import { aErrorApi, mensajeError } from '~/utils/errores'
 import {
   avisoApiKeyBrevo,
+  avisoCreditos,
   avisoSinRespaldo,
+  credencialEnUso,
   cuerpoCredencialCorreo,
   describirPlanBrevo,
   esCorreoValido,
   estadoCredencialCorreo,
+  estadoCreditos,
   ETIQUETAS_CAMPOS_CREDENCIAL,
   formularioCredencialCorreo,
+  hayCreditos,
   hayPrioridades,
   mensajeDesactivarCredencial,
   mensajeEliminarCredencial,
+  necesitaRevisarCreditos,
   nombreProveedor,
   nombreSecreto,
   ordenarCredencialesCorreo,
   ordenTrasMover,
   PROVEEDORES_CORREO,
   remitenteCredencial,
+  resumenCreditos,
+  textoCreditos,
   validarCredencialCorreo,
   type DireccionOrden,
 } from '~/utils/credencialesCorreo'
@@ -46,10 +53,18 @@ const resultados = ref<Record<number, ResultadoPrueba>>({})
 const ordenadas = computed(() => ordenarCredencialesCorreo(credenciales.value))
 /** Backend con la spec 041: conoce el orden de respaldo y el envío por Gmail. Uno anterior no envía `prioridad`. */
 const conPrioridad = computed(() => hayPrioridades(credenciales.value))
+/** Backend con la spec 042: informa los envíos que le quedan a cada credencial de Brevo. */
+const conCreditos = computed(() => hayCreditos(credenciales.value))
+const enUsoId = computed(() => credencialEnUso(credenciales.value)?.id ?? null)
+const avisoDeCreditos = computed(() => avisoCreditos(credenciales.value))
+const revisando = ref(false)
 const vista = computed(() => ordenadas.value.map((credencial, posicion) => ({
   credencial,
   posicion,
   estado: estadoCredencialCorreo(credencial),
+  creditos: estadoCreditos(credencial),
+  detalleCreditos: textoCreditos(credencial),
+  enUso: credencial.id === enUsoId.value,
   resultado: resultados.value[credencial.id] ?? null,
   puedeSubir: ordenTrasMover(ordenadas.value, credencial.id, 'arriba') !== null,
   puedeBajar: ordenTrasMover(ordenadas.value, credencial.id, 'abajo') !== null,
@@ -69,7 +84,27 @@ async function cargar() {
     cargando.value = false
   }
 }
-onMounted(cargar)
+
+/**
+ * Pregunta a Brevo cuántos envíos le quedan a cada credencial activa (no gasta créditos). Al abrir la pantalla se
+ * hace sola, sin avisos, si alguna revisión falta o venció; con un backend anterior (404) no pasa nada.
+ */
+async function revisarCreditos(silencioso = false) {
+  revisando.value = true
+  try {
+    credenciales.value = (await api<Respuesta<CredencialCorreo[]>>('email-credentials/check', { method: 'POST' })).data
+    if (!silencioso) toast.exito(`Créditos revisados. ${resumenCreditos(credenciales.value) || 'No hay credenciales de Brevo activas.'}`)
+  } catch (error) {
+    if (!silencioso) toast.error(mensajeError(error, ETIQUETAS_CAMPOS_CREDENCIAL))
+  } finally {
+    revisando.value = false
+  }
+}
+
+onMounted(async () => {
+  await cargar()
+  if (necesitaRevisarCreditos(credenciales.value)) await revisarCreditos(true)
+})
 
 function reemplazar(actualizada: CredencialCorreo | undefined) {
   if (!actualizada) return
@@ -263,7 +298,8 @@ async function enviarPrueba() {
     const resultado = (await api<Respuesta<EnvioPruebaCorreo>>(`email-credentials/${credencial.id}/send-test`, { method: 'POST', body: { correo } })).data
     reemplazar(resultado.credencial)
     if (resultado.ok) {
-      toast.exito(`Correo de prueba enviado a ${correo}. Revisa también la carpeta de spam.`)
+      const confirmacion = resultado.messageId ? `${nombreProveedor(credencial.proveedor)} confirmó que lo aceptó (ID ${resultado.messageId}).` : `${nombreProveedor(credencial.proveedor)} lo aceptó.`
+      toast.exito(`Correo de prueba enviado a ${correo}. ${confirmacion} Revisa también la carpeta de spam.`)
       envio.abierto = false
     } else {
       envio.error = `${nombreProveedor(credencial.proveedor)} no aceptó el envío: ${resultado.error ?? 'error desconocido'}`
@@ -294,6 +330,7 @@ async function enviarPrueba() {
         </p>
       </div>
       <div class="flex flex-wrap gap-2">
+        <AppButton v-if="conCreditos" variant="secondary" icon="heroicons:arrow-path" :loading="revisando" @click="revisarCreditos()">Revisar créditos</AppButton>
         <AppButton variant="secondary" icon="heroicons:book-open" @click="abrirGuia()">Guía de Gmail</AppButton>
         <AppButton icon="heroicons:plus" @click="abrir()">Agregar credencial</AppButton>
       </div>
@@ -306,12 +343,21 @@ async function enviarPrueba() {
         <ul class="list-disc space-y-1 pl-4 marker:text-brand-400">
           <li>Los correos salen por la <strong class="text-slate-100">primera credencial activa</strong>; si falla o se queda sin créditos, pasa sola a la siguiente (hasta 3 intentos) con el remitente de esa. Cambia el orden con las flechas; la predeterminada siempre es la primera.</li>
           <li><strong class="text-slate-100">Brevo:</strong> el correo del remitente debe estar verificado en Brevo (Remitentes, dominios e IP dedicadas); si no, rechaza los envíos. El plan gratuito da 300 envíos al día.</li>
-          <li><strong class="text-slate-100">Gmail:</strong> el remitente es la cuenta de Gmail y se entra con una contraseña de aplicación (Cuenta de Google → Seguridad → Verificación en 2 pasos → Contraseñas de aplicaciones). Permite unos 500 envíos al día (2000 en Google Workspace). <button type="button" class="font-semibold text-brand-300 underline underline-offset-2 hover:text-white" @click="abrirGuia()">Ver la guía paso a paso</button></li>
+          <li><strong class="text-slate-100">Gmail:</strong> el remitente es la cuenta de Gmail y se entra con una contraseña de aplicación (Cuenta de Google → Seguridad e inicio de sesión → Verificación en dos pasos → Contraseñas de aplicaciones). Permite unos 500 envíos al día (2000 en Google Workspace). <button type="button" class="font-semibold text-brand-300 underline underline-offset-2 hover:text-white" @click="abrirGuia()">Ver la guía paso a paso</button></li>
           <li>Cada evento puede elegir su credencial en <strong class="text-slate-100">Eventos → General</strong>; si no elige ninguna, se usa la <strong class="text-slate-100">predeterminada</strong>.</li>
           <li>La API key o la contraseña se guarda cifrada y solo verás sus últimos 4 caracteres. «Probar» la verifica sin enviar correos.</li>
         </ul>
       </div>
     </section>
+
+    <p
+      v-if="avisoDeCreditos"
+      class="rounded-xl px-4 py-3 text-sm ring-1"
+      :class="avisoDeCreditos.tono === 'alerta' ? 'bg-red-500/10 text-red-200 ring-red-400/30' : 'bg-brand-500/5 text-slate-300 ring-brand-400/25'"
+      :role="avisoDeCreditos.tono === 'alerta' ? 'alert' : 'status'"
+    >
+      {{ avisoDeCreditos.texto }}
+    </p>
 
     <p v-if="sinRespaldo" class="rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-amber-200 ring-1 ring-amber-400/25" role="status">
       {{ sinRespaldo }}
@@ -342,7 +388,7 @@ async function enviarPrueba() {
 
     <div v-else-if="credenciales.length" class="space-y-4">
       <article
-        v-for="{ credencial, posicion, estado, resultado, puedeSubir, puedeBajar } in vista"
+        v-for="{ credencial, posicion, estado, creditos, detalleCreditos, enUso, resultado, puedeSubir, puedeBajar } in vista"
         :key="credencial.id"
         class="card p-5"
         :aria-labelledby="`credencial-${credencial.id}`"
@@ -358,9 +404,13 @@ async function enviarPrueba() {
               <AppBadge v-if="conPrioridad" tono="neutral" :title="posicion === 0 ? 'Es la primera: se usa antes que las demás' : 'Se usa cuando fallan las anteriores'">Prioridad {{ posicion + 1 }}</AppBadge>
               <AppBadge :tono="credencial.activo ? 'ok' : 'neutral'">{{ credencial.activo ? 'Activa' : 'Inactiva' }}</AppBadge>
               <AppBadge :tono="estado.tono" :title="credencial.ultimoError ?? undefined">{{ estado.texto }}</AppBadge>
+              <AppBadge v-if="creditos" :tono="creditos.tono" :title="detalleCreditos ?? undefined">{{ creditos.texto }}</AppBadge>
+              <AppBadge v-if="enUso" tono="brand" title="Es por la que salen los correos ahora: la primera activa con envíos disponibles">
+                <Icon name="heroicons:paper-airplane" class="size-3.5" aria-hidden="true" /> Envía ahora
+              </AppBadge>
             </div>
             <p class="text-sm text-slate-300"><span class="text-slate-500">Remitente:</span> {{ remitenteCredencial(credencial) }}</p>
-            <p class="text-xs text-slate-400">{{ nombreProveedor(credencial.proveedor) }} · {{ nombreSecreto(credencial.proveedor) }} <span class="font-mono text-slate-300">{{ credencial.apiKeyEnmascarada }}</span></p>
+            <p class="text-xs text-slate-400">{{ nombreProveedor(credencial.proveedor) }} · {{ nombreSecreto(credencial.proveedor) }} <span class="font-mono text-slate-300">{{ credencial.apiKeyEnmascarada }}</span><span v-if="detalleCreditos"> · {{ detalleCreditos }}</span></p>
           </div>
 
           <div class="flex flex-wrap gap-2">
@@ -518,7 +568,7 @@ async function enviarPrueba() {
           :hint="editando
             ? `Actual: ${editando.apiKeyEnmascarada}. Déjala vacía para conservarla.`
             : esGmail
-              ? 'En myaccount.google.com/apppasswords (requiere la verificación en 2 pasos). Son 16 letras; puedes pegarla con sus espacios.'
+              ? 'En myaccount.google.com/apppasswords (requiere la verificación en dos pasos). Son 16 letras; puedes pegarla con sus espacios.'
               : 'En Brevo: SMTP y API → Claves API → Generar una nueva clave API.'"
           class="sm:col-span-2"
         >

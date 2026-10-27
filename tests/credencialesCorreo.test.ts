@@ -2,18 +2,24 @@ import { describe, expect, it } from 'vitest'
 import type { CredencialCorreo } from '~/types/api'
 import {
   avisoApiKeyBrevo,
+  avisoCreditos,
   avisoSinRespaldo,
+  credencialEnUso,
   cuerpoCredencialCorreo,
   describirCredencialEvento,
   describirPlanBrevo,
   esClaveAplicacionValida,
   esCorreoValido,
   estadoCredencialCorreo,
+  estadoCreditos,
   etiquetaUsarPredeterminada,
   formularioCredencialCorreo,
+  haceCuanto,
+  hayCreditos,
   hayPrioridades,
   mensajeDesactivarCredencial,
   mensajeEliminarCredencial,
+  necesitaRevisarCreditos,
   nombreProveedor,
   nombreSecreto,
   normalizarClaveAplicacion,
@@ -21,6 +27,9 @@ import {
   ordenarCredencialesCorreo,
   ordenTrasMover,
   remitenteCredencial,
+  resumenCreditos,
+  sinCreditos,
+  textoCreditos,
   validarCredencialCorreo,
 } from '~/utils/credencialesCorreo'
 
@@ -281,5 +290,89 @@ describe('credencial de correo del evento', () => {
   it('describe la credencial en solo lectura', () => {
     expect(describirCredencialEvento(null)).toBe('Usar la predeterminada')
     expect(describirCredencialEvento({ id: 2, nombre: 'Brevo deportes', remitenteCorreo: 'd@undc.edu.pe' })).toBe('Brevo deportes · d@undc.edu.pe')
+  })
+})
+
+describe('credenciales de correo: créditos de envío (backend spec 042)', () => {
+  const AHORA = Date.parse('2026-10-26T22:56:00.000Z')
+  const revisada = (minutos: number) => new Date(AHORA - minutos * 60_000).toISOString()
+  // Las cuatro de producción el 26/10: ANGEL (predeterminada, 295), Gianmarcos (0), LORENA (300) y JOSEMARIA (299)
+  const lista = () => [
+    credencial({ id: 1, nombre: 'ANGEL', esPredeterminada: true, prioridad: 1, creditosDisponibles: 295, creditosVerificadosEn: revisada(1) }),
+    credencial({ id: 2, nombre: 'Gianmarcos', prioridad: 2, creditosDisponibles: 0, creditosVerificadosEn: revisada(1) }),
+    credencial({ id: 3, nombre: 'LORENA', prioridad: 3, creditosDisponibles: 300, creditosVerificadosEn: revisada(1) }),
+    credencial({ id: 4, nombre: 'JOSEMARIA', prioridad: 4, creditosDisponibles: 299, creditosVerificadosEn: revisada(1) }),
+  ]
+
+  it('muestra cuántos envíos le quedan a cada una y marca la que se agotó', () => {
+    expect(estadoCreditos(lista()[0]!)).toEqual({ texto: '295 envíos', tono: 'ok' })
+    expect(estadoCreditos(lista()[1]!)).toEqual({ texto: 'Sin créditos', tono: 'error' })
+    expect(estadoCreditos(credencial({ creditosDisponibles: 12 }))).toEqual({ texto: '12 envíos', tono: 'warn' })
+    expect(estadoCreditos(credencial({ creditosDisponibles: null }))).toEqual({ texto: 'Créditos sin revisar', tono: 'neutral' })
+    expect(sinCreditos({ creditosDisponibles: 0 })).toBe(true)
+    expect(sinCreditos({ creditosDisponibles: null })).toBe(false)
+    expect(sinCreditos({})).toBe(false)
+  })
+
+  it('Gmail y un backend anterior no muestran créditos', () => {
+    expect(estadoCreditos(credencial({ proveedor: 'GMAIL_SMTP', creditosDisponibles: null }))).toBeNull()
+    expect(estadoCreditos(credencial())).toBeNull()
+    expect(textoCreditos(credencial({ proveedor: 'GMAIL_SMTP', creditosDisponibles: 5 }), AHORA)).toBeNull()
+    expect(hayCreditos([credencial()])).toBe(false)
+    expect(hayCreditos(lista())).toBe(true)
+    expect(hayCreditos([])).toBe(false)
+  })
+
+  it('dice hace cuánto se revisaron y el texto de cada tarjeta', () => {
+    expect(haceCuanto(revisada(0), AHORA)).toBe('hace un momento')
+    expect(haceCuanto(revisada(3), AHORA)).toBe('hace 3 min')
+    expect(haceCuanto(revisada(125), AHORA)).toBe('hace 2 h')
+    expect(haceCuanto(revisada(3000), AHORA)).toBe('hace 2 d')
+    expect(haceCuanto(null, AHORA)).toBe('sin revisar')
+    expect(haceCuanto('no es una fecha', AHORA)).toBe('sin revisar')
+    expect(textoCreditos(lista()[0]!, AHORA)).toBe('295 envíos disponibles · revisado hace 1 min')
+    expect(textoCreditos(lista()[1]!, AHORA)).toBe('Sin envíos disponibles · revisado hace 1 min')
+    expect(textoCreditos(credencial({ creditosDisponibles: null }), AHORA)).toBeNull()
+  })
+
+  it('la que envía ahora es la primera activa con envíos, sin pasar por las agotadas ni las inactivas', () => {
+    expect(credencialEnUso(lista())?.id).toBe(1)
+    const sinLaPrimera = lista().map((c) => (c.id === 1 ? { ...c, creditosDisponibles: 0 } : c))
+    expect(credencialEnUso(sinLaPrimera)?.id).toBe(3) // salta a Gianmarcos (0)
+    expect(credencialEnUso(sinLaPrimera.map((c) => (c.id === 3 ? { ...c, activo: false } : c)))?.id).toBe(4)
+    expect(credencialEnUso(lista().map((c) => ({ ...c, creditosDisponibles: 0 })))).toBeNull()
+    expect(credencialEnUso([])).toBeNull()
+    expect(credencialEnUso([credencial({ creditosDisponibles: null })])?.id).toBe(1) // sin dato cuenta como disponible
+  })
+
+  it('avisa si no queda ninguna con envíos y qué se está saltando', () => {
+    expect(avisoCreditos(lista())).toBeNull()
+    const sinTodas = lista().map((c) => ({ ...c, creditosDisponibles: 0 }))
+    expect(avisoCreditos(sinTodas)).toMatchObject({ tono: 'alerta', texto: expect.stringContaining('Ninguna credencial activa tiene envíos disponibles') })
+    const primeraAgotada = lista().map((c) => (c.id === 1 ? { ...c, creditosDisponibles: 0 } : c))
+    expect(avisoCreditos(primeraAgotada)).toEqual({
+      tono: 'info',
+      texto: 'Sin envíos disponibles: «ANGEL», «Gianmarcos». Los correos salen por «LORENA», la primera con envíos.',
+    })
+    // Una de Gmail activa siempre puede enviar (no informa créditos)
+    expect(avisoCreditos([...sinTodas, credencial({ id: 9, nombre: 'Gmail', proveedor: 'GMAIL_SMTP', prioridad: 9, creditosDisponibles: null })])).toMatchObject({ tono: 'info' })
+    expect(avisoCreditos([])).toBeNull()
+    expect(avisoCreditos([credencial({ activo: false, creditosDisponibles: 0 })])).toBeNull()
+  })
+
+  it('al abrir la pantalla revisa solo si falta o venció la revisión de una de Brevo activa', () => {
+    expect(necesitaRevisarCreditos(lista(), AHORA)).toBe(false)
+    expect(necesitaRevisarCreditos(lista().map((c) => (c.id === 3 ? { ...c, creditosVerificadosEn: revisada(6) } : c)), AHORA)).toBe(true)
+    expect(necesitaRevisarCreditos(lista().map((c) => (c.id === 3 ? { ...c, creditosVerificadosEn: null } : c)), AHORA)).toBe(true)
+    // Inactivas, Gmail y un backend anterior no se revisan
+    expect(necesitaRevisarCreditos(lista().map((c) => ({ ...c, creditosVerificadosEn: null, activo: false })), AHORA)).toBe(false)
+    expect(necesitaRevisarCreditos([credencial({ proveedor: 'GMAIL_SMTP', creditosDisponibles: null, creditosVerificadosEn: null })], AHORA)).toBe(false)
+    expect(necesitaRevisarCreditos([credencial()], AHORA)).toBe(false)
+  })
+
+  it('resume los créditos de las de Brevo activas', () => {
+    expect(resumenCreditos(lista())).toBe('ANGEL: 295 · Gianmarcos: 0 · LORENA: 300 · JOSEMARIA: 299')
+    expect(resumenCreditos(lista().map((c) => (c.id === 2 ? { ...c, activo: false } : c)))).toBe('ANGEL: 295 · LORENA: 300 · JOSEMARIA: 299')
+    expect(resumenCreditos([credencial({ creditosDisponibles: null })])).toBe('')
   })
 })

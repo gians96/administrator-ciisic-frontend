@@ -132,6 +132,88 @@ export function ordenTrasMover(ordenadas: readonly Pick<CredencialCorreo, 'id' |
   return ids
 }
 
+// ─── Créditos de envío (backend spec 042) ───
+
+/** Cuánto vale una revisión de créditos: el backend vuelve a preguntar a Brevo pasado este tiempo. */
+export const VIGENCIA_CREDITOS_MS = 5 * 60 * 1000
+
+type ConCreditos = Pick<CredencialCorreo, 'creditosDisponibles'>
+
+/** El backend informa créditos (spec 042): alguna credencial trae `creditosDisponibles`. */
+export function hayCreditos(lista: readonly ConCreditos[]): boolean {
+  return lista.some((credencial) => credencial.creditosDisponibles !== undefined)
+}
+
+/** Sin envíos disponibles según la última revisión (Brevo; Gmail no informa créditos). */
+export function sinCreditos(credencial: ConCreditos): boolean {
+  return credencial.creditosDisponibles === 0
+}
+
+/** Insignia de los envíos que le quedan; `null` si no aplica (Gmail) o el backend aún no los informa. */
+export function estadoCreditos(credencial: Pick<CredencialCorreo, 'proveedor' | 'creditosDisponibles'>): { texto: string, tono: 'ok' | 'warn' | 'error' | 'neutral' } | null {
+  const creditos = credencial.creditosDisponibles
+  if (credencial.proveedor === 'GMAIL_SMTP' || creditos === undefined) return null
+  if (creditos === null) return { texto: 'Créditos sin revisar', tono: 'neutral' }
+  if (creditos === 0) return { texto: 'Sin créditos', tono: 'error' }
+  return { texto: `${numero(creditos)} envíos`, tono: creditos <= 20 ? 'warn' : 'ok' }
+}
+
+/** `hace 3 min`, `hace 2 h`, `hace 1 d`. */
+export function haceCuanto(iso: string | null | undefined, ahora = Date.now()): string {
+  const marca = iso ? Date.parse(iso) : Number.NaN
+  if (Number.isNaN(marca)) return 'sin revisar'
+  const minutos = Math.floor((ahora - marca) / 60_000)
+  if (minutos < 1) return 'hace un momento'
+  if (minutos < 60) return `hace ${minutos} min`
+  const horas = Math.floor(minutos / 60)
+  return horas < 24 ? `hace ${horas} h` : `hace ${Math.floor(horas / 24)} d`
+}
+
+/** `295 envíos disponibles · revisado hace 3 min`; `null` si no se sabe (nunca revisada, Gmail o backend anterior). */
+export function textoCreditos(credencial: Pick<CredencialCorreo, 'proveedor' | 'creditosDisponibles' | 'creditosVerificadosEn'>, ahora = Date.now()): string | null {
+  const creditos = credencial.creditosDisponibles
+  if (credencial.proveedor === 'GMAIL_SMTP' || creditos === undefined || creditos === null) return null
+  const cuanto = creditos === 0 ? 'Sin envíos disponibles' : `${numero(creditos)} envíos disponibles`
+  return `${cuanto} · revisado ${haceCuanto(credencial.creditosVerificadosEn, ahora)}`
+}
+
+type Enviable = Ordenable & ConCreditos & Pick<CredencialCorreo, 'id'>
+
+/** Credencial por la que salen los correos ahora: la primera activa, en orden de prioridad, que no esté sin créditos. */
+export function credencialEnUso<T extends Enviable>(lista: readonly T[]): T | null {
+  return ordenarCredencialesCorreo(lista).find((credencial) => credencial.activo && !sinCreditos(credencial)) ?? null
+}
+
+/** Sin ninguna con envíos (alerta) o con credenciales por delante que se saltan (informativo); `null` si todo está bien. */
+export function avisoCreditos(lista: readonly (Ordenable & ConCreditos)[]): { tono: 'alerta' | 'info', texto: string } | null {
+  const activas = ordenarCredencialesCorreo(lista).filter((credencial) => credencial.activo)
+  if (!activas.length) return null
+  const enUso = activas.find((credencial) => !sinCreditos(credencial))
+  if (!enUso) {
+    return { tono: 'alerta', texto: 'Ninguna credencial activa tiene envíos disponibles: los correos no saldrán hasta que Brevo renueve el cupo (el plan gratuito se renueva cada día) o agregues otra credencial, por ejemplo Gmail.' }
+  }
+  const saltadas = activas.slice(0, activas.indexOf(enUso))
+  if (!saltadas.length) return null
+  return { tono: 'info', texto: `Sin envíos disponibles: ${saltadas.map((credencial) => `«${credencial.nombre}»`).join(', ')}. Los correos salen por «${enUso.nombre}», la primera con envíos.` }
+}
+
+/** Si hay credenciales de Brevo activas cuya revisión de créditos falta o venció: la pantalla las revisa sola al abrirse. */
+export function necesitaRevisarCreditos(lista: readonly Pick<CredencialCorreo, 'proveedor' | 'activo' | 'creditosDisponibles' | 'creditosVerificadosEn'>[], ahora = Date.now()): boolean {
+  return lista.some((credencial) => {
+    if (!credencial.activo || credencial.proveedor !== 'BREVO' || credencial.creditosDisponibles === undefined) return false
+    const revisada = credencial.creditosVerificadosEn ? Date.parse(credencial.creditosVerificadosEn) : Number.NaN
+    return Number.isNaN(revisada) || ahora - revisada > VIGENCIA_CREDITOS_MS
+  })
+}
+
+/** `ANGEL: 295 · Gianmarcos: 0`, para el aviso tras revisar. */
+export function resumenCreditos(lista: readonly Pick<CredencialCorreo, 'nombre' | 'proveedor' | 'activo' | 'creditosDisponibles'>[]): string {
+  return lista
+    .filter((credencial) => credencial.activo && credencial.proveedor === 'BREVO' && typeof credencial.creditosDisponibles === 'number')
+    .map((credencial) => `${credencial.nombre}: ${numero(credencial.creditosDisponibles)}`)
+    .join(' · ')
+}
+
 /** Aviso cuando hay una sola credencial activa: si se agota, no sale ningún correo. `null` en los demás casos. */
 export function avisoSinRespaldo(lista: readonly Pick<CredencialCorreo, 'activo' | 'proveedor'>[]): string | null {
   const activas = lista.filter((credencial) => credencial.activo)

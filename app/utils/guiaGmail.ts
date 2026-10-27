@@ -26,14 +26,15 @@ export const PASOS_GUIA_GMAIL: readonly PasoGuia[] = [
       'Cuenta de Gmail personal: unos 500 correos al día.',
       'Cuenta de Google Workspace: unos 2000 correos al día.',
       'Gmail solo firma con la propia cuenta: el remitente del panel será esa misma dirección.',
+      'Si tienes varias cuentas abiertas en el navegador, mira el avatar de arriba a la derecha y confirma que estás en esa cuenta antes de seguir.',
     ],
   },
   {
-    titulo: 'Activa la verificación en 2 pasos',
-    texto: 'Entra con esa cuenta y activa la verificación en 2 pasos. Sin ella, Google no deja crear contraseñas de aplicación.',
+    titulo: 'Activa la verificación en dos pasos',
+    texto: 'En «Seguridad e inicio de sesión», dentro de «Cómo inicias sesión en Google», abre «Verificación en dos pasos». Si dice que está desactivada, pulsa «Activar la verificación en dos pasos».',
     detalles: [
-      'Seguridad → «Verificación en 2 pasos» → Empezar, y sigue los pasos con tu celular.',
-      'Si ya la tienes activa, pasa al siguiente paso.',
+      'Google te pide la contraseña y confirmar con tu teléfono o con la notificación de Google.',
+      'Cuando diga «Activada», pasa al siguiente paso. Sin ella, Google no deja crear contraseñas de aplicación.',
     ],
     enlace: { texto: 'Abrir Seguridad de Google', url: URL_SEGURIDAD_GOOGLE },
   },
@@ -80,11 +81,11 @@ export interface ProblemaGuia { problema: string, solucion: string }
 export const PROBLEMAS_GUIA_GMAIL: readonly ProblemaGuia[] = [
   {
     problema: '«Gmail rechazó el usuario o la contraseña de aplicación»',
-    solucion: 'Revisa que la cuenta del remitente sea exactamente la que creó la contraseña, que la verificación en 2 pasos siga activa y que pegaste la contraseña de aplicación (16 letras), no la de la cuenta. Si cambiaste la contraseña de la cuenta de Google, Google revoca las de aplicación: crea otra y edita la credencial.',
+    solucion: 'Revisa que la cuenta del remitente sea exactamente la que creó la contraseña, que la verificación en dos pasos siga activa y que pegaste la contraseña de aplicación (16 letras), no la de la cuenta. Si cambiaste la contraseña de la cuenta de Google, Google revoca las de aplicación: crea otra y edita la credencial.',
   },
   {
     problema: 'No aparece «Contraseñas de aplicaciones»',
-    solucion: 'Falta la verificación en 2 pasos, la cuenta usa la Protección avanzada de Google o el administrador de Google Workspace no permite las contraseñas de aplicación (pídele que las habilite).',
+    solucion: 'Falta la verificación en dos pasos, la cuenta usa la Protección avanzada de Google o el administrador de Google Workspace no permite las contraseñas de aplicación (pídele que las habilite).',
   },
   {
     problema: '«Gmail alcanzó su límite de envíos»',

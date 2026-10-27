@@ -36,8 +36,9 @@ cuente la IP de cada visitante:
 2. **Correo**: credenciales de Brevo (API key) o de **Gmail por SMTP** (contraseña de aplicación),
    cada una con **Probar** y **Enviar prueba**, y su **orden de prioridad** (backend 041): si una falla
    o se queda sin créditos, el correo sale por la siguiente. Con el backend 014, el código de acceso al
-   portal sale de la primera credencial activa cuyo último envío no falló hace menos de 15 min: sin
-   ninguna, el login no ofrece el código.
+   portal sale de la primera credencial activa cuyo último envío no falló hace menos de 15 min y que
+   tenga envíos (backend 042): sin ninguna, el login no ofrece el código. **Revisar créditos** muestra
+   cuántos envíos le quedan a cada credencial de Brevo y cuál envía ahora.
 3. **Consultas DNI**: tokens de Decolecta/apiperu.
 4. **Eventos → Acceso**: token de la landing del evento (se muestra una vez).
 5. **Eventos → Integraciones**: URL y token de deportes-fi.

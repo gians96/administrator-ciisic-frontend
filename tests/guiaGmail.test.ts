@@ -12,7 +12,7 @@ describe('guía de Gmail por SMTP', () => {
   it('tiene los pasos en el orden de la configuración, con título y texto', () => {
     expect(PASOS_GUIA_GMAIL.map((paso) => paso.titulo)).toEqual([
       'Elige la cuenta que enviará los correos',
-      'Activa la verificación en 2 pasos',
+      'Activa la verificación en dos pasos',
       'Crea la contraseña de aplicación',
       'Agrégala en el panel',
       'Prueba la conexión',
