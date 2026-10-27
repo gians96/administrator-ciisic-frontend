@@ -218,6 +218,7 @@ export const MENU: readonly SeccionMenu[] = [
       { to: '/', label: 'Resumen', icon: 'heroicons:squares-2x2', permiso: 'resumen.ver' },
       { to: '/inscripciones', label: 'Inscripciones', icon: 'heroicons:clipboard-document-check', permiso: 'inscripciones.ver' },
       { to: '/credenciales', label: 'Credencial 3D', icon: 'heroicons:cube-transparent', permiso: 'inscripciones.ver' },
+      { to: '/fotochecks', label: 'Fotochecks', icon: 'heroicons:printer', permiso: 'inscripciones.exportar' },
       { to: '/asistencia', label: 'Asistencia', icon: 'heroicons:qr-code', permiso: 'asistencia.ver' },
       { to: '/delegaciones', label: 'Delegaciones', icon: 'heroicons:user-group', permiso: 'delegaciones.ver' },
       { to: '/reportes', label: 'Reportes', icon: 'heroicons:chart-bar-square', permiso: 'reportes.ver' },

@@ -3,6 +3,7 @@ import type { AccesoPanel, Permiso } from '~/types/api'
 import {
   accesoDeSesion,
   conDependencias,
+  DEPENDENCIAS,
   dependenciasDe,
   esPermiso,
   etiquetaRol,
@@ -115,14 +116,14 @@ describe('permisos: accesoDeSesion', () => {
 
 describe('permisos: menú', () => {
   it('Owner ve todo; Administrador, todo menos Sistema', () => {
-    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/credenciales', '/asistencia', '/delegaciones', '/reportes', '/escanear', '/ponencias', '/mensajes', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen', '/ponencias-especializadas/enviar-enlace', RUTA_PUERTA, '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
+    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/credenciales', '/fotochecks', '/asistencia', '/delegaciones', '/reportes', '/escanear', '/ponencias', '/mensajes', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen', '/ponencias-especializadas/enviar-enlace', RUTA_PUERTA, '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
     expect(rutas(ADMINISTRADOR)).not.toContain('/sistema')
     expect(rutas(ADMINISTRADOR)).toContain('/administradores')
   })
 
   it('Tesorero: solo el Congreso; la sección Configuración se oculta', () => {
     expect(menuPara(TESORERO).map((seccion) => seccion.titulo)).toEqual(['Congreso'])
-    expect(rutas(TESORERO)).toEqual(['/', '/inscripciones', '/credenciales', '/asistencia', '/delegaciones', '/reportes', '/ponencias', '/mensajes'])
+    expect(rutas(TESORERO)).toEqual(['/', '/inscripciones', '/credenciales', '/fotochecks', '/asistencia', '/delegaciones', '/reportes', '/ponencias', '/mensajes'])
   })
 
   it('Ponencias especializadas: programa e inscripciones con «ver»; la puerta, con «asistencia»', () => {
@@ -140,6 +141,16 @@ describe('permisos: menú', () => {
     const items = MENU.flatMap((seccion) => seccion.items)
     expect(items.find((i) => i.to === '/credenciales')?.permiso).toBe('inscripciones.ver')
     expect(items.find((i) => i.to === '/ponencias-especializadas/enviar-enlace')?.permiso).toBe('especializadas.ver')
+  })
+
+  it('Fotochecks (spec 030) lo ve quien exporta inscripciones: el código del QR solo sale en ese CSV', () => {
+    const items = MENU.flatMap((seccion) => seccion.items)
+    expect(items.find((i) => i.to === '/fotochecks')?.permiso).toBe('inscripciones.exportar')
+    expect(rutas(acceso(['inscripciones.exportar']))).toContain('/fotochecks')
+    // Ver inscritos no basta: sin exportar no hay CSV ni código
+    expect(rutas(acceso(['inscripciones.ver']))).not.toContain('/fotochecks')
+    expect(rutas(COMISION)).not.toContain('/fotochecks')
+    expect(DEPENDENCIAS['inscripciones.exportar']).toContain('inscripciones.ver')
   })
 
   it('Comisión: solo lo que se le asignó', () => {
