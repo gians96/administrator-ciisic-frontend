@@ -17,8 +17,8 @@ modo **oscuro y claro**, el **logo de la Facultad de Ingeniería**, medidas **pe
 - **Diseño**: el de la credencial web en unidades `cqw` (escala a cualquier medida): cabecera con el logo del congreso y el de la Facultad, nombre del congreso, nombre grande, QR sobre cuadro blanco y
   código. **Oscuro** (como la web) o **claro**, con un **acento** único configurable en lugar de las tecnologías de cada persona (no vienen en el CSV). Cuadro recto con **sangrado** y borde fino como guía de corte;
   casillas para mostrar u ocultar cada elemento, nombre en mayúsculas y textos del evento editables (por defecto los del evento elegido).
-- **Pastilla de categoría** (2026-10-26): dice **«Asistentes»** para todo inscrito, sin importar su clasificación ni su tipo, y **«Delegaciones»** (sin el nombre de la delegación) solo para quien viene de una
-  delegación (`rolDeFotocheck`: el backend nombra sus tipos «DELEGACION <nombre>»). Las personas a mano llevan el rol que se escribe (sin rol y con código, «Asistentes»). La tabla y el filtro siguen mostrando el tipo real.
+- **Pastilla de categoría** (2026-10-26, ajustada el 2026-10-27): dice **«ASISTENTE»** (`ROL_ASISTENTE`) para todo inscrito, sin importar su clasificación ni su tipo y **también para quien viene de una delegación**
+  (antes llevaba «Delegaciones»; se pidió un solo texto para todos). Las personas a mano llevan el rol que se escribe (sin rol y con código, «Asistente»). La tabla y el filtro siguen mostrando el tipo real.
 - **Vista previa de impresión**: `FotochecksVistaPrevia` apila las hojas tal como saldrán, con la misma `FotochecksHoja` y las mismas medidas que la impresión; zoom, guías (margen y lugar de cada fotocheck, solo
   de pantalla), modo ampliado y solo monta las hojas visibles (`IntersectionObserver`).
 - **PDF**: «Imprimir / Guardar PDF» abre el cuadro de impresión del navegador con todas las hojas (`useImpresionFotochecks`): PDF vectorial con las fuentes incrustadas y sin librerías de PDF. `@page` fija la hoja,

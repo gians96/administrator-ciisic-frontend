@@ -252,7 +252,7 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   `useApi().leerArchivo('events/:id/inscriptions/export?estado=APROBADO')` y `leerInscritosCsv` (`app/utils/fotochecks.ts`: columnas por **título**, conserva solo nombre, código, tipo y modalidad; sin la columna «Código QR»
   —backend sin la 040— lo explica y no carga nada). **El código es una credencial**: vive solo en memoria (`modulosQr` guarda una caché acotada que `olvidarQrs` vacía), nunca en `localStorage`, URL, consola ni `useHead`,
   y la tabla no lo muestra; en el navegador solo se guardan el diseño (`ciisic:fotochecks:config`) y los **ids** ya impresos por evento (`ciisic:fotochecks:impresos:<id>`). La **pastilla** («Categoría» en el diseño) dice
-  «Asistentes» para todo inscrito y «Delegaciones» solo para quien viene de una delegación (`rolDeFotocheck`: su tipo se llama `DELEGACION <nombre>`); **no** usa la clasificación ni el tipo, que siguen en la tabla y el filtro.
+  «ASISTENTE» para todo inscrito, también para quien viene de una delegación (`ROL_ASISTENTE`); **no** usa la clasificación ni el tipo, que siguen en la tabla y el filtro.
   Medidas en **cm** (6.7 × 10 por defecto;
   `calcularRejilla` dice cuántos caben: 8 en A4 horizontal). `FotocheckTarjeta` (unidades `cqw`, oscuro como la credencial web o claro) y `FotochecksHoja` los usan **la vista previa** (`FotochecksVistaPrevia`, monta solo
   las hojas visibles) **y la impresión**, por eso lo que se ve es lo que sale. El PDF sale del cuadro de impresión del navegador (`useImpresionFotochecks`: monta todas las hojas con `<Teleport>` solo al imprimir,
