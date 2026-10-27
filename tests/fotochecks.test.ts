@@ -4,6 +4,8 @@ import {
   ASISTENTE_EJEMPLO,
   CLAVE_CONFIG_FOTOCHECKS,
   FILTROS_FOTOCHECKS_INICIALES,
+  ROL_ASISTENTES,
+  ROL_DELEGACIONES,
   calcularRejilla,
   cantidadDeHojas,
   claveImpresosFotochecks,
@@ -12,6 +14,7 @@ import {
   configPorDefectoFotocheck,
   crearAsistenteManual,
   esImpresoFotocheck,
+  esTipoDeDelegacion,
   etiquetaHoja,
   filtrarAsistentes,
   formatoCm,
@@ -28,6 +31,7 @@ import {
   ordenarAsistentes,
   paginarFotochecks,
   resumenRejilla,
+  rolDeFotocheck,
   rutaDeModulos,
   rutaExportacionInscritos,
   tamanoNombreFotocheck,
@@ -189,8 +193,8 @@ describe('fotochecks: lectura del CSV de inscripciones', () => {
     const resultado = leerInscritosCsv(csv(fila({ id: '7', nombres: 'Ana María', apellidos: 'Pérez Ñaupa' }), fila({ id: '8', nombres: 'Luis', apellidos: 'Quispe', codigo: 'ZZZZZ99999', clasificacion: 'Egresado' })))
     expect(resultado.faltanColumnas).toEqual([])
     expect(resultado.asistentes).toEqual([
-      { clave: 'inscripcion:7', id: 7, nombres: 'Ana María', apellidos: 'Pérez Ñaupa', codigo: 'ABCDE12345', tipo: 'Estudiante UNDC', rol: 'Estudiante UNDC', virtual: false },
-      { clave: 'inscripcion:8', id: 8, nombres: 'Luis', apellidos: 'Quispe', codigo: 'ZZZZZ99999', tipo: 'Estudiante UNDC', rol: 'Egresado', virtual: false },
+      { clave: 'inscripcion:7', id: 7, nombres: 'Ana María', apellidos: 'Pérez Ñaupa', codigo: 'ABCDE12345', tipo: 'Estudiante UNDC', rol: 'Asistentes', virtual: false },
+      { clave: 'inscripcion:8', id: 8, nombres: 'Luis', apellidos: 'Quispe', codigo: 'ZZZZZ99999', tipo: 'Estudiante UNDC', rol: 'Asistentes', virtual: false },
     ])
   })
 
@@ -231,13 +235,26 @@ describe('fotochecks: lectura del CSV de inscripciones', () => {
     expect(resultado.noAprobados).toBe(2)
   })
 
-  it('marca a los virtuales y arma el rol con clasificación, tipo o «Asistente»', () => {
+  it('marca a los virtuales', () => {
     const { asistentes } = leerInscritosCsv(csv(
       fila({ id: '1', modalidad: 'VIRTUAL', tipo: 'Virtual general', codigo: 'AAAAA11111' }),
-      fila({ id: '2', tipo: '', clasificacion: '', codigo: 'BBBBB22222' }),
+      fila({ id: '2', tipo: '', codigo: 'BBBBB22222' }),
     ))
-    expect(asistentes[0]).toMatchObject({ virtual: true, rol: 'Virtual general' })
-    expect(asistentes[1]).toMatchObject({ virtual: false, rol: 'Asistente', tipo: '' })
+    expect(asistentes.map((persona) => persona.virtual)).toEqual([true, false])
+  })
+
+  it('la pastilla dice «Asistentes» para todo inscrito, sin importar su clasificación ni su tipo, y «Delegaciones» solo para los de una delegación', () => {
+    const delegacion = 'DELEGACION UNAT · ESCUELA PROFESIONAL DE INGENIERÍA DE SISTEMAS'
+    const { asistentes } = leerInscritosCsv(csv(
+      fila({ id: '1', tipo: 'Estudiante UNDC', codigo: 'AAAAA11111' }),
+      fila({ id: '2', tipo: 'Profesionales y público en general', clasificacion: 'Egresado', codigo: 'BBBBB22222' }),
+      fila({ id: '3', tipo: '', clasificacion: '', codigo: 'CCCCC33333' }),
+      fila({ id: '4', modalidad: 'VIRTUAL', tipo: 'Virtual general', codigo: 'DDDDD44444' }),
+      fila({ id: '5', tipo: delegacion, clasificacion: 'Egresado', codigo: 'EEEEE55555' }),
+    ))
+    expect(asistentes.map((persona) => persona.rol)).toEqual([ROL_ASISTENTES, ROL_ASISTENTES, ROL_ASISTENTES, ROL_ASISTENTES, ROL_DELEGACIONES])
+    // El tipo de inscripción sigue siendo el real: es el de la tabla y el del filtro
+    expect(asistentes[4]?.tipo).toBe(delegacion)
   })
 
   it('sin la columna «Código QR» (backend sin la spec 040) explica qué falta', () => {
@@ -262,6 +279,28 @@ describe('fotochecks: lectura del CSV de inscripciones', () => {
 
   it('ruta de la exportación: solo aprobados del evento', () => {
     expect(rutaExportacionInscritos(2)).toBe('events/2/inscriptions/export?estado=APROBADO')
+  })
+})
+
+describe('fotochecks: pastilla «Asistentes» o «Delegaciones»', () => {
+  it('reconoce los tipos que el backend nombra «DELEGACION <nombre>», con o sin tilde y en cualquier caja', () => {
+    expect(esTipoDeDelegacion('DELEGACION UNAC')).toBe(true)
+    expect(esTipoDeDelegacion('  Delegación   UNH ')).toBe(true)
+    expect(esTipoDeDelegacion('Delegaciones invitadas')).toBe(true)
+    expect(esTipoDeDelegacion('DELEGACION')).toBe(true)
+  })
+
+  it('no confunde otros tipos con una delegación', () => {
+    expect(esTipoDeDelegacion('Estudiante UNDC')).toBe(false)
+    expect(esTipoDeDelegacion('Delegado de aula')).toBe(false)
+    expect(esTipoDeDelegacion('Profesional · delegación')).toBe(false)
+    expect(esTipoDeDelegacion('')).toBe(false)
+  })
+
+  it('«Delegaciones» solo para una delegación; para todo lo demás, «Asistentes»', () => {
+    expect(rolDeFotocheck('DELEGACION UNAT · ESCUELA PROFESIONAL DE INGENIERÍA DE SISTEMAS')).toBe('Delegaciones')
+    expect(rolDeFotocheck('Profesionales y público en general')).toBe('Asistentes')
+    expect(rolDeFotocheck('')).toBe('Asistentes')
   })
 })
 
@@ -302,9 +341,9 @@ describe('fotochecks: personas agregadas a mano', () => {
     })
   })
 
-  it('con código opcional en mayúsculas; sin rol pero con código queda «Asistente»', () => {
+  it('con código opcional en mayúsculas; sin rol pero con código queda «Asistentes»', () => {
     const resultado = crearAsistenteManual({ nombre: 'Ana', rol: '', codigo: 'abcde12345' }, 1)
-    expect(resultado).toMatchObject({ ok: true, asistente: { codigo: 'ABCDE12345', rol: 'Asistente' } })
+    expect(resultado).toMatchObject({ ok: true, asistente: { codigo: 'ABCDE12345', rol: 'Asistentes' } })
   })
 
   it('valida nombre, rol y código', () => {
@@ -361,6 +400,7 @@ describe('fotochecks: lista, filtros y orden', () => {
 
   it('el asistente de ejemplo es ficticio', () => {
     expect(ASISTENTE_EJEMPLO.codigo).toBe('ABCDE12345')
+    expect(ASISTENTE_EJEMPLO.rol).toBe('Asistentes')
     expect(Object.isFrozen(ASISTENTE_EJEMPLO)).toBe(true)
   })
 })

@@ -95,7 +95,7 @@ function restablecer() {
         </div>
       </div>
 
-      <AppField label="Color de acento" :for="`${id}-acento`" :error="acentoValido ? null : 'Usa el formato #rrggbb, por ejemplo #00d9e8.'" hint="Borde, pastilla del tipo y banda del rol.">
+      <AppField label="Color de acento" :for="`${id}-acento`" :error="acentoValido ? null : 'Usa el formato #rrggbb, por ejemplo #00d9e8.'" hint="Borde, pastilla de la categoría y banda del rol.">
         <div class="flex items-center gap-2">
           <input
             type="color"

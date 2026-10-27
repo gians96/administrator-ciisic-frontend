@@ -45,7 +45,7 @@ export const ELEMENTOS_FOTOCHECK: ReadonlyArray<{ id: ElementoFotocheck, etiquet
   { id: 'logoFi', etiqueta: 'Logo de la Facultad de Ingeniería', descripcion: 'A la derecha de la cabecera' },
   { id: 'nombreCongreso', etiqueta: 'Nombre completo del congreso', descripcion: 'Bajo la cabecera' },
   { id: 'marcaDeAgua', etiqueta: 'Marca de agua', descripcion: 'El logo del congreso, grande y tenue' },
-  { id: 'tipo', etiqueta: 'Tipo de inscripción', descripcion: 'Una pastilla bajo el nombre' },
+  { id: 'tipo', etiqueta: 'Categoría', descripcion: '«Asistentes» o «Delegaciones», en una pastilla bajo el nombre' },
   { id: 'codigo', etiqueta: 'Código bajo el QR', descripcion: 'Las 10 letras o números del QR' },
 ]
 
@@ -282,10 +282,14 @@ export interface AsistenteFotocheck {
   codigo: string
   /** «Tipo de inscripción» (filtro y tabla). */
   tipo: string
-  /** Texto de la pastilla: clasificación, tipo o «Asistente», como `rolDeCredencial` de la landing. */
+  /** Texto de la pastilla: «Asistentes» o «Delegaciones» (`rolDeFotocheck`), o el rol escrito a mano. */
   rol: string
   virtual: boolean
 }
+
+/** Pastilla de todo inscrito; solo quien viene de una delegación lleva la otra, sin el nombre de la delegación. */
+export const ROL_ASISTENTES = 'Asistentes'
+export const ROL_DELEGACIONES = 'Delegaciones'
 
 /** Persona ficticia para ver el diseño antes de cargar a nadie (nunca un código real). */
 export const ASISTENTE_EJEMPLO: Readonly<AsistenteFotocheck> = Object.freeze({
@@ -295,7 +299,7 @@ export const ASISTENTE_EJEMPLO: Readonly<AsistenteFotocheck> = Object.freeze({
   apellidos: 'Apellidos de ejemplo',
   codigo: 'ABCDE12345',
   tipo: 'Asistente',
-  rol: 'Asistente',
+  rol: ROL_ASISTENTES,
   virtual: false,
 })
 
@@ -306,6 +310,16 @@ const limpiar = (valor: unknown) => String(valor ?? '').replace(/\s+/g, ' ').tri
 
 /** Sin tildes, en minúsculas y con un solo espacio: sirve para comparar títulos de columna y para buscar. */
 const sinTildes = (valor: string) => valor.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim()
+
+/** El backend nombra los tipos de una delegación «DELEGACION <nombre>» (`nombreDeTipo`: mayúsculas y sin tilde). */
+export function esTipoDeDelegacion(tipo: string): boolean {
+  return /^delegacion(es)?(\s|$)/.test(sinTildes(tipo))
+}
+
+/** Pastilla de quien viene de las inscripciones: «Delegaciones» o «Asistentes»; no depende de la clasificación ni del tipo. */
+export function rolDeFotocheck(tipo: string): string {
+  return esTipoDeDelegacion(tipo) ? ROL_DELEGACIONES : ROL_ASISTENTES
+}
 
 /** Nombre y apellidos como se imprimen (mayúsculas si se pidió). */
 export function nombreParaFotocheck(persona: Pick<AsistenteFotocheck, 'nombres' | 'apellidos'>, mayusculas: boolean): string {
@@ -404,7 +418,6 @@ export function leerInscritosCsv(texto: string): ResultadoCsvFotochecks {
 
   const iId = columna('id')
   const iTipo = columna('tipo de inscripcion')
-  const iClasificacion = columna('clasificacion')
   const iModalidad = columna('modalidad de asistencia')
   const iEstado = columna('estado')
   const dato = (fila: string[], indice: number) => (indice < 0 ? '' : limpiar(sinNeutralizar(fila[indice] ?? '')))
@@ -436,7 +449,7 @@ export function leerInscritosCsv(texto: string): ResultadoCsvFotochecks {
       apellidos,
       codigo,
       tipo,
-      rol: dato(fila, iClasificacion) || tipo || 'Asistente',
+      rol: rolDeFotocheck(tipo),
       virtual: dato(fila, iModalidad).toUpperCase() === 'VIRTUAL',
     })
   }
@@ -465,7 +478,7 @@ export function crearAsistenteManual(datos: { nombre: string, rol: string, codig
   else if (!rol && !codigo) errores.rol = 'Escribe el rol: es lo que se imprime en la banda.'
   if (codigo && !REGEX_CODIGO_FOTOCHECK.test(codigo)) errores.codigo = 'Son 10 letras mayúsculas o números.'
   if (Object.keys(errores).length) return { ok: false, errores }
-  return { ok: true, asistente: { clave: `manual:${numero}`, id: null, nombres: nombre, apellidos: '', codigo, tipo: rol || 'Manual', rol: rol || 'Asistente', virtual: false } }
+  return { ok: true, asistente: { clave: `manual:${numero}`, id: null, nombres: nombre, apellidos: '', codigo, tipo: rol || 'Manual', rol: rol || ROL_ASISTENTES, virtual: false } }
 }
 
 // ─── Lista: filtros, orden y «ya impreso» ───
