@@ -176,6 +176,7 @@ const RESPALDO_POR_CODIGO: Readonly<Record<string, string>> = {
   CONGRESS_REGISTRATION_REJECTED: 'La inscripción al congreso fue rechazada o cancelada.',
   // Resumen por persona, cancelación y comunicado (backend spec 031)
   FREE_ACCESS_ENABLED: 'El acceso libre está encendido: todas las personas pueden asistir, no hay a quién cancelar. Apágalo en el Programa para exigir el congreso.',
+  EMAIL_CREDITS_EXHAUSTED: 'Ninguna credencial de correo activa tiene envíos disponibles (el plan gratuito de Brevo da 300 al día). Revisa los créditos en Correo, agrega otra credencial o espera a que se renueve el cupo.',
   EMAIL_CREDENTIAL_UNAVAILABLE: 'No hay una credencial de correo activa para enviar el comunicado. Configúrala en Correo.',
   // Envíos masivos a los inscritos presenciales (backend spec 039)
   LANDING_URL_MISSING: 'Falta la URL de la landing. Configúrala en Sistema para poder armar los enlaces.',

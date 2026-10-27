@@ -37,6 +37,16 @@ export interface ResultadoEnvio {
   /** No existen, no están aprobadas o no son de la modalidad del canal (presenciales; virtuales en el acceso virtual). */
   noElegibles: number
   fallidos: number
+  /** Cuántos salieron por cada credencial de correo (backend spec 044). Ausente si no salió ninguno o con un backend anterior. */
+  porCredencial?: EnviosPorCredencial[]
+  /** Se acabaron los envíos de todas las credenciales: el servidor cortó y lo que faltó sigue «sin enviar». Ausente si no pasó. */
+  agotado?: true
+}
+
+export interface EnviosPorCredencial {
+  credencialId: number
+  nombre: string
+  enviados: number
 }
 
 export const RESULTADO_ENVIO_VACIO: Readonly<ResultadoEnvio> = Object.freeze({ enviados: 0, yaEnviados: 0, noElegibles: 0, fallidos: 0 })
@@ -129,12 +139,25 @@ export function dividirEnTandas<T>(items: readonly T[], tamano = TAMANO_TANDA_EN
   return tandas
 }
 
+/** Suma por credencial en el orden en que aparecen. */
+function sumarPorCredencial(a: readonly EnviosPorCredencial[] = [], b: readonly EnviosPorCredencial[] = []): EnviosPorCredencial[] {
+  const suma = new Map<number, EnviosPorCredencial>()
+  for (const tramo of [...a, ...b]) {
+    const previo = suma.get(tramo.credencialId)
+    suma.set(tramo.credencialId, previo ? { ...previo, enviados: previo.enviados + tramo.enviados } : { ...tramo })
+  }
+  return [...suma.values()]
+}
+
 export function sumarResultados(a: ResultadoEnvio, b: ResultadoEnvio): ResultadoEnvio {
+  const porCredencial = sumarPorCredencial(a.porCredencial, b.porCredencial)
   return {
     enviados: a.enviados + b.enviados,
     yaEnviados: a.yaEnviados + b.yaEnviados,
     noElegibles: a.noElegibles + b.noElegibles,
     fallidos: a.fallidos + b.fallidos,
+    ...(porCredencial.length ? { porCredencial } : {}),
+    ...(a.agotado || b.agotado ? { agotado: true as const } : {}),
   }
 }
 
@@ -148,8 +171,11 @@ export interface EnvioPorTandas {
   resultado: ResultadoEnvio
   /** Personas atendidas antes de terminar o cortar. */
   hechas: number
-  /** Qué cortó el envío: un error de la petición o que la persona lo detuvo. */
-  corte: { tipo: 'error', error: unknown } | { tipo: 'detenido' } | null
+  /**
+   * Qué cortó el envío: un error de la petición, que la persona lo detuvo, que el servidor dijo que se acabaron los envíos
+   * de todas las credenciales (`agotado`) o que una tanda entera no salió (`sin-salida`: no se insiste).
+   */
+  corte: { tipo: 'error', error: unknown } | { tipo: 'detenido' } | { tipo: 'agotado' } | { tipo: 'sin-salida' } | null
 }
 
 interface OpcionesEnvio {
@@ -173,13 +199,22 @@ export async function enviarPorTandas(opciones: OpcionesEnvio): Promise<EnvioPor
   opciones.alAvanzar?.({ hechas, total })
   for (const tanda of dividirEnTandas(opciones.ids, opciones.tamano)) {
     if (opciones.detener?.()) return { resultado, hechas, corte: { tipo: 'detenido' } }
+    let respuesta: ResultadoEnvio
     try {
-      resultado = sumarResultados(resultado, await opciones.enviar(tanda))
+      respuesta = await opciones.enviar(tanda)
     } catch (error) {
       return { resultado, hechas, corte: { tipo: 'error', error } }
     }
+    resultado = sumarResultados(resultado, respuesta)
+    if (respuesta.agotado) {
+      // El servidor cortó a mitad de la tanda: solo se atendió a quienes alcanzó
+      hechas += respuesta.enviados + respuesta.yaEnviados + respuesta.noElegibles + respuesta.fallidos
+      opciones.alAvanzar?.({ hechas, total })
+      return { resultado, hechas, corte: { tipo: 'agotado' } }
+    }
     hechas += tanda.length
     opciones.alAvanzar?.({ hechas, total })
+    if (tanda.length && respuesta.enviados === 0 && respuesta.fallidos >= tanda.length) return { resultado, hechas, corte: { tipo: 'sin-salida' } }
   }
   return { resultado, hechas, corte: null }
 }
@@ -198,10 +233,13 @@ export function resumenDeEnvio(envio: EnvioPorTandas, mensajeDeError: string | n
   lineas.push(resultado.enviados
     ? { tono: 'ok', texto: `Correo enviado a ${plural(resultado.enviados, 'persona', 'personas')}.` }
     : { tono: 'warn', texto: 'No se envió ningún correo.' })
+  if (resultado.porCredencial?.length) lineas.push({ tono: 'ok', texto: `Salieron por ${resultado.porCredencial.map((tramo) => `${tramo.nombre} (${tramo.enviados})`).join(' y ')}.` })
   if (resultado.yaEnviados) lineas.push({ tono: 'warn', texto: `Se omitió a ${plural(resultado.yaEnviados, 'persona', 'personas')} que ya lo habían recibido.` })
   if (resultado.noElegibles) lineas.push({ tono: 'warn', texto: `Se omitió a ${plural(resultado.noElegibles, 'persona', 'personas')} que ya no cumplen (no están aprobadas o no son ${canal === 'virtual' ? 'virtuales' : 'presenciales'}).` })
   if (resultado.fallidos) lineas.push({ tono: 'error', texto: `No se pudo enviar a ${plural(resultado.fallidos, 'persona', 'personas')}: siguen como «Sin enviar» para reintentar.` })
-  if (corte?.tipo === 'error') lineas.push({ tono: 'error', texto: `Se cortó el envío${mensajeDeError ? `: ${mensajeDeError}` : ''}. Lo que faltó sigue como «Sin enviar»: corrige el problema y vuelve a elegirlas.` })
+  if (corte?.tipo === 'error') lineas.push({ tono: 'error', texto: `Se cortó el envío${mensajeDeError ? `: ${mensajeDeError.replace(/[.\s]+$/, '')}` : ''}. Lo que faltó sigue como «Sin enviar»: corrige el problema y vuelve a elegirlas.` })
+  if (corte?.tipo === 'agotado') lineas.push({ tono: 'error', texto: 'No quedan envíos en ninguna credencial de correo activa y se cortó el envío. Lo que faltó sigue como «Sin enviar»: revisa los créditos en Correo, agrega otra credencial o espera a que se renueve el cupo, y vuelve a elegirlas.' })
+  if (corte?.tipo === 'sin-salida') lineas.push({ tono: 'error', texto: 'Ninguno de los últimos correos salió, así que se cortó el envío para no insistir. Lo que faltó sigue como «Sin enviar»: revisa la credencial de correo y vuelve a intentarlo.' })
   if (corte?.tipo === 'detenido') lineas.push({ tono: 'warn', texto: 'Detuviste el envío. Lo que faltó sigue como «Sin enviar».' })
   return lineas
 }

@@ -27,8 +27,10 @@ import {
   ordenarCredencialesCorreo,
   ordenTrasMover,
   remitenteCredencial,
+  repartoPrevisto,
   resumenCreditos,
   sinCreditos,
+  textoReparto,
   textoCreditos,
   validarCredencialCorreo,
 } from '~/utils/credencialesCorreo'
@@ -374,5 +376,76 @@ describe('credenciales de correo: créditos de envío (backend spec 042)', () =>
     expect(resumenCreditos(lista())).toBe('ANGEL: 295 · Gianmarcos: 0 · LORENA: 300 · JOSEMARIA: 299')
     expect(resumenCreditos(lista().map((c) => (c.id === 2 ? { ...c, activo: false } : c)))).toBe('ANGEL: 295 · LORENA: 300 · JOSEMARIA: 299')
     expect(resumenCreditos([credencial({ creditosDisponibles: null })])).toBe('')
+  })
+})
+
+describe('credenciales de correo: reparto previsto de un envío masivo (backend spec 044)', () => {
+  const lista = () => [
+    credencial({ id: 1, nombre: 'ANGEL', esPredeterminada: true, prioridad: 1, creditosDisponibles: 295 }),
+    credencial({ id: 2, nombre: 'Gianmarcos', prioridad: 2, creditosDisponibles: 0 }),
+    credencial({ id: 3, nombre: 'LORENA', prioridad: 3, creditosDisponibles: 300 }),
+    credencial({ id: 4, nombre: 'JOSEMARIA', prioridad: 4, creditosDisponibles: 299 }),
+  ]
+
+  it('320 correos con ANGEL en 295: 295 por ANGEL y 25 por LORENA, saltando a Gianmarcos (0)', () => {
+    const previsto = repartoPrevisto(320, lista())
+    expect(previsto).toEqual({
+      reparto: [{ id: 1, nombre: 'ANGEL', envios: 295, sinLimite: false }, { id: 3, nombre: 'LORENA', envios: 25, sinLimite: false }],
+      sinCubrir: 0,
+    })
+    expect(textoReparto(320, previsto)).toEqual({ tono: 'info', texto: '320 correos: 295 por ANGEL y 25 por LORENA.' })
+  })
+
+  it('si caben en la primera dice que todos salen por ella', () => {
+    const previsto = repartoPrevisto(100, lista())
+    expect(previsto.reparto).toEqual([{ id: 1, nombre: 'ANGEL', envios: 100, sinLimite: false }])
+    expect(textoReparto(100, previsto)).toEqual({ tono: 'info', texto: '100 correos: todos por ANGEL.' })
+    expect(textoReparto(1, repartoPrevisto(1, lista()))).toEqual({ tono: 'info', texto: '1 correo: todos por ANGEL.' })
+  })
+
+  it('reparte entre varias, con tres tramos separados por coma', () => {
+    const previsto = repartoPrevisto(800, lista())
+    expect(previsto.reparto.map((tramo) => tramo.envios)).toEqual([295, 300, 205])
+    expect(textoReparto(800, previsto)!.texto).toBe('800 correos: 295 por ANGEL, 300 por LORENA y 205 por JOSEMARIA.')
+  })
+
+  it('si no alcanza avisa cuántos quedarían sin enviar', () => {
+    const previsto = repartoPrevisto(900, lista())
+    expect(previsto.sinCubrir).toBe(6)
+    const aviso = textoReparto(900, previsto)!
+    expect(aviso.tono).toBe('alerta')
+    expect(aviso.texto).toBe('Solo hay envíos para 894 de 900 (295 por ANGEL, 300 por LORENA y 299 por JOSEMARIA): los últimos 6 quedarían sin enviar. Agrega otra credencial o espera a que se renueve el cupo.')
+  })
+
+  it('con un solo faltante usa el singular', () => {
+    const casiTodas = lista().map((c) => (c.id === 1 ? { ...c, creditosDisponibles: 1 } : { ...c, creditosDisponibles: 0 }))
+    const previsto = repartoPrevisto(2, casiTodas)
+    expect(previsto.sinCubrir).toBe(1)
+    expect(textoReparto(2, previsto)!.texto).toBe('Solo hay envíos para 1 de 2 (1 por ANGEL): el último quedaría sin enviar. Agrega otra credencial o espera a que se renueve el cupo.')
+  })
+
+  it('la credencial del evento va primero aunque no sea la predeterminada', () => {
+    const previsto = repartoPrevisto(320, lista(), 3)
+    expect(previsto.reparto).toEqual([{ id: 3, nombre: 'LORENA', envios: 300, sinLimite: false }, { id: 1, nombre: 'ANGEL', envios: 20, sinLimite: false }])
+    // Si la del evento no sirve (sin créditos o inactiva) se sigue con la cadena normal
+    expect(repartoPrevisto(10, lista(), 2).reparto[0]!.id).toBe(1)
+    expect(repartoPrevisto(10, lista().map((c) => (c.id === 3 ? { ...c, activo: false } : c)), 3).reparto[0]!.id).toBe(1)
+  })
+
+  it('una credencial que no informa créditos (Gmail) recibe lo que falte', () => {
+    const conGmail = [...lista().slice(0, 1), credencial({ id: 9, nombre: 'Gmail', proveedor: 'GMAIL_SMTP', prioridad: 9, creditosDisponibles: null })]
+    const previsto = repartoPrevisto(320, conGmail)
+    expect(previsto.reparto).toEqual([{ id: 1, nombre: 'ANGEL', envios: 295, sinLimite: false }, { id: 9, nombre: 'Gmail', envios: 25, sinLimite: true }])
+    expect(previsto.sinCubrir).toBe(0)
+    expect(textoReparto(320, previsto)!.texto).toBe('320 correos: 295 por ANGEL y 25 por Gmail (sin cupo conocido).')
+  })
+
+  it('sin ninguna credencial con envíos alerta que se rechazará, y sin personas no dice nada', () => {
+    const sinTodas = lista().map((c) => ({ ...c, creditosDisponibles: 0 }))
+    const previsto = repartoPrevisto(50, sinTodas)
+    expect(previsto).toEqual({ reparto: [], sinCubrir: 50 })
+    expect(textoReparto(50, previsto)).toMatchObject({ tono: 'alerta', texto: expect.stringContaining('el envío se rechazará') })
+    expect(textoReparto(0, repartoPrevisto(0, lista()))).toBeNull()
+    expect(repartoPrevisto(-5, lista())).toEqual({ reparto: [], sinCubrir: 0 })
   })
 })

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { Respuesta } from '~/types/api'
+import type { CredencialCorreo, Respuesta } from '~/types/api'
+import { hayCreditos, necesitaRevisarCreditos, repartoPrevisto, textoReparto } from '~/utils/credencialesCorreo'
 import { mensajeError } from '~/utils/errores'
 import { nombreCompleto, numero } from '~/utils/formato'
 import { esNoDisponible } from '~/utils/portal'
@@ -48,6 +49,7 @@ const props = withDefaults(defineProps<{
 }>(), { cuerpoExtra: () => ({}), bloqueo: null })
 
 const { api } = useApi()
+const auth = useAuthStore()
 const eventos = useEventoStore()
 const toast = useToast()
 const route = useRoute()
@@ -187,8 +189,34 @@ function detener() {
 
 const porcentaje = computed(() => (progreso.value.total ? Math.round((progreso.value.hechas / progreso.value.total) * 100) : 0))
 
+// Reparto previsto entre las credenciales de correo (backend spec 044): solo orientación, el servidor decide.
+/** Solo quien configura el correo puede leer los créditos (Tesorero y Comisión envían, pero no los ven). */
+const veCreditos = computed(() => auth.puede('correo.configurar'))
+const credenciales = ref<CredencialCorreo[]>([])
+const revisandoCreditos = ref(false)
+const credencialDelEvento = computed(() => eventos.seleccionado?.credencialCorreoId ?? null)
+const reparto = computed(() => {
+  if (!hayCreditos(credenciales.value)) return null
+  return textoReparto(elegidas.value.length, repartoPrevisto(elegidas.value.length, credenciales.value, credencialDelEvento.value))
+})
+
+async function revisarCreditos() {
+  if (!veCreditos.value) return
+  revisandoCreditos.value = true
+  try {
+    let lista = (await api<Respuesta<CredencialCorreo[]>>('email-credentials')).data
+    if (necesitaRevisarCreditos(lista)) lista = (await api<Respuesta<CredencialCorreo[]>>('email-credentials/check', { method: 'POST' })).data
+    credenciales.value = lista
+  } catch {
+    credenciales.value = [] // sin ella el envío se hace igual: el servidor decide y avisa
+  } finally {
+    revisandoCreditos.value = false
+  }
+}
+
 function abrir() {
   if (!elegidas.value.length || props.bloqueo) return
+  revisarCreditos()
   fase.value = 'confirmar'
   reenviar.value = false
   entiendo.value = false
@@ -339,6 +367,15 @@ async function enviar() {
         <p class="rounded-xl bg-white/5 px-4 py-3 text-sm text-slate-200 ring-1 ring-white/10 ring-inset">
           Se enviará un correo a <strong class="text-white tabular-nums">{{ numero(elegidas.length) }}</strong> {{ elegidas.length === 1 ? 'persona' : 'personas' }}, cada correo por separado: nadie ve las direcciones de las demás.
           Se envía en tandas de 25 y puedes detenerlo; a quien ya se le envió se le omite.
+        </p>
+        <p v-if="revisandoCreditos" class="text-xs text-slate-400" role="status">Revisando los créditos de las credenciales de correo…</p>
+        <p
+          v-else-if="reparto"
+          class="rounded-xl px-4 py-3 text-sm ring-1 ring-inset"
+          :class="reparto.tono === 'alerta' ? 'bg-amber-400/10 text-amber-100 ring-amber-300/25' : 'bg-brand-500/5 text-slate-200 ring-brand-400/25'"
+          :role="reparto.tono === 'alerta' ? 'alert' : 'status'"
+        >
+          {{ reparto.texto }}
         </p>
         <AppSwitch v-model="reenviar" label="Volver a enviar a quien ya lo recibió" descripcion="Apagado, solo recibe quien aún no lo tiene (lo normal)." />
         <label class="flex items-start gap-3 text-sm text-slate-200">

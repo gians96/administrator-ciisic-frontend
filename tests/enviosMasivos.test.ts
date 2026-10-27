@@ -144,6 +144,50 @@ describe('envíos masivos: por tandas', () => {
     expect(await enviarPorTandas({ ids: [], enviar })).toEqual({ resultado: RESULTADO_ENVIO_VACIO, hechas: 0, corte: null })
     expect(enviar).not.toHaveBeenCalled()
   })
+
+  it('suma por credencial las tandas, en el orden en que aparecen, y solo agrega las claves cuando aplican', async () => {
+    const respuestas = [
+      resultado({ enviados: 2, porCredencial: [{ credencialId: 1, nombre: 'ANGEL', enviados: 2 }] }),
+      resultado({ enviados: 2, porCredencial: [{ credencialId: 1, nombre: 'ANGEL', enviados: 1 }, { credencialId: 3, nombre: 'LORENA', enviados: 1 }] }),
+    ]
+    const envio = await enviarPorTandas({ ids: [1, 2, 3, 4], tamano: 2, enviar: async () => respuestas.shift()! })
+    expect(envio.resultado).toEqual(resultado({
+      enviados: 4, porCredencial: [{ credencialId: 1, nombre: 'ANGEL', enviados: 3 }, { credencialId: 3, nombre: 'LORENA', enviados: 1 }],
+    }))
+    expect(envio.resultado).not.toHaveProperty('agotado')
+    expect(sumarResultados(resultado({ enviados: 1 }), resultado({ enviados: 2 }))).toEqual(resultado({ enviados: 3 }))
+  })
+
+  it('si el servidor dice que se agotaron los envíos corta ahí y cuenta solo a quienes alcanzó', async () => {
+    const enviar = vi.fn()
+      .mockResolvedValueOnce(resultado({ enviados: 25, porCredencial: [{ credencialId: 1, nombre: 'ANGEL', enviados: 25 }] }))
+      .mockResolvedValueOnce(resultado({ enviados: 10, agotado: true, porCredencial: [{ credencialId: 1, nombre: 'ANGEL', enviados: 10 }] }))
+    const avance = vi.fn()
+    const envio = await enviarPorTandas({ ids: Array.from({ length: 100 }, (_, i) => i + 1), tamano: 25, enviar, alAvanzar: avance })
+    expect(enviar).toHaveBeenCalledTimes(2)
+    expect(envio.corte).toEqual({ tipo: 'agotado' })
+    expect(envio.hechas).toBe(35)
+    expect(envio.resultado).toMatchObject({ enviados: 35, agotado: true, porCredencial: [{ credencialId: 1, nombre: 'ANGEL', enviados: 35 }] })
+    expect(avance).toHaveBeenLastCalledWith({ hechas: 35, total: 100 })
+  })
+
+  it('si una tanda entera no salió corta para no insistir con el resto', async () => {
+    const enviar = vi.fn()
+      .mockResolvedValueOnce(resultado({ enviados: 2 }))
+      .mockResolvedValueOnce(resultado({ fallidos: 2 }))
+    const envio = await enviarPorTandas({ ids: [1, 2, 3, 4, 5, 6], tamano: 2, enviar })
+    expect(enviar).toHaveBeenCalledTimes(2)
+    expect(envio.corte).toEqual({ tipo: 'sin-salida' })
+    expect(envio.hechas).toBe(4)
+    expect(envio.resultado).toEqual(resultado({ enviados: 2, fallidos: 2 }))
+  })
+
+  it('una tanda con algunos fallidos y algunos enviados sigue con la siguiente', async () => {
+    const enviar = vi.fn().mockResolvedValue(resultado({ enviados: 1, fallidos: 1 }))
+    const envio = await enviarPorTandas({ ids: [1, 2, 3, 4], tamano: 2, enviar })
+    expect(enviar).toHaveBeenCalledTimes(2)
+    expect(envio.corte).toBeNull()
+  })
 })
 
 describe('envíos masivos: resumen del resultado', () => {
@@ -174,8 +218,29 @@ describe('envíos masivos: resumen del resultado', () => {
     expect(porError.at(-1)).toMatchObject({ tono: 'error' })
     expect(porError.at(-1)!.texto).toContain('Falta la URL de la landing.')
     expect(porError.at(-1)!.texto).toContain('sigue como «Sin enviar»')
+    // El mensaje del servidor ya termina en punto: no se duplica
+    expect(porError.at(-1)!.texto).not.toContain('..')
     const detenido = resumenDeEnvio(envio(resultado({ enviados: 5 }), { tipo: 'detenido' }), null)
     expect(detenido.at(-1)).toEqual({ tono: 'warn', texto: 'Detuviste el envío. Lo que faltó sigue como «Sin enviar».' })
+  })
+
+  it('dice cuántos salieron por cada credencial', () => {
+    const lineas = resumenDeEnvio(envio(resultado({ enviados: 320, porCredencial: [{ credencialId: 1, nombre: 'ANGEL', enviados: 295 }, { credencialId: 3, nombre: 'LORENA', enviados: 25 }] })), null)
+    expect(lineas).toEqual([
+      { tono: 'ok', texto: 'Correo enviado a 320 personas.' },
+      { tono: 'ok', texto: 'Salieron por ANGEL (295) y LORENA (25).' },
+    ])
+    // Sin el dato (un backend anterior) el resumen es el de siempre
+    expect(resumenDeEnvio(envio(resultado({ enviados: 3 })), null)).toEqual([{ tono: 'ok', texto: 'Correo enviado a 3 personas.' }])
+  })
+
+  it('si se agotaron los envíos o una tanda no salió, lo explica y dice qué hacer', () => {
+    const agotado = resumenDeEnvio(envio(resultado({ enviados: 295, agotado: true }), { tipo: 'agotado' }), null)
+    expect(agotado.at(-1)).toMatchObject({ tono: 'error' })
+    expect(agotado.at(-1)!.texto).toContain('No quedan envíos en ninguna credencial de correo activa')
+    expect(agotado.at(-1)!.texto).toContain('sigue como «Sin enviar»')
+    const sinSalida = resumenDeEnvio(envio(resultado({ fallidos: 25 }), { tipo: 'sin-salida' }), null)
+    expect(sinSalida.at(-1)!.texto).toContain('Ninguno de los últimos correos salió')
   })
 })
 

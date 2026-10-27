@@ -214,6 +214,67 @@ export function resumenCreditos(lista: readonly Pick<CredencialCorreo, 'nombre' 
     .join(' · ')
 }
 
+// ─── Reparto de un envío masivo (backend spec 044) ───
+
+export interface TramoDeReparto {
+  id: number
+  nombre: string
+  envios: number
+  /** La credencial no informa cuántos envíos le quedan (Gmail, o Brevo sin revisar): se le asigna el resto. */
+  sinLimite: boolean
+}
+
+export interface RepartoPrevisto {
+  reparto: TramoDeReparto[]
+  /** Cuántos quedarían sin enviar porque no hay envíos para todos. */
+  sinCubrir: number
+}
+
+/**
+ * Cómo se repartirían `personas` correos entre las credenciales: la misma cadena que el backend (la del evento primero y luego
+ * las activas por prioridad), saltando las que no tienen envíos; cada una de Brevo aporta los que le quedan y una que no informa
+ * créditos recibe todo lo que falte. Es una **estimación** (el servidor decide y vuelve a revisar): sirve para avisar antes de enviar.
+ */
+export function repartoPrevisto(personas: number, lista: readonly (Enviable & Pick<CredencialCorreo, 'proveedor'>)[], credencialDelEventoId: number | null = null): RepartoPrevisto {
+  const activas = ordenarCredencialesCorreo(lista).filter((credencial) => credencial.activo && !sinCreditos(credencial))
+  const propia = credencialDelEventoId === null ? undefined : activas.find((credencial) => credencial.id === credencialDelEventoId)
+  const cadena = propia ? [propia, ...activas.filter((credencial) => credencial.id !== propia.id)] : activas
+  const reparto: TramoDeReparto[] = []
+  let faltan = Math.max(0, personas)
+  for (const credencial of cadena) {
+    if (faltan <= 0) break
+    const limite = credencial.proveedor === 'BREVO' && typeof credencial.creditosDisponibles === 'number' ? credencial.creditosDisponibles : null
+    if (limite === null) {
+      reparto.push({ id: credencial.id, nombre: credencial.nombre, envios: faltan, sinLimite: true })
+      faltan = 0
+      break
+    }
+    const usa = Math.min(faltan, limite)
+    if (usa > 0) {
+      reparto.push({ id: credencial.id, nombre: credencial.nombre, envios: usa, sinLimite: false })
+      faltan -= usa
+    }
+  }
+  return { reparto, sinCubrir: faltan }
+}
+
+/** Frase del reparto («320 correos: 295 por ANGEL y 25 por LORENA») y su tono; alerta si no alcanza. `null` sin personas. */
+export function textoReparto(personas: number, previsto: RepartoPrevisto): { tono: 'info' | 'alerta', texto: string } | null {
+  if (personas <= 0) return null
+  const { reparto, sinCubrir } = previsto
+  if (!reparto.length) return { tono: 'alerta', texto: 'Ninguna credencial de correo activa tiene envíos disponibles: el envío se rechazará. Revisa los créditos en Correo.' }
+  const partes = reparto.map((tramo) => `${numero(tramo.envios)} por ${tramo.nombre}${tramo.sinLimite ? ' (sin cupo conocido)' : ''}`)
+  const unidas = partes.length > 1 ? `${partes.slice(0, -1).join(', ')} y ${partes.at(-1)}` : partes[0]!
+  if (sinCubrir > 0) {
+    return {
+      tono: 'alerta',
+      texto: `Solo hay envíos para ${numero(personas - sinCubrir)} de ${numero(personas)} (${unidas}): ${sinCubrir === 1 ? 'el último quedaría' : `los últimos ${numero(sinCubrir)} quedarían`} sin enviar. Agrega otra credencial o espera a que se renueve el cupo.`,
+    }
+  }
+  const quien = reparto.length === 1 ? `todos por ${reparto[0]!.nombre}${reparto[0]!.sinLimite ? ' (sin cupo conocido)' : ''}` : unidas
+  return { tono: 'info', texto: `${numero(personas)} ${personas === 1 ? 'correo' : 'correos'}: ${quien}.` }
+}
+
 /** Aviso cuando hay una sola credencial activa: si se agota, no sale ningún correo. `null` en los demás casos. */
 export function avisoSinRespaldo(lista: readonly Pick<CredencialCorreo, 'activo' | 'proveedor'>[]): string | null {
   const activas = lista.filter((credencial) => credencial.activo)
