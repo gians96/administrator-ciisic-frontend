@@ -1,16 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   alternarDestinatarios,
+  claveEnlaceVirtual,
   cuerpoMensajePonencias,
+  cuerpoMensajeVirtual,
   dividirEnTandas,
   enviarPorTandas,
+  esEnlaceDeAcceso,
   FILTROS_ENVIO_VACIOS,
   filtrosEnvioDesdeQuery,
   hayFiltrosEnvio,
   idsElegidos,
   LARGO_ASUNTO,
+  LARGO_ENLACE,
   LARGO_MENSAJE,
   mensajePonenciasPropuesto,
+  mensajeVirtualPropuesto,
   parametrosEnvio,
   parrafosDelMensaje,
   RESULTADO_ENVIO_VACIO,
@@ -18,9 +23,12 @@ import {
   rutaEnvio,
   seleccionDeIds,
   sumarResultados,
+  TEXTOS_CANAL,
+  TEXTO_BOTON_VIRTUAL,
   tipoDelDestinatario,
   todasMarcadas,
   validarMensajePonencias,
+  validarMensajeVirtual,
   type EnvioPorTandas,
   type ResultadoEnvio,
 } from '~/utils/enviosMasivos'
@@ -35,6 +43,10 @@ describe('envíos masivos: rutas del backend', () => {
     expect(rutaEnvio(2, 'ponencias', 'lista')).toBe('events/2/specialized-talk-invitations')
     expect(rutaEnvio(2, 'ponencias', 'enviar')).toBe('events/2/specialized-talk-invitations/send')
     expect(rutaEnvio(2, 'ponencias', 'probar')).toBe('events/2/specialized-talk-invitations/test')
+    expect(rutaEnvio(2, 'virtual', 'lista')).toBe('events/2/virtual-access')
+    expect(rutaEnvio(2, 'virtual', 'ids')).toBe('events/2/virtual-access/ids')
+    expect(rutaEnvio(2, 'virtual', 'enviar')).toBe('events/2/virtual-access/send')
+    expect(rutaEnvio(2, 'virtual', 'probar')).toBe('events/2/virtual-access/test')
   })
 })
 
@@ -147,6 +159,11 @@ describe('envíos masivos: resumen del resultado', () => {
     ])
   })
 
+  it('en el acceso virtual los que no cumplen son los que no son virtuales', () => {
+    const lineas = resumenDeEnvio(envio(resultado({ enviados: 2, noElegibles: 1 })), null, 'virtual')
+    expect(lineas.at(-1)).toEqual({ tono: 'warn', texto: 'Se omitió a 1 persona que ya no cumplen (no están aprobadas o no son virtuales).' })
+  })
+
   it('con una sola persona usa el singular y sin envíos lo dice', () => {
     expect(resumenDeEnvio(envio(resultado({ enviados: 1 })), null)).toEqual([{ tono: 'ok', texto: 'Correo enviado a 1 persona.' }])
     expect(resumenDeEnvio(envio(resultado()), null)).toEqual([{ tono: 'warn', texto: 'No se envió ningún correo.' }])
@@ -185,6 +202,67 @@ describe('envíos masivos: mensaje de las ponencias', () => {
   it('el cuerpo recorta los espacios y los párrafos se separan por líneas en blanco', () => {
     expect(cuerpoMensajePonencias({ asunto: '  Asunto  ', mensaje: '\n Hola \n\n\n Chau \n' })).toEqual({ asunto: 'Asunto', mensaje: 'Hola \n\n\n Chau' })
     expect(parrafosDelMensaje('Hola\nlínea 2\n\n\nChau\n\n  ')).toEqual(['Hola\nlínea 2', 'Chau'])
+  })
+})
+
+describe('envíos masivos: acceso de los inscritos virtuales', () => {
+  const valido = { asunto: 'Tu acceso al congreso', mensaje: 'Entra con el botón de abajo.', enlace: 'https://meet.example.com/sala' }
+
+  it('el texto propuesto menciona el evento y el botón, no personaliza y deja el enlace vacío para quien envía', () => {
+    const { asunto, mensaje, enlace } = mensajeVirtualPropuesto('VIII CIISIC 2026')
+    expect(asunto).toContain('VIII CIISIC 2026')
+    expect(mensaje).toContain('VIII CIISIC 2026')
+    expect(mensaje).toMatch(/botón de abajo/i)
+    expect(mensaje).not.toContain('{nombre}')
+    expect(enlace).toBe('')
+    expect(mensajeVirtualPropuesto(null).asunto).toContain('el congreso')
+  })
+
+  it('no se puede enviar sin enlace; con él, el texto propuesto es válido', () => {
+    expect(validarMensajeVirtual(mensajeVirtualPropuesto('VIII CIISIC 2026'))).toEqual({ enlace: 'Escribe el enlace para ingresar al congreso.' })
+    expect(validarMensajeVirtual({ ...mensajeVirtualPropuesto('VIII CIISIC 2026'), enlace: 'https://meet.example.com/sala' })).toEqual({})
+  })
+
+  it('valida el asunto y el mensaje con los mismos largos de las ponencias', () => {
+    expect(validarMensajeVirtual({ asunto: 'ab', mensaje: 'corto', enlace: valido.enlace })).toMatchObject({
+      asunto: expect.stringContaining(String(LARGO_ASUNTO.minimo)),
+      mensaje: expect.stringContaining(String(LARGO_MENSAJE.minimo)),
+    })
+  })
+
+  it.each([
+    ['https://meet.example.com/sala', true],
+    ['  https://us02web.zoom.us/j/123456789?pwd=AbC  ', true],
+    ['http://meet.example.com/sala', false],
+    ['javascript:alert(1)', false],
+    ['data:text/html,hola', false],
+    ['//meet.example.com/sala', false],
+    ['meet.example.com/sala', false],
+    ['https://usuario:clave@meet.example.com/sala', false],
+    ['https://localhost/sala', false],
+    ['https://meet.example.com/sala con espacio', false],
+    ['', false],
+  ])('el enlace %j es válido: %s', (enlace, esperado) => {
+    expect(esEnlaceDeAcceso(enlace)).toBe(esperado)
+    expect(Boolean(validarMensajeVirtual({ ...valido, enlace }).enlace)).toBe(!esperado)
+  })
+
+  it('rechaza un enlace de más de 500 caracteres (el límite del backend)', () => {
+    expect(esEnlaceDeAcceso(`https://meet.example.com/${'a'.repeat(LARGO_ENLACE)}`)).toBe(false)
+    expect(esEnlaceDeAcceso(`https://meet.example.com/${'a'.repeat(LARGO_ENLACE - 40)}`)).toBe(true)
+  })
+
+  it('el cuerpo recorta los espacios de todo, también del enlace', () => {
+    expect(cuerpoMensajeVirtual({ asunto: '  Asunto  ', mensaje: ' Hola ', enlace: '  https://meet.example.com/sala \n' })).toEqual({
+      asunto: 'Asunto', mensaje: 'Hola', enlace: 'https://meet.example.com/sala',
+    })
+  })
+
+  it('el botón y los textos del canal hablan de virtuales y la clave del enlace es de cada evento', () => {
+    expect(TEXTO_BOTON_VIRTUAL).toBe('Ingresar al congreso')
+    expect(TEXTOS_CANAL.virtual).toMatchObject({ inscritos: 'Inscritos virtuales', columna: 'Acceso enviado' })
+    expect(TEXTOS_CANAL.credencial.inscritos).toBe('Inscritos presenciales')
+    expect(claveEnlaceVirtual(2)).not.toBe(claveEnlaceVirtual(3))
   })
 })
 

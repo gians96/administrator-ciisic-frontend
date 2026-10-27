@@ -2,10 +2,11 @@ import type { Meta } from '~/types/api'
 import { fechaHoraLima } from '~/utils/formato'
 
 /**
- * Envíos masivos a los inscritos presenciales (spec 029; backend 039): el enlace de la credencial 3D (cada persona recibe el
- * suyo) y un mismo mensaje con el enlace a la inscripción de ponencias. Lógica pura de las dos pantallas.
+ * Envíos masivos (spec 029; backend 039): a los inscritos presenciales, el enlace de la credencial 3D (cada persona recibe el
+ * suyo) y un mismo mensaje con el enlace a la inscripción de ponencias; y a los inscritos virtuales (spec 033; backend 043),
+ * un mismo mensaje con el enlace de acceso al congreso. Lógica pura de las tres pantallas.
  */
-export type CanalEnvio = 'credencial' | 'ponencias'
+export type CanalEnvio = 'credencial' | 'ponencias' | 'virtual'
 
 export interface DestinatarioEnvio {
   id: number
@@ -33,7 +34,7 @@ export interface ResultadoEnvio {
   enviados: number
   /** Ya lo habían recibido (y no se pidió reenviar), o lo tomó otra cuenta al mismo tiempo. */
   yaEnviados: number
-  /** No existen, no están aprobadas o no son presenciales. */
+  /** No existen, no están aprobadas o no son de la modalidad del canal (presenciales; virtuales en el acceso virtual). */
   noElegibles: number
   fallidos: number
 }
@@ -46,6 +47,7 @@ export const TAMANO_TANDA_ENVIO = 25
 const SEGMENTO: Readonly<Record<CanalEnvio, string>> = {
   credencial: 'credential-links',
   ponencias: 'specialized-talk-invitations',
+  virtual: 'virtual-access',
 }
 
 export type AccionEnvio = 'lista' | 'ids' | 'enviar' | 'probar'
@@ -190,14 +192,14 @@ export interface LineaResultado {
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`
 
 /** Líneas del resultado: a cuántas se les envió, a quién se omitió y por qué, y qué pasó si se cortó. */
-export function resumenDeEnvio(envio: EnvioPorTandas, mensajeDeError: string | null): LineaResultado[] {
+export function resumenDeEnvio(envio: EnvioPorTandas, mensajeDeError: string | null, canal: CanalEnvio = 'credencial'): LineaResultado[] {
   const { resultado, corte } = envio
   const lineas: LineaResultado[] = []
   lineas.push(resultado.enviados
     ? { tono: 'ok', texto: `Correo enviado a ${plural(resultado.enviados, 'persona', 'personas')}.` }
     : { tono: 'warn', texto: 'No se envió ningún correo.' })
   if (resultado.yaEnviados) lineas.push({ tono: 'warn', texto: `Se omitió a ${plural(resultado.yaEnviados, 'persona', 'personas')} que ya lo habían recibido.` })
-  if (resultado.noElegibles) lineas.push({ tono: 'warn', texto: `Se omitió a ${plural(resultado.noElegibles, 'persona', 'personas')} que ya no cumplen (no están aprobadas o no son presenciales).` })
+  if (resultado.noElegibles) lineas.push({ tono: 'warn', texto: `Se omitió a ${plural(resultado.noElegibles, 'persona', 'personas')} que ya no cumplen (no están aprobadas o no son ${canal === 'virtual' ? 'virtuales' : 'presenciales'}).` })
   if (resultado.fallidos) lineas.push({ tono: 'error', texto: `No se pudo enviar a ${plural(resultado.fallidos, 'persona', 'personas')}: siguen como «Sin enviar» para reintentar.` })
   if (corte?.tipo === 'error') lineas.push({ tono: 'error', texto: `Se cortó el envío${mensajeDeError ? `: ${mensajeDeError}` : ''}. Lo que faltó sigue como «Sin enviar»: corrige el problema y vuelve a elegirlas.` })
   if (corte?.tipo === 'detenido') lineas.push({ tono: 'warn', texto: 'Detuviste el envío. Lo que faltó sigue como «Sin enviar».' })
@@ -256,11 +258,85 @@ export function parrafosDelMensaje(mensaje: string): string[] {
 
 export const TEXTO_BOTON_PONENCIAS = 'Inscribirme a las ponencias'
 
+// ─── Acceso de los inscritos virtuales (spec 033; backend 043) ──────────────
+
+export interface MensajeVirtual extends MensajePonencias {
+  /** Enlace de la transmisión (Zoom, Meet, YouTube…): el botón del correo lleva a él. */
+  enlace: string
+}
+
+export const TEXTO_BOTON_VIRTUAL = 'Ingresar al congreso'
+/** Mayor largo del enlace, el mismo del backend. */
+export const LARGO_ENLACE = 500
+
+/**
+ * Misma regla del backend (`esEnlaceDeAcceso`): `https` con servidor, sin usuario ni contraseña y sin espacios. El panel avisa
+ * antes de enviar; el servidor decide.
+ */
+export function esEnlaceDeAcceso(valor: string): boolean {
+  const enlace = valor.trim()
+  if (!enlace || enlace.length > LARGO_ENLACE || /\s/.test(enlace)) return false
+  try {
+    const url = new URL(enlace)
+    return url.protocol === 'https:' && url.hostname.includes('.') && !url.username && !url.password
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Texto propuesto (el staff lo edita), el mismo para todas las personas. El correo trae solo el botón «Ingresar al congreso»
+ * con el enlace; por eso el texto lo menciona sin escribir la dirección. El enlace queda vacío: lo escribe quien envía.
+ */
+export function mensajeVirtualPropuesto(evento: string | null | undefined): MensajeVirtual {
+  const nombre = evento?.trim() || 'el congreso'
+  return {
+    asunto: `Tu acceso virtual al ${nombre}`,
+    mensaje: [
+      'Hola,',
+      `Gracias por inscribirte en modalidad virtual al ${nombre}. Con el botón de abajo puedes ingresar al congreso y seguir las ponencias en vivo.`,
+      'Te recomendamos entrar unos minutos antes de cada sesión. Si tienes algún problema para conectarte, responde a este correo.',
+      'Te esperamos.',
+    ].join('\n\n'),
+    enlace: '',
+  }
+}
+
+export function validarMensajeVirtual(form: MensajeVirtual): Record<string, string> {
+  const errores = validarMensajePonencias(form)
+  const enlace = form.enlace.trim()
+  if (!enlace) errores.enlace = 'Escribe el enlace para ingresar al congreso.'
+  else if (!esEnlaceDeAcceso(enlace)) errores.enlace = 'Escribe un enlace completo que empiece con https:// (sin espacios).'
+  return errores
+}
+
+/** Cuerpo del envío y de la prueba (el servidor escapa el texto y valida el enlace). */
+export function cuerpoMensajeVirtual(form: MensajeVirtual): MensajeVirtual {
+  return { ...cuerpoMensajePonencias(form), enlace: form.enlace.trim() }
+}
+
+/** Clave del navegador donde se recuerda el último enlace usado en cada evento (solo una comodidad: se puede cambiar). */
+export function claveEnlaceVirtual(eventoId: number): string {
+  return `ciisic:acceso-virtual:enlace:${eventoId}`
+}
+
 // ─── Presentación ───────────────────────────────────────────────────────────
 
-export const TEXTOS_CANAL: Readonly<Record<CanalEnvio, { columna: string, enviado: string, sinEnviar: string }>> = {
-  credencial: { columna: 'Enlace enviado', enviado: 'Ya recibieron su enlace', sinEnviar: 'Aún sin enlace' },
-  ponencias: { columna: 'Mensaje enviado', enviado: 'Ya recibieron el mensaje', sinEnviar: 'Aún sin mensaje' },
+export interface TextosCanal {
+  columna: string
+  enviado: string
+  sinEnviar: string
+  /** Etiqueta y detalle de la primera tarjeta de totales. */
+  inscritos: string
+  detalleInscritos: string
+  /** Lista vacía del evento. */
+  vacio: string
+}
+
+export const TEXTOS_CANAL: Readonly<Record<CanalEnvio, TextosCanal>> = {
+  credencial: { columna: 'Enlace enviado', enviado: 'Ya recibieron su enlace', sinEnviar: 'Aún sin enlace', inscritos: 'Inscritos presenciales', detalleInscritos: 'Aprobados, con o sin kit', vacio: 'Aún no hay inscritos presenciales aprobados' },
+  ponencias: { columna: 'Mensaje enviado', enviado: 'Ya recibieron el mensaje', sinEnviar: 'Aún sin mensaje', inscritos: 'Inscritos presenciales', detalleInscritos: 'Aprobados, con o sin kit', vacio: 'Aún no hay inscritos presenciales aprobados' },
+  virtual: { columna: 'Acceso enviado', enviado: 'Ya recibieron el acceso', sinEnviar: 'Aún sin acceso', inscritos: 'Inscritos virtuales', detalleInscritos: 'Aprobados con un tipo virtual', vacio: 'Aún no hay inscritos virtuales aprobados' },
 }
 
 /** «26 oct. 2026, 10:30 a. m.» o «—» si aún no se le envió. */

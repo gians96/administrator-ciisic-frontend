@@ -29,9 +29,10 @@ import {
 } from '~/utils/enviosMasivos'
 
 /**
- * Envío masivo a los inscritos presenciales (spec 029; backend 039): lista a quienes están aprobados y son presenciales con la marca
- * de «ya se le envió», deja elegirlos (también a todos los pendientes de una vez) y manda por tandas, de a 25, con avance. El servidor
- * vuelve a comprobar a cada persona y reserva la marca antes de enviar: si falla algo, lo que faltó sigue «sin enviar».
+ * Envío masivo a los inscritos (spec 029; backend 039; los virtuales, spec 033 y backend 043): lista a quienes están aprobados y son de la
+ * modalidad del canal (presenciales; virtuales en el acceso virtual) con la marca de «ya se le envió», deja elegirlos (también a todos los
+ * pendientes de una vez) y manda por tandas, de a 25, con avance. El servidor vuelve a comprobar a cada persona y reserva la marca antes
+ * de enviar: si falla algo, lo que faltó sigue «sin enviar».
  */
 const props = withDefaults(defineProps<{
   canal: CanalEnvio
@@ -220,7 +221,7 @@ async function enviar() {
     alAvanzar: (avance) => { progreso.value = avance },
     detener: () => detenerPedido,
   })
-  lineas.value = resumenDeEnvio(envio, envio.corte?.tipo === 'error' ? mensajeError(envio.corte.error) : null)
+  lineas.value = resumenDeEnvio(envio, envio.corte?.tipo === 'error' ? mensajeError(envio.corte.error) : null, props.canal)
   fase.value = 'listo'
   seleccion.value = {}
   await cargar()
@@ -239,7 +240,7 @@ async function enviar() {
 
     <template v-else>
       <section v-if="resumen" class="grid gap-4 sm:grid-cols-3" aria-label="Totales del evento">
-        <AppStat etiqueta="Inscritos presenciales" :valor="numero(resumen.total)" detalle="Aprobados, con o sin kit" icon="heroicons:users" />
+        <AppStat :etiqueta="textos.inscritos" :valor="numero(resumen.total)" :detalle="textos.detalleInscritos" icon="heroicons:users" />
         <AppStat etiqueta="Ya enviado" :valor="numero(resumen.enviados)" :detalle="textos.enviado" icon="heroicons:envelope-open" tono="ok" />
         <AppStat etiqueta="Sin enviar" :valor="numero(resumen.pendientes)" :detalle="textos.sinEnviar" icon="heroicons:paper-airplane" tono="warn" />
       </section>
@@ -320,7 +321,7 @@ async function enviar() {
         <div v-if="cargando && !filas.length" class="py-14 text-center text-sm text-slate-400">Cargando…</div>
         <AppEmpty
           v-else-if="!filas.length"
-          :titulo="conFiltros ? 'No hay personas con estos filtros' : 'Aún no hay inscritos presenciales aprobados'"
+          :titulo="conFiltros ? 'No hay personas con estos filtros' : textos.vacio"
           icon="heroicons:users"
         />
         <AppPagination :meta="meta" @cambiar="aplicar" />
