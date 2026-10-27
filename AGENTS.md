@@ -235,7 +235,9 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   (`ordenTrasMover` manda **todos** los ids a `PUT email-credentials/order`; la predeterminada no se mueve: para cambiarla se marca otra) y la insignia «Prioridad N» es la posición. Un aviso ámbar sale cuando hay una
   sola credencial activa (`avisoSinRespaldo`). La contraseña de Gmail se pega con o sin espacios y se envía sin ellos (`normalizarClaveAplicacion`); «Probar» de Gmail solo inicia sesión y «Enviar prueba» no usa el
   respaldo. **Backend 041 primero**: uno anterior descarta `proveedor` y guardaría la contraseña como API key de Brevo, así que Gmail solo se ofrece si las credenciales traen `prioridad` (`hayPrioridades`) o no hay
-  ninguna, y si aun así la respuesta del alta no trae `GMAIL_SMTP`, el panel borra esa credencial y avisa. Sin `prioridad` no hay flechas ni insignia de prioridad.
+  ninguna, y si aun así la respuesta del alta no trae `GMAIL_SMTP`, el panel borra esa credencial y avisa. Sin `prioridad` no hay flechas ni insignia de prioridad. La **guía de Gmail** es un panel lateral
+  (`GuiaGmailSmtp` sobre `AppModal lado="derecha"`; textos en `app/utils/guiaGmail.ts`, el único lugar donde se editan): se abre desde «Guía de Gmail», la ayuda, el último error de una credencial de Gmail y el formulario; abierta
+  sobre el formulario no ofrece «Agregar» (lo reiniciaría). No pongas contraseñas de ejemplo en ella.
 - **Fotochecks para imprimir** (spec 030; backend 040): `/fotochecks` (`inscripciones.exportar`: el **código del QR solo sale en el CSV de inscripciones**, nunca en los listados) carga los aprobados con
   `useApi().leerArchivo('events/:id/inscriptions/export?estado=APROBADO')` y `leerInscritosCsv` (`app/utils/fotochecks.ts`: columnas por **título**, conserva solo nombre, código, tipo y modalidad; sin la columna «Código QR»
   —backend sin la 040— lo explica y no carga nada). **El código es una credencial**: vive solo en memoria (`modulosQr` guarda una caché acotada que `olvidarQrs` vacía), nunca en `localStorage`, URL, consola ni `useHead`,

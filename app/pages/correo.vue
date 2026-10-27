@@ -229,6 +229,21 @@ async function eliminar(credencial: CredencialCorreo) {
   })
 }
 
+// ─── Guía de Gmail ───
+/** `desdeFormulario`: se abrió sobre el formulario de la credencial, así que no ofrece «Agregar» (borraría lo escrito). */
+const guia = reactive({ abierto: false, desdeFormulario: false })
+
+function abrirGuia(desdeFormulario = false) {
+  Object.assign(guia, { abierto: true, desdeFormulario })
+}
+
+/** Cierra la guía y abre el alta con Gmail elegido. */
+function agregarDesdeGuia() {
+  guia.abierto = false
+  abrir()
+  if (gmailDisponible.value) form.proveedor = 'GMAIL_SMTP'
+}
+
 // ─── Envío de prueba ───
 const envio = reactive({ abierto: false, credencial: null as CredencialCorreo | null, correo: '', enviando: false, error: '', errorCampo: '' })
 
@@ -278,7 +293,10 @@ async function enviarPrueba() {
           Credenciales con las que se envían los correos de los eventos (aprobación de inscripciones, credenciales y avisos): Brevo por API o Gmail por SMTP. Si una falla o se queda sin créditos, se usa la siguiente por orden de prioridad. Solo un SuperAdmin puede gestionarlas.
         </p>
       </div>
-      <AppButton icon="heroicons:plus" @click="abrir()">Agregar credencial</AppButton>
+      <div class="flex flex-wrap gap-2">
+        <AppButton variant="secondary" icon="heroicons:book-open" @click="abrirGuia()">Guía de Gmail</AppButton>
+        <AppButton icon="heroicons:plus" @click="abrir()">Agregar credencial</AppButton>
+      </div>
     </div>
 
     <section class="flex gap-3 rounded-xl border border-brand-400/25 bg-brand-500/5 p-4 text-sm text-slate-300" aria-labelledby="ayuda-correo">
@@ -288,7 +306,7 @@ async function enviarPrueba() {
         <ul class="list-disc space-y-1 pl-4 marker:text-brand-400">
           <li>Los correos salen por la <strong class="text-slate-100">primera credencial activa</strong>; si falla o se queda sin créditos, pasa sola a la siguiente (hasta 3 intentos) con el remitente de esa. Cambia el orden con las flechas; la predeterminada siempre es la primera.</li>
           <li><strong class="text-slate-100">Brevo:</strong> el correo del remitente debe estar verificado en Brevo (Remitentes, dominios e IP dedicadas); si no, rechaza los envíos. El plan gratuito da 300 envíos al día.</li>
-          <li><strong class="text-slate-100">Gmail:</strong> el remitente es la cuenta de Gmail y se entra con una contraseña de aplicación (Cuenta de Google → Seguridad → Verificación en 2 pasos → Contraseñas de aplicaciones). Permite unos 500 envíos al día (2000 en Google Workspace).</li>
+          <li><strong class="text-slate-100">Gmail:</strong> el remitente es la cuenta de Gmail y se entra con una contraseña de aplicación (Cuenta de Google → Seguridad → Verificación en 2 pasos → Contraseñas de aplicaciones). Permite unos 500 envíos al día (2000 en Google Workspace). <button type="button" class="font-semibold text-brand-300 underline underline-offset-2 hover:text-white" @click="abrirGuia()">Ver la guía paso a paso</button></li>
           <li>Cada evento puede elegir su credencial en <strong class="text-slate-100">Eventos → General</strong>; si no elige ninguna, se usa la <strong class="text-slate-100">predeterminada</strong>.</li>
           <li>La API key o la contraseña se guarda cifrada y solo verás sus últimos 4 caracteres. «Probar» la verifica sin enviar correos.</li>
         </ul>
@@ -409,6 +427,7 @@ async function enviarPrueba() {
 
         <p v-if="credencial.ultimoEstado === 'ERROR' && credencial.ultimoError" class="mt-3 rounded-xl bg-red-500/10 px-4 py-2.5 text-sm text-red-200 ring-1 ring-red-400/25">
           <span class="font-semibold">Último error:</span> {{ credencial.ultimoError }}
+          <button v-if="credencial.proveedor === 'GMAIL_SMTP'" type="button" class="ml-1 font-semibold text-red-100 underline underline-offset-2 hover:text-white" @click="abrirGuia()">Ver la guía de Gmail</button>
         </p>
 
         <dl class="mt-4 grid gap-4 border-t border-white/5 pt-4 text-sm sm:grid-cols-3">
@@ -516,6 +535,7 @@ async function enviarPrueba() {
             :aria-describedby="avisoApiKey ? 'cr-apikey-aviso' : undefined"
           >
           <p v-if="avisoApiKey" id="cr-apikey-aviso" class="mt-1 text-xs text-amber-300">{{ avisoApiKey }}</p>
+          <button v-if="esGmail" type="button" class="mt-1.5 text-xs font-semibold text-brand-300 underline underline-offset-2 hover:text-white" @click="abrirGuia(true)">¿Cómo creo la contraseña de aplicación? Ver la guía</button>
         </AppField>
         <AppField
           :label="esGmail ? 'Cuenta de Gmail (remitente)' : 'Correo del remitente'"
@@ -574,5 +594,13 @@ async function enviarPrueba() {
         </AppButton>
       </template>
     </AppModal>
+
+    <GuiaGmailSmtp
+      :abierto="guia.abierto"
+      :puede-agregar="gmailDisponible"
+      :ofrecer-agregar="!guia.desdeFormulario"
+      @cerrar="guia.abierto = false"
+      @agregar="agregarDesdeGuia"
+    />
   </div>
 </template>
