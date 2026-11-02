@@ -440,9 +440,12 @@ const columnas = computed(() => (conAcciones.value ? 7 : 6))
         <header class="flex items-center justify-between border-b border-white/10 px-6 py-4">
           <h2 class="text-lg font-bold">{{ actividad?.nombre }}</h2>
           <div class="flex flex-wrap items-center gap-2">
-            <AppBadge v-if="textoResumenKits(resumenKits)" :tono="resumenKits && resumenKits.pendientes > 0 ? 'warn' : 'ok'" title="Kits de todo el evento: inscripciones aprobadas presenciales con kit">
-              <Icon name="heroicons:gift" class="size-3.5" aria-hidden="true" /> Kits: {{ textoResumenKits(resumenKits) }}
-            </AppBadge>
+            <!-- Spec 035: la insignia abre el tablero de kits (la misma cuenta ya tiene `asistencia.ver`, el permiso de la página) -->
+            <NuxtLink v-if="textoResumenKits(resumenKits)" to="/kits" class="rounded-full" aria-label="Ver el tablero de kits">
+              <AppBadge :tono="resumenKits && resumenKits.pendientes > 0 ? 'warn' : 'ok'" title="Kits de todo el evento: inscripciones aprobadas presenciales con kit. Abre el tablero de kits.">
+                <Icon name="heroicons:gift" class="size-3.5" aria-hidden="true" /> Kits: {{ textoResumenKits(resumenKits) }}
+              </AppBadge>
+            </NuxtLink>
             <AppBadge tono="brand">{{ numero(asistencias.length) }} asistentes</AppBadge>
           </div>
         </header>

@@ -116,14 +116,14 @@ describe('permisos: accesoDeSesion', () => {
 
 describe('permisos: menú', () => {
   it('Owner ve todo; Administrador, todo menos Sistema', () => {
-    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/credenciales', '/acceso-virtual', '/fotochecks', '/asistencia', '/delegaciones', '/reportes', '/escanear', '/ponencias', '/mensajes', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen', '/ponencias-especializadas/enviar-enlace', RUTA_PUERTA, '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
+    expect(rutas(OWNER)).toEqual(['/', '/inscripciones', '/credenciales', '/acceso-virtual', '/fotochecks', '/asistencia', '/kits', '/delegaciones', '/reportes', '/escanear', '/ponencias', '/mensajes', '/ponencias-especializadas', '/ponencias-especializadas/inscripciones', '/ponencias-especializadas/resumen', '/ponencias-especializadas/enviar-enlace', RUTA_PUERTA, '/eventos', '/tipos-inscripcion', '/consultas', '/participantes', '/correo', '/administradores', '/sistema'])
     expect(rutas(ADMINISTRADOR)).not.toContain('/sistema')
     expect(rutas(ADMINISTRADOR)).toContain('/administradores')
   })
 
   it('Tesorero: solo el Congreso; la sección Configuración se oculta', () => {
     expect(menuPara(TESORERO).map((seccion) => seccion.titulo)).toEqual(['Congreso'])
-    expect(rutas(TESORERO)).toEqual(['/', '/inscripciones', '/credenciales', '/acceso-virtual', '/fotochecks', '/asistencia', '/delegaciones', '/reportes', '/ponencias', '/mensajes'])
+    expect(rutas(TESORERO)).toEqual(['/', '/inscripciones', '/credenciales', '/acceso-virtual', '/fotochecks', '/asistencia', '/kits', '/delegaciones', '/reportes', '/ponencias', '/mensajes'])
   })
 
   it('Ponencias especializadas: programa e inscripciones con «ver»; la puerta, con «asistencia»', () => {
@@ -162,9 +162,19 @@ describe('permisos: menú', () => {
     expect(DEPENDENCIAS['inscripciones.exportar']).toContain('inscripciones.ver')
   })
 
+  it('Entrega de kits (spec 035) la ve quien ve la asistencia: solo trae cifras; los nombres piden «inscripciones.ver» dentro de la página', () => {
+    const items = MENU.flatMap((seccion) => seccion.items)
+    expect(items.find((i) => i.to === '/kits')?.permiso).toBe('asistencia.ver')
+    expect(rutas(acceso(['asistencia.ver']))).toContain('/kits')
+    expect(rutas(acceso(['inscripciones.ver']))).not.toContain('/kits')
+    // Va justo después de Asistencia
+    const orden = rutas(OWNER)
+    expect(orden.indexOf('/kits')).toBe(orden.indexOf('/asistencia') + 1)
+  })
+
   it('Comisión: solo lo que se le asignó', () => {
-    expect(rutas(COMISION)).toEqual(['/asistencia', '/escanear'])
-    expect(rutas(acceso(['asistencia.ver']))).toEqual(['/asistencia'])
+    expect(rutas(COMISION)).toEqual(['/asistencia', '/kits', '/escanear'])
+    expect(rutas(acceso(['asistencia.ver']))).toEqual(['/asistencia', '/kits'])
     expect(menuPara(acceso([]))).toEqual([])
     expect(menuPara(null)).toEqual([])
   })

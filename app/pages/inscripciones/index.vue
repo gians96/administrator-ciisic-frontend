@@ -5,6 +5,8 @@ import { aParametros, filtrosDesdeQuery, type FiltrosInscripcion } from '~/utils
 import { mensajeError } from '~/utils/errores'
 import { descripcionInscripciones, placeholderBusqueda, tipoDeFila } from '~/utils/inscripciones'
 import { esVirtual, etiquetaDeInsignia, hayTiposVirtuales } from '~/utils/modalidad'
+import { ETIQUETA_FILTRO_KIT, FILTROS_KIT, TEXTO_SITUACION_KIT_FILA, textoEntregaKit, TONO_SITUACION_KIT_FILA, kitDe } from '~/utils/kit'
+import { AVISO_BACKEND_SIN_FILTRO_KIT, estadoFilaKit, hayTiposConKit, listaSinFiltrarPorKit } from '~/utils/kitsTablero'
 
 definePageMeta({ permiso: 'inscripciones.ver' })
 useHead({ title: 'Inscripciones · Panel CIISIC' })
@@ -34,6 +36,20 @@ const conPagos = computed(() => auth.puede('pagos.ver'))
  * trae una modalidad, se muestra para poder quitarla.
  */
 const conFiltroModalidad = computed(() => hayTiposVirtuales(categorias.value) || filtros.modalidad !== '')
+
+/**
+ * El filtro «Kit» (spec 045 del backend) solo se ofrece cuando el evento tiene algún tipo con kit: sin ellos siempre devolvería lo mismo
+ * o nada. Si la URL ya trae un kit, se muestra para poder quitarlo.
+ */
+const conFiltroKit = computed(() => hayTiposConKit(categorias.value) || filtros.kit !== '')
+/** Un backend anterior a la spec 045 ignora `?kit=` sin avisar: se dice que la lista no está filtrada. */
+const listaSinFiltro = computed(() => listaSinFiltrarPorKit(filtros.kit, filas.value))
+/** Tailwind necesita ver cada clase completa: una por combinación de filtros opcionales (modalidad y kit). */
+const columnasFiltros = computed(() => {
+  if (conFiltroModalidad.value && conFiltroKit.value) return 'xl:grid-cols-[1.3fr_1fr_1fr_1fr_1fr_1.4fr_1fr_auto]'
+  if (conFiltroModalidad.value || conFiltroKit.value) return 'xl:grid-cols-[1.5fr_1fr_1fr_1fr_1.4fr_1fr_auto]'
+  return 'xl:grid-cols-[2fr_1fr_1fr_1.4fr_1fr_auto]'
+})
 
 const tipos = computed(() => categorias.value
   .filter((categoria) => !filtros.categoria || categoria.codigo === filtros.categoria)
@@ -103,7 +119,7 @@ watch(busqueda, (valor) => {
   }, 350)
 })
 
-watch(() => [filtros.estado, filtros.categoria, filtros.modalidad, filtros.tipoInscripcionId, filtros.esEstudianteUndc], () => aplicar())
+watch(() => [filtros.estado, filtros.categoria, filtros.modalidad, filtros.kit, filtros.tipoInscripcionId, filtros.esEstudianteUndc], () => aplicar())
 
 watch(() => eventos.seleccionadoId, (id, anterior) => {
   // Las filas del evento anterior no quedan a la vista bajo el nuevo (ni sin evento)
@@ -130,12 +146,17 @@ function alActualizar(detalle: InscripcionDetalle) {
     fila.revisadoEn = detalle.revision.revisadoEn
     // Un cambio de tipo desde el detalle (spec 035 del backend) también se ve en la fila
     fila.tipoInscripcion = tipoDeFila(detalle)
+    // Y entregar o deshacer el kit (spec 037 del backend), sin recargar la página
+    if (detalle.kit) {
+      fila.kit = detalle.kit
+      fila.kitEntregado = detalle.kit.entregado
+    }
   }
 }
 
 function limpiar() {
   busqueda.value = ''
-  Object.assign(filtros, { estado: '', categoria: '', modalidad: '', tipoInscripcionId: '', esEstudianteUndc: '', q: '', page: 1 })
+  Object.assign(filtros, { estado: '', categoria: '', modalidad: '', kit: '', tipoInscripcionId: '', esEstudianteUndc: '', q: '', page: 1 })
 }
 </script>
 
@@ -147,13 +168,17 @@ function limpiar() {
         <h1 class="mt-1 text-3xl font-extrabold">Inscripciones</h1>
         <p class="mt-1 text-sm text-slate-400">{{ descripcionInscripciones(auth.puede) }}</p>
       </div>
-      <a
-        v-if="exportarUrl"
-        :href="exportarUrl"
-        class="inline-flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm text-white ring-1 ring-white/15 ring-inset transition hover:bg-white/10"
-      >
-        <Icon name="heroicons:arrow-down-tray" class="size-4" aria-hidden="true" /> Exportar CSV
-      </a>
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- Spec 035: el tablero de kits lo ve quien ve la asistencia (su permiso) y solo si el evento tiene kits -->
+        <AppButton v-if="conFiltroKit && auth.puede('asistencia.ver')" variant="secondary" icon="heroicons:gift" to="/kits">Entrega de kits</AppButton>
+        <a
+          v-if="exportarUrl"
+          :href="exportarUrl"
+          class="inline-flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm text-white ring-1 ring-white/15 ring-inset transition hover:bg-white/10"
+        >
+          <Icon name="heroicons:arrow-down-tray" class="size-4" aria-hidden="true" /> Exportar CSV
+        </a>
+      </div>
     </div>
 
     <section v-if="eventos.cargado && !eventos.seleccionadoId" class="card">
@@ -162,7 +187,7 @@ function limpiar() {
 
     <template v-else>
       <section class="card p-4">
-        <div class="grid gap-3 md:grid-cols-2" :class="conFiltroModalidad ? 'xl:grid-cols-[1.5fr_1fr_1fr_1fr_1.4fr_1fr_auto]' : 'xl:grid-cols-[2fr_1fr_1fr_1.4fr_1fr_auto]'">
+        <div class="grid gap-3 md:grid-cols-2" :class="columnasFiltros">
           <div class="relative">
             <label for="buscar" class="sr-only">Buscar</label>
             <Icon name="heroicons:magnifying-glass" class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" aria-hidden="true" />
@@ -190,6 +215,13 @@ function limpiar() {
               <option value="VIRTUAL">Solo virtual</option>
             </select>
           </div>
+          <div v-if="conFiltroKit">
+            <label for="f-kit" class="sr-only">Kit</label>
+            <select id="f-kit" v-model="filtros.kit" class="field-control">
+              <option value="">Con y sin kit</option>
+              <option v-for="valor in FILTROS_KIT" :key="valor" :value="valor">{{ ETIQUETA_FILTRO_KIT[valor] }}</option>
+            </select>
+          </div>
           <div>
             <label for="f-tipo" class="sr-only">Tipo de inscripción</label>
             <select id="f-tipo" v-model="filtros.tipoInscripcionId" class="field-control">
@@ -210,6 +242,7 @@ function limpiar() {
       </section>
 
       <section class="card overflow-hidden">
+        <p v-if="listaSinFiltro" class="border-b border-amber-400/25 bg-amber-500/10 px-6 py-3 text-sm text-amber-200" role="alert">{{ AVISO_BACKEND_SIN_FILTRO_KIT }}</p>
         <div class="relative overflow-x-auto">
           <table class="table-base">
             <thead>
@@ -245,6 +278,15 @@ function limpiar() {
                     <AppBadgeVirtual v-if="esVirtual(fila.tipoInscripcion)" />
                     <AppBadge v-if="fila.esEstudianteUndc" tono="brand">UNDC</AppBadge>
                     <AppBadge v-if="fila.delegacion" tono="info">Delegación · {{ fila.delegacion.nombre }}</AppBadge>
+                    <!-- Spec 045: dónde está el kit. El texto de «cuándo y quién» va en el título de la insignia (y completo en el detalle) -->
+                    <AppBadge
+                      v-if="estadoFilaKit(fila).situacion !== 'NINGUNO'"
+                      :tono="TONO_SITUACION_KIT_FILA[estadoFilaKit(fila).situacion]"
+                      :title="textoEntregaKit(kitDe(fila.kit)) || undefined"
+                    >
+                      <Icon name="heroicons:gift" class="size-3.5" aria-hidden="true" /> {{ TEXTO_SITUACION_KIT_FILA[estadoFilaKit(fila).situacion] }}
+                    </AppBadge>
+                    <AppBadge v-if="estadoFilaKit(fila).aRevisar" tono="error" title="Ya se entregó, pero su inscripción ya no está aprobada o su tipo ya no incluye kit">Kit a revisar</AppBadge>
                   </div>
                 </td>
                 <template v-if="conPagos">

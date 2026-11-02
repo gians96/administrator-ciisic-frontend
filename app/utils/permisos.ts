@@ -221,6 +221,7 @@ export const MENU: readonly SeccionMenu[] = [
       { to: '/acceso-virtual', label: 'Acceso virtual', icon: 'heroicons:video-camera', permiso: 'inscripciones.ver' },
       { to: '/fotochecks', label: 'Fotochecks', icon: 'heroicons:printer', permiso: 'inscripciones.exportar' },
       { to: '/asistencia', label: 'Asistencia', icon: 'heroicons:qr-code', permiso: 'asistencia.ver' },
+      { to: '/kits', label: 'Entrega de kits', icon: 'heroicons:gift', permiso: 'asistencia.ver' },
       { to: '/delegaciones', label: 'Delegaciones', icon: 'heroicons:user-group', permiso: 'delegaciones.ver' },
       { to: '/reportes', label: 'Reportes', icon: 'heroicons:chart-bar-square', permiso: 'reportes.ver' },
       { to: RUTA_ESCANER, label: 'Escanear asistencia', icon: 'heroicons:camera', permiso: 'asistencia.marcar' },

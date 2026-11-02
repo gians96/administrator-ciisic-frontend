@@ -196,3 +196,61 @@ export function avisoCambioKit(
   const personas = total === 1 ? '1 inscripción' : `${total} inscripciones`
   return `Este tipo ya tiene ${personas}. ${nuevo ? 'Encender' : 'Apagar'} «Incluye kit» cambia de inmediato quién recibe kit en la puerta (${nuevo ? 'todas pasarían a «Con kit»' : 'todas pasarían a «Sin kit»'}); las entregas ya marcadas se conservan. ¿Guardar así?`
 }
+
+// ─── Filtro por kit del listado de inscripciones (spec 045 del backend; spec 035 del panel) ───
+
+/** Valores de `?kit=` del listado y del CSV de inscripciones (los `FILTROS_KIT` del backend). */
+export const FILTROS_KIT = ['CON_KIT', 'SIN_KIT', 'PENDIENTE', 'ENTREGADO', 'POR_APROBAR', 'REVISAR'] as const
+export type FiltroKit = typeof FILTROS_KIT[number]
+
+export function esFiltroKit(valor: unknown): valor is FiltroKit {
+  return typeof valor === 'string' && (FILTROS_KIT as readonly string[]).includes(valor)
+}
+
+/** Texto de cada filtro en los selectores. */
+export const ETIQUETA_FILTRO_KIT: Readonly<Record<FiltroKit, string>> = {
+  CON_KIT: 'Con kit',
+  SIN_KIT: 'Sin kit',
+  PENDIENTE: 'Kit pendiente de entrega',
+  ENTREGADO: 'Kit entregado',
+  POR_APROBAR: 'Con kit · pago por aprobar',
+  REVISAR: 'Entregado · a revisar',
+}
+
+/**
+ * Dónde está el kit de una fila del listado (la misma regla que `situacionKit` del backend). `NINGUNO`: no hay nada que decir
+ * (tipo sin kit o virtual, inscripción rechazada o cancelada, o un backend anterior a la spec 045 que no envía `kit`).
+ */
+export type SituacionKitFila = 'ENTREGADO' | 'PENDIENTE' | 'POR_APROBAR' | 'NINGUNO'
+
+export function situacionKitFila(kit: KitEstado | null | undefined, codigoEstado: string): SituacionKitFila {
+  if (!kit) return 'NINGUNO'
+  if (kit.entregado) return 'ENTREGADO'
+  if (!kit.incluye) return 'NINGUNO'
+  if (codigoEstado === 'APROBADO') return 'PENDIENTE'
+  return codigoEstado === 'PENDIENTE' || codigoEstado === 'EN_REVISION' ? 'POR_APROBAR' : 'NINGUNO'
+}
+
+/** Texto corto de la insignia de cada situación; `NINGUNO`, vacío. */
+export const TEXTO_SITUACION_KIT_FILA: Readonly<Record<SituacionKitFila, string>> = {
+  ENTREGADO: 'Kit entregado',
+  PENDIENTE: 'Kit pendiente',
+  POR_APROBAR: 'Kit · pago por aprobar',
+  NINGUNO: '',
+}
+
+/** Tono (los de `AppBadge`) de la insignia de cada situación. */
+export const TONO_SITUACION_KIT_FILA: Readonly<Record<SituacionKitFila, 'ok' | 'warn' | 'info' | 'neutral'>> = {
+  ENTREGADO: 'ok',
+  PENDIENTE: 'warn',
+  POR_APROBAR: 'info',
+  NINGUNO: 'neutral',
+}
+
+/**
+ * Ya se entregó pero hoy no corresponde: la inscripción dejó de estar aprobada o su tipo ya no incluye kit (el filtro `REVISAR`).
+ * Se deshace desde el detalle si fue un error.
+ */
+export function entregadoARevisar(kit: KitEstado | null | undefined, codigoEstado: string): boolean {
+  return Boolean(kit?.entregado) && (!kit?.incluye || codigoEstado !== 'APROBADO')
+}

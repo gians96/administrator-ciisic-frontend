@@ -223,6 +223,15 @@ Todo el dato vive en backend-ciisic; el panel es una SPA con un BFF Nitro. Docum
   **Deshacer** no pide que el tipo siga incluyendo kit. En el editor de tipos «Incluye kit» queda apagado y desactivado si el tipo es virtual (`backendSinKit`, `kitNoGuardado`, `avisoKitIncoherente`, `avisoCambioKit`).
   **Los virtuales no marcan asistencia**: el backend responde `403 VIRTUAL_REGISTRATION` y el escáner lo muestra en rojo («Inscripción virtual»); el aviso ámbar anterior queda solo como respaldo con un backend que aún no bloquea.
   Todo es tolerante: sin `kit` (backend anterior) las pantallas se ven como antes. **Backend 037 primero.**
+- **Tablero de kits** (spec 035; backend 045): `/kits` («Entrega de kits», `asistencia.ver`, justo después de Asistencia en el menú) es un **tablero de lectura** sobre el registro de la spec 037: `GET events/:id/kits/dashboard` trae solo cifras
+  (`TableroKits`: totales, por tipo —los planes de una delegación llevan `delegacionId`—, entregas por día y hora de Lima y quién entrega) y **el panel no recalcula nada**, solo valida la forma (`tableroKitsDe`); sus números son los de la insignia
+  «Kits:» de Asistencia. Los cinco indicadores (`indicadoresKits`: A entregar · Entregados · Pendientes · Pago por aprobar · A revisar) son botones que eligen la **vista** de la lista (`VistaKits` → `consultaDeVista` → `?kit=` de
+  `GET events/:id/inscriptions`); «A revisar» son kits entregados que hoy no corresponden (inscripción cancelada o tipo sin kit) y «Entregados» los incluye (la nota lo dice). La lista de personas pide `inscripciones.ver` (sin él solo se ven las cifras)
+  y deja entregar o deshacer con `asistencia.marcar` por la misma ruta de la spec 037 (`useEntregaKit`, el flujo del detalle: confirmación al deshacer y `KIT_ALREADY_DELIVERED` / `KIT_NOT_DELIVERED` releen). Tipos y filas son **opcionales**
+  (`InscripcionFila.kit` llega desde el backend 045): un backend anterior ignora `?kit=` sin avisar, así que si se filtra y las filas no traen `kit` se avisa en lugar de mostrar una lista sin filtrar (`listaSinFiltrarPorKit`), y sin la ruta del tablero la
+  pantalla dice que aún no está disponible. En **Inscripciones** el filtro «Kit» (`FILTROS_KIT`, en la URL y en el CSV: `?kit=PENDIENTE` baja quién falta) y la insignia «Kit entregado» / «Kit pendiente» / «Kit a revisar» (`estadoFilaKit`) solo salen si el
+  evento tiene tipos con kit (`hayTiposConKit`). El contenido del kit (`CONTENIDO_KIT`) es un espejo de `ciisic-undc-web/app/data/kit-items.ts`: si cambia, se actualiza en los dos. Se actualiza solo cada 30 s con la pestaña visible. Los nombres
+  `hoyEnLimaKits` y `horaEnLimaKits` llevan sufijo porque `tokensAcceso.ts` y `fotocheck.ts` ya exportan `hoyEnLima` y `horaEnLima` (Nuxt auto-importa `app/utils`). **Backend 045 primero.**
 - **Envíos masivos a los inscritos presenciales** (spec 029; backend 038 y 039): `/credenciales` («Credencial 3D», `inscripciones.ver`; enviar = `credenciales.reenviar`) manda a cada persona **su** enlace a la
   credencial 3D de la landing y `/ponencias-especializadas/enviar-enlace` (`especializadas.ver`; enviar y probar = `especializadas.inscribir`) manda **un mismo mensaje** editable con el botón a la inscripción de ponencias
   (la tarjeta `EnvioEnlaceCard` del Programa lleva ahí). Los dos usan `components/envios/PanelEnvio.vue` y la lógica pura de `app/utils/enviosMasivos.ts`: la lista son los **aprobados presenciales** del backend con su
@@ -321,7 +330,7 @@ Puertos locales: landing 3000 · panel 3001 · backend-ciisic 3010 · API_UNDC 3
 
 ## SDD con Spec Kit
 
-Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–034
+Constitución: [`.specify/memory/constitution.md`](.specify/memory/constitution.md). Specs 001–035 (la 035, el tablero de kits; su contrato en `backend-ciisic/specs/045-tablero-kits/contracts/`)
 en `specs/` (base, inscripciones, eventos y tipos, consultas DNI, resumen/Semana Sistémica,
 correo y tokens de acceso, sistema/Google/portal, roles y permisos, portal del participante y
 escáner, «Disponible para» de los tipos, eliminar inscripciones solo el Owner, modalidad virtual de

@@ -413,8 +413,10 @@ export interface InscripcionFila {
   participante: ParticipanteRef
   /** `modalidad` (de asistencia) falta con un backend anterior a la spec 018. */
   tipoInscripcion: { id: number, nombre: string, etiqueta: string | null, categoria: string, modalidad?: ModalidadAsistencia, incluyeKit?: boolean } | null
-  /** Spec 037: el kit ya se entregó (cuándo y quién, en el detalle). Ausente con un backend anterior. */
+  /** Spec 037: el kit ya se entregó. Ausente con un backend anterior. */
   kitEntregado?: boolean
+  /** Spec 045 del backend: el kit completo (si el tipo lo incluye y, si se entregó, cuándo y quién). Ausente con un backend anterior a la 045. */
+  kit?: KitEstado
   clasificacion: { id: number, nombre: string } | null
   estado: EstadoRef
   /** Sin `pagos.ver`: `monto`, `modalidadPago`, `numeroOperacion` y `fechaPago` en `null` y `tieneVoucher: false`. */
