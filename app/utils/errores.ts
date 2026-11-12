@@ -181,6 +181,17 @@ const RESPALDO_POR_CODIGO: Readonly<Record<string, string>> = {
   // Envíos masivos a los inscritos presenciales (backend spec 039)
   LANDING_URL_MISSING: 'Falta la URL de la landing. Configúrala en Sistema para poder armar los enlaces.',
   EMAIL_SEND_FAILED: 'No se pudo enviar el correo. Revisa la credencial de correo en Correo (¿quedan créditos en Brevo?).',
+  // Certificados (backend spec 015)
+  PANEL_URL_MISSING: 'Falta la URL del panel. Configúrala en Sistema para poder armar los enlaces de los certificados.',
+  CERTIFICATE_NOT_FOUND: 'No encontramos certificados con esos datos.',
+  CERTIFICATE_FILE_NOT_FOUND: 'El certificado aún no tiene su PDF firmado.',
+  CERTIFICATE_NOT_READY: 'El certificado aún no tiene su PDF firmado.',
+  CERTIFICATE_ANNULLED: 'El certificado está anulado.',
+  CERTIFICATE_ALREADY_ANNULLED: 'El certificado ya estaba anulado.',
+  CERTIFICATE_CHANGED: 'El certificado cambió mientras se subía su PDF. Vuelve a intentarlo.',
+  CERTIFICATE_COLUMNS_MISSING: 'El Excel no tiene las columnas esperadas (DNI, Nombres, Apellidos y Codigo).',
+  IMPORT_TOO_LARGE: 'El Excel tiene demasiadas filas. Pártelo en varias cargas.',
+  IMPORT_EMPTY: 'El Excel no tiene filas con datos.',
   ATTENDEES_NOT_FOUND: 'Ninguna de las personas elegidas necesita el aviso (ya pueden asistir o ya no tienen inscripciones).',
   // Archivos (foto del portal, QR de pagos)
   FILE_REQUIRED: 'Adjunta el archivo.',
