@@ -37,8 +37,31 @@ export interface FormularioCredencialCorreo {
   apiKey: string
   remitenteCorreo: string
   remitenteNombre: string
+  /** Solo Gmail. */
+  smtpPuerto: PuertoSmtp
   esPredeterminada: boolean
   activo: boolean
+}
+
+/**
+ * Puertos de Gmail (backend spec 046): 465 cifra desde el inicio (SSL) y 587 arranca sin cifrar y pasa a TLS con
+ * STARTTLS. Los dos son seguros; si la red del servidor bloquea el elegido, el backend prueba el otro.
+ */
+export type PuertoSmtp = 465 | 587
+export const PUERTO_SMTP_POR_DEFECTO: PuertoSmtp = 465
+export const PUERTOS_SMTP: ReadonlyArray<{ valor: PuertoSmtp, nombre: string, detalle: string }> = [
+  { valor: 465, nombre: '465 · SSL (recomendado)', detalle: 'Cifrado desde el inicio de la conexión.' },
+  { valor: 587, nombre: '587 · STARTTLS', detalle: 'Empieza sin cifrar y pasa a TLS antes de enviar la contraseña.' },
+]
+
+export function puertoSmtpDe(valor: unknown): PuertoSmtp {
+  return valor === 587 ? 587 : PUERTO_SMTP_POR_DEFECTO
+}
+
+/** «465 · SSL» / «587 · STARTTLS» para la tarjeta; `null` si no es de Gmail o el backend no lo informa. */
+export function etiquetaPuertoSmtp(credencial: Pick<CredencialCorreo, 'proveedor' | 'smtpPuerto'>): string | null {
+  if (credencial.proveedor !== 'GMAIL_SMTP' || credencial.smtpPuerto === undefined) return null
+  return puertoSmtpDe(credencial.smtpPuerto) === 465 ? 'Puerto 465 · SSL' : 'Puerto 587 · STARTTLS'
 }
 
 /** Nombres legibles de las claves de `fields` (errores de validación del backend). */
@@ -48,6 +71,7 @@ export const ETIQUETAS_CAMPOS_CREDENCIAL: Readonly<Record<string, string>> = {
   apiKey: 'API key o contraseña',
   remitenteCorreo: 'Correo del remitente',
   remitenteNombre: 'Nombre del remitente',
+  smtpPuerto: 'Puerto',
   esPredeterminada: 'Predeterminada',
   activo: 'Activa',
   correo: 'Correo destino',
@@ -295,6 +319,7 @@ export function formularioCredencialCorreo(credencial?: CredencialCorreo | null,
     apiKey: '',
     remitenteCorreo: credencial?.remitenteCorreo ?? '',
     remitenteNombre: credencial?.remitenteNombre ?? '',
+    smtpPuerto: puertoSmtpDe(credencial?.smtpPuerto),
     esPredeterminada: credencial ? credencial.esPredeterminada : esPrimera,
     activo: credencial?.activo ?? true,
   }
@@ -349,6 +374,8 @@ export function cuerpoCredencialCorreo(form: FormularioCredencialCorreo, origina
       apiKey,
       remitenteCorreo,
       ...(remitenteNombre ? { remitenteNombre } : {}),
+      // Un backend sin la spec 046 descarta la clave y queda en 465, como antes
+      ...(form.proveedor === 'GMAIL_SMTP' ? { smtpPuerto: form.smtpPuerto } : {}),
       ...(form.esPredeterminada ? { esPredeterminada: true } : {}),
       activo: form.activo,
     }
@@ -360,6 +387,7 @@ export function cuerpoCredencialCorreo(form: FormularioCredencialCorreo, origina
   if (remitenteCorreo !== original.remitenteCorreo) cuerpo.remitenteCorreo = remitenteCorreo
   if (remitenteNombre !== (original.remitenteNombre ?? '')) cuerpo.remitenteNombre = remitenteNombre || null
   if (form.activo !== original.activo) cuerpo.activo = form.activo
+  if (original.proveedor === 'GMAIL_SMTP' && form.smtpPuerto !== puertoSmtpDe(original.smtpPuerto)) cuerpo.smtpPuerto = form.smtpPuerto
   if (form.esPredeterminada && !original.esPredeterminada) cuerpo.esPredeterminada = true
   return cuerpo
 }

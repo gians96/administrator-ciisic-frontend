@@ -15,6 +15,7 @@ describe('guía de Gmail por SMTP', () => {
       'Activa la verificación en dos pasos',
       'Crea la contraseña de aplicación',
       'Agrégala en el panel',
+      'Elige el puerto: 465 o 587',
       'Prueba la conexión',
       'Define el orden de uso',
     ])
@@ -34,6 +35,8 @@ describe('guía de Gmail por SMTP', () => {
     const problemas = PROBLEMAS_GUIA_GMAIL.map((p) => p.problema).join(' | ')
     expect(problemas).toContain('Gmail rechazó el usuario o la contraseña de aplicación')
     expect(problemas).toContain('Gmail alcanzó su límite de envíos')
+    expect(problemas).toContain('por el puerto 465 ni por el 587')
+    expect(problemas).toContain('Brevo dejó de funcionar')
     for (const p of PROBLEMAS_GUIA_GMAIL) expect(p.solucion.length).toBeGreaterThan(20)
   })
 
@@ -44,9 +47,9 @@ describe('guía de Gmail por SMTP', () => {
   })
 
   it('cuenta el avance sin salirse de 0 a total', () => {
-    expect(textoAvanceGuia(2)).toBe('2 de 6 pasos')
-    expect(textoAvanceGuia(-1)).toBe('0 de 6 pasos')
-    expect(textoAvanceGuia(9)).toBe('6 de 6 pasos')
+    expect(textoAvanceGuia(2)).toBe('2 de 7 pasos')
+    expect(textoAvanceGuia(-1)).toBe('0 de 7 pasos')
+    expect(textoAvanceGuia(9)).toBe('7 de 7 pasos')
     expect(textoAvanceGuia(1, 3)).toBe('1 de 3 pasos')
   })
 })

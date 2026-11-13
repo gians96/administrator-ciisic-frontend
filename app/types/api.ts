@@ -670,6 +670,8 @@ export interface CredencialCorreo {
   apiKeyEnmascarada: string
   remitenteCorreo: string
   remitenteNombre: string | null
+  /** Gmail (backend spec 046): 465 (SSL) o 587 (STARTTLS); Brevo: `null`. Ausente en un backend anterior. */
+  smtpPuerto?: number | null
   esPredeterminada: boolean
   /** Orden de respaldo (1 = primera; la predeterminada siempre es la primera). Ausente en un backend anterior a la spec 041. */
   prioridad?: number
@@ -692,7 +694,8 @@ export interface PlanBrevo { tipo: string, creditos: number | null, tipoCreditos
 export interface PruebaCredencialCorreo {
   ok: boolean
   /** Gmail: solo `correo` (la cuenta que inició sesión); sin planes. */
-  cuenta?: { correo: string | null, empresa: string | null, planes: PlanBrevo[] }
+  /** `puerto`: Gmail, por dónde conectó (backend spec 046). */
+  cuenta?: { correo: string | null, empresa: string | null, planes: PlanBrevo[], puerto?: number }
   error?: string
   credencial: CredencialCorreo
 }

@@ -28,6 +28,8 @@ import {
   resumenCreditos,
   textoCreditos,
   validarCredencialCorreo,
+  etiquetaPuertoSmtp,
+  PUERTOS_SMTP,
   type DireccionOrden,
 } from '~/utils/credencialesCorreo'
 
@@ -410,7 +412,7 @@ async function enviarPrueba() {
               </AppBadge>
             </div>
             <p class="text-sm text-slate-300"><span class="text-slate-500">Remitente:</span> {{ remitenteCredencial(credencial) }}</p>
-            <p class="text-xs text-slate-400">{{ nombreProveedor(credencial.proveedor) }} · {{ nombreSecreto(credencial.proveedor) }} <span class="font-mono text-slate-300">{{ credencial.apiKeyEnmascarada }}</span><span v-if="detalleCreditos"> · {{ detalleCreditos }}</span></p>
+            <p class="text-xs text-slate-400">{{ nombreProveedor(credencial.proveedor) }} · {{ nombreSecreto(credencial.proveedor) }} <span class="font-mono text-slate-300">{{ credencial.apiKeyEnmascarada }}</span><span v-if="etiquetaPuertoSmtp(credencial)"> · {{ etiquetaPuertoSmtp(credencial) }}</span><span v-if="detalleCreditos"> · {{ detalleCreditos }}</span></p>
           </div>
 
           <div class="flex flex-wrap gap-2">
@@ -525,6 +527,7 @@ async function enviarPrueba() {
             <p class="mt-2 text-slate-200">
               Cuenta {{ nombreProveedor(credencial.proveedor) }}: <span class="text-white">{{ resultado.cuenta.correo ?? 'correo no informado' }}</span><span v-if="resultado.cuenta.empresa"> · {{ resultado.cuenta.empresa }}</span>
             </p>
+            <p v-if="resultado.cuenta.puerto" class="mt-1 text-xs text-slate-300">Conectó por el puerto {{ resultado.cuenta.puerto }} ({{ resultado.cuenta.puerto === 465 ? 'SSL' : 'STARTTLS' }}).</p>
             <ul v-if="resultado.cuenta.planes.length" class="mt-2 flex flex-wrap gap-2" aria-label="Créditos por plan">
               <li v-for="(plan, indice) in resultado.cuenta.planes" :key="indice" class="rounded-lg bg-white/5 px-3 py-1.5 text-xs text-slate-200 tabular-nums ring-1 ring-white/10">
                 {{ describirPlanBrevo(plan) }}
@@ -598,6 +601,11 @@ async function enviarPrueba() {
         </AppField>
         <AppField label="Nombre del remitente" for="cr-remitente" :error="errores.remitenteNombre" hint="Opcional (p. ej. CIISIC UNDC).">
           <input id="cr-remitente" v-model="form.remitenteNombre" class="field-control" maxlength="120" autocomplete="off">
+        </AppField>
+        <AppField v-if="esGmail" label="Puerto" for="cr-puerto" :error="errores.smtpPuerto" hint="Servidor smtp.gmail.com. Si este puerto no conecta, el sistema prueba el otro solo.">
+          <select id="cr-puerto" v-model.number="form.smtpPuerto" class="field-control">
+            <option v-for="puerto in PUERTOS_SMTP" :key="puerto.valor" :value="puerto.valor" :title="puerto.detalle">{{ puerto.nombre }}</option>
+          </select>
         </AppField>
         <div class="space-y-4 rounded-xl bg-white/5 p-4 sm:col-span-2">
           <AppSwitch

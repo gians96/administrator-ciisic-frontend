@@ -26,6 +26,8 @@ export const PASOS_GUIA_GMAIL: readonly PasoGuia[] = [
       'Cuenta de Gmail personal: unos 500 correos al día.',
       'Cuenta de Google Workspace: unos 2000 correos al día.',
       'Gmail solo firma con la propia cuenta: el remitente del panel será esa misma dirección.',
+      'Una cuenta institucional (congreso@undc.edu.pe) es de Google Workspace: el administrador de Google de la UNDC debe permitir las contraseñas de aplicación (Consola de administración → Seguridad → Autenticación → Verificación en dos pasos).',
+      'Puedes registrar varias cuentas (una credencial por cuenta): si una falla o llega a su límite, el correo sale por la siguiente.',
       'Si tienes varias cuentas abiertas en el navegador, mira el avatar de arriba a la derecha y confirma que estás en esa cuenta antes de seguir.',
     ],
   },
@@ -56,6 +58,17 @@ export const PASOS_GUIA_GMAIL: readonly PasoGuia[] = [
       'Contraseña de aplicación: pégala tal como la muestra Google, con o sin espacios.',
       'Cuenta de Gmail (remitente): la misma cuenta del paso 1.',
       'Nombre del remitente (opcional): lo que verá quien recibe el correo, por ejemplo «CIISIC UNDC».',
+      'Si tienes los datos en un .env: MAIL_HOST / EMAIL_HOST (smtp.gmail.com) ya está fijo; MAIL_USERNAME / EMAIL_USER es la cuenta de Gmail; MAIL_PASSWORD / EMAIL_PASS es la contraseña de aplicación; MAIL_PORT / EMAIL_PORT es el puerto; EMAIL_FROM es el nombre del remitente; MAIL_ENCRYPTION sale solo del puerto.',
+    ],
+  },
+  {
+    titulo: 'Elige el puerto: 465 o 587',
+    texto: 'Gmail acepta los dos y ambos van cifrados. Deja 465 (recomendado) salvo que sepas que la red del servidor lo bloquea.',
+    detalles: [
+      '465 · SSL: la conexión se cifra desde el primer momento (equivale a MAIL_ENCRYPTION=ssl).',
+      '587 · STARTTLS: empieza sin cifrar y pasa a TLS antes de enviar la contraseña (equivale a MAIL_ENCRYPTION=tls).',
+      'Por eso tus configuraciones tenían puertos distintos: las dos formas funcionan.',
+      'Si el puerto elegido no conecta, el sistema prueba el otro solo; al «Probar» te dice por cuál conectó y lo deja guardado.',
     ],
   },
   {
@@ -70,6 +83,7 @@ export const PASOS_GUIA_GMAIL: readonly PasoGuia[] = [
     titulo: 'Define el orden de uso',
     texto: 'Los correos salen por la primera credencial activa. Si falla o se queda sin créditos, salen solos por la siguiente.',
     detalles: [
+      'Con varias cuentas de Gmail sumas sus límites diarios (por ejemplo, Workspace + una personal ≈ 2500 al día).',
       'Para que Gmail sea el respaldo de Brevo, déjala debajo de Brevo (flechas arriba y abajo).',
       'Para que Gmail sea la principal, usa «Marcar como predeterminada».',
     ],
@@ -94,6 +108,14 @@ export const PROBLEMAS_GUIA_GMAIL: readonly ProblemaGuia[] = [
   {
     problema: 'El correo llega a spam',
     solucion: 'Pide que lo marquen como «No es spam» y, en envíos masivos, mándalos por tandas pequeñas. Si usas una cuenta de Workspace, su dominio ya tiene reputación propia.',
+  },
+  {
+    problema: '«No se pudo conectar con smtp.gmail.com por el puerto 465 ni por el 587»',
+    solucion: 'El servidor no tiene salida a internet por esos puertos (firewall o proveedor del hosting). Pide que permitan la salida a smtp.gmail.com por el 465 o el 587; con uno basta.',
+  },
+  {
+    problema: 'Brevo dejó de funcionar con todas las API keys a la vez',
+    solucion: 'Brevo bloquea las API keys usadas desde una IP que no conoce (el mensaje dice «Brevo bloqueó la IP del servidor»). Entra a Brevo → Configuración de seguridad → IPs autorizadas y agrega la IP del servidor, o desactiva ese bloqueo. Mientras tanto, usa Gmail como predeterminada.',
   },
   {
     problema: 'Quiero dejar de usar Gmail',

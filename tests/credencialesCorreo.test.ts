@@ -100,7 +100,7 @@ describe('credenciales de correo: formulario', () => {
   })
 
   it('arranca vacío (la primera queda predeterminada) o con los datos sin la API key', () => {
-    expect(formularioCredencialCorreo(null, true)).toEqual({ proveedor: 'BREVO', nombre: '', apiKey: '', remitenteCorreo: '', remitenteNombre: '', esPredeterminada: true, activo: true })
+    expect(formularioCredencialCorreo(null, true)).toEqual({ proveedor: 'BREVO', nombre: '', apiKey: '', remitenteCorreo: '', remitenteNombre: '', smtpPuerto: 465, esPredeterminada: true, activo: true })
     expect(formularioCredencialCorreo(null, false, 'GMAIL_SMTP').proveedor).toBe('GMAIL_SMTP')
     expect(formularioCredencialCorreo(credencial({ proveedor: 'GMAIL_SMTP' }), false, 'BREVO').proveedor).toBe('GMAIL_SMTP')
     expect(formularioCredencialCorreo(credencial({ esPredeterminada: false }), true)).toMatchObject({ nombre: 'Brevo congreso', apiKey: '', esPredeterminada: false })
@@ -192,7 +192,7 @@ describe('credenciales de correo: Gmail por SMTP (backend spec 041)', () => {
 
   it('el alta envía el proveedor y la contraseña sin espacios; Brevo no envía proveedor', () => {
     expect(cuerpoCredencialCorreo(formulario({ apiKey: ' abcd EFGH ijkl mnop ' }))).toEqual({
-      proveedor: 'GMAIL_SMTP', nombre: 'Gmail', apiKey: 'abcdefghijklmnop', remitenteCorreo: 'garias@undc.edu.pe', activo: true,
+      proveedor: 'GMAIL_SMTP', nombre: 'Gmail', apiKey: 'abcdefghijklmnop', remitenteCorreo: 'garias@undc.edu.pe', smtpPuerto: 465, activo: true,
     })
     expect(cuerpoCredencialCorreo({ ...formulario({ apiKey: 'xkeysib-123456' }), proveedor: 'BREVO' })).not.toHaveProperty('proveedor')
   })
